@@ -1,0 +1,16 @@
+# 缓存与临时文件
+cache/
+__pycache__/
+*.pyc
+.uploads/
+.trae-html-share-packages/
+*.log
+
+# 隧道相关(本地专用)
+tunnel_watchdog.sh
+start_tunnel.sh
+
+# 敏感信息
+.env
+*.token
+*_history.json

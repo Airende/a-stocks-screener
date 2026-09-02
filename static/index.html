@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta http-equiv="Expires" content="0" />
+<title>A股智能选股系统</title>
+<style>
+  :root{
+    --bg:#0f1623; --panel:#172233; --panel2:#1e2c40; --border:#2a3a52;
+    --txt:#e8eef6; --sub:#9fb0c6; --up:#ff4d4f; --down:#26a69a;
+    --accent:#4f9dff; --gold:#f5c842; --tag:#2b3b55;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,"PingFang SC","Microsoft YaHei",Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--txt)}
+  .wrap{max-width:1400px;margin:0 auto;padding:20px}
+  header{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px}
+  h1{font-size:22px;margin:0;display:flex;align-items:center;gap:10px}
+  h1 .logo{width:34px;height:34px;border-radius:8px;background:linear-gradient(135deg,#4f9dff,#6f6bff);display:flex;align-items:center;justify-content:center;font-weight:800}
+  .sub{color:var(--sub);font-size:13px;margin-top:2px}
+  .toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  button{cursor:pointer;border:none;border-radius:8px;padding:9px 18px;font-size:14px;font-weight:600;background:var(--accent);color:#fff;transition:.15s}
+  button:hover{filter:brightness(1.1)}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  .ghost{background:var(--panel2);color:var(--txt)}
+  .meta{font-size:12px;color:var(--sub)}
+  .stats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+  .stat{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:10px 14px;min-width:110px}
+  .stat .n{font-size:20px;font-weight:700}
+  .stat .l{font-size:12px;color:var(--sub);margin-top:2px}
+  .up{color:var(--up)} .down{color:var(--down)}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;margin-bottom:18px}
+  .card-h{padding:12px 16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer}
+  .card-h h2{margin:0;font-size:14px}
+  .card-b{padding:0 16px 14px;font-size:13px;color:var(--sub);line-height:1.8}
+  .cond{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
+  .cond .g{background:var(--panel2);border-radius:8px;padding:10px 12px}
+  .cond .gt{font-weight:700;color:var(--txt);margin-bottom:8px}
+  .cond .gtype{font-size:11px;color:var(--gold);font-weight:400;margin-left:6px}
+  .cond .ck{display:flex;align-items:flex-start;gap:7px;margin:6px 0;font-size:13px;color:var(--txt);cursor:pointer}
+  .cond .ck input{margin-top:3px;accent-color:var(--accent);cursor:pointer;transform:scale(1.15)}
+  .cond .ck .lb{flex:1;line-height:1.4}
+  .cond .ck .hint{color:var(--sub);font-size:11px}
+  .ckbar{margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .tag{display:inline-block;background:var(--tag);color:#bcd2f5;border-radius:4px;padding:1px 7px;font-size:11px;margin:1px 2px}
+  .tbl-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:12px}
+  table{width:100%;border-collapse:collapse;font-size:13px;min-width:1100px}
+  th,td{padding:9px 10px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--border)}
+  th{background:var(--panel2);color:var(--sub);font-weight:600;position:sticky;top:0;z-index:1}
+  td.l,th.l{text-align:left}
+  tr:hover td{background:var(--panel2)}
+  .nm{font-weight:600}
+  a.nm{color:inherit;text-decoration:none;cursor:pointer;transition:color .15s}
+  a.nm:hover{color:var(--gold);text-decoration:underline}
+  .code{color:var(--sub);font-size:11px}
+  .bar{display:inline-block;width:34px;height:5px;border-radius:3px;background:var(--border);position:relative;vertical-align:middle;margin-right:4px}
+  .bar i{position:absolute;left:0;top:0;height:100%;border-radius:3px}
+  .empty{text-align:center;padding:50px;color:var(--sub)}
+  .spin{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:sp .8s linear infinite;vertical-align:middle;margin-right:6px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .pill{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+  .pill.up{background:rgba(255,77,79,.15);color:var(--up)}
+  .pill.down{background:rgba(38,166,154,.15);color:var(--down)}
+  .warn{background:rgba(245,200,66,.1);border:1px solid rgba(245,200,66,.3);color:var(--gold);border-radius:8px;padding:8px 12px;font-size:12px;margin-bottom:14px}
+  .sec-h{font-size:15px;font-weight:700;margin:6px 2px 10px;display:flex;align-items:center;gap:8px}
+  .sec-h .cnt{background:var(--accent);color:#fff;font-size:12px;border-radius:10px;padding:1px 9px}
+  .lg{display:inline-block;background:var(--tag);color:#bcd2f5;border-radius:4px;padding:1px 6px;font-size:11px;margin:0 1px;cursor:help}
+  .dot{display:inline-block;width:18px;height:18px;line-height:18px;text-align:center;border-radius:50%;font-size:10px;margin:0 1px;font-weight:700}
+  .dot.on{background:var(--down);color:#04211e}
+  .dot.off{background:var(--border);color:var(--sub)}
+  .gold{color:var(--gold)!important}
+  /* Tab布局 */
+  .main-tabs{display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:0}
+  .main-tab{padding:12px 28px;font-size:15px;font-weight:600;color:var(--sub);cursor:pointer;border-bottom:3px solid transparent;transition:.15s;white-space:nowrap}
+  .main-tab:hover{color:var(--txt)}
+  .main-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+  .tab-pane{display:none}
+  .tab-pane.active{display:block}
+  /* 个股分析模块 */
+  .sa-box{position:relative;max-width:500px}
+  .sa-input{width:100%;padding:10px 14px;font-size:14px;border:1px solid var(--border);border-radius:8px;background:var(--panel2);color:var(--txt);outline:none}
+  .sa-input:focus{border-color:var(--accent)}
+  .sa-input::placeholder{color:var(--sub)}
+  .sa-dropdown{position:absolute;top:100%;left:0;right:0;background:var(--panel2);border:1px solid var(--border);border-radius:0 0 8px 8px;max-height:320px;overflow-y:auto;z-index:50;display:none;box-shadow:0 4px 12px rgba(0,0,0,.3)}
+  .sa-dropdown.show{display:block}
+  .sa-item{padding:8px 14px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13px;border-bottom:1px solid var(--border)}
+  .sa-item:hover{background:var(--panel)}
+  .sa-item .nm{font-weight:600}
+  .sa-item .cd{color:var(--sub);font-size:11px}
+  .sa-item .ind{color:var(--accent);font-size:11px}
+  .sa-panel{margin-top:16px;display:none}
+  .sa-panel.show{display:block}
+  .sa-head{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:14px}
+  .sa-head .nm{font-size:20px;font-weight:700}
+  .sa-head .cd{color:var(--sub);font-size:13px}
+  .sa-head .ind{color:var(--accent);font-size:12px}
+  .sa-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin-bottom:16px}
+  .sa-cell{background:var(--panel2);border-radius:8px;padding:10px 14px}
+  .sa-cell .l{font-size:11px;color:var(--sub);margin-bottom:3px}
+  .sa-cell .v{font-size:16px;font-weight:700}
+  .sa-analysis{display:grid;grid-template-columns:1fr;gap:6px}
+  .sa-row{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--panel2);border-radius:8px;font-size:13px}
+  .sa-row .item{font-weight:600;min-width:80px;color:var(--accent)}
+  .sa-row .desc{flex:1;color:var(--txt)}
+  .sa-row .st{font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px;white-space:nowrap}
+  .sa-row .st.看多{background:rgba(255,77,79,.15);color:var(--up)}
+  .sa-row .st.偏多{background:rgba(255,77,79,.1);color:var(--up)}
+  .sa-row .st.看空{background:rgba(38,166,154,.15);color:var(--down)}
+  .sa-row .st.偏空{background:rgba(38,166,154,.1);color:var(--down)}
+  .sa-row .st.中性{background:var(--tag);color:var(--sub)}
+  .sa-chart{margin-top:14px;height:200px;position:relative;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--panel2)}
+  /* 均线形态筛选 */
+  .ma-tabs{display:flex;gap:0;margin-bottom:0;flex-wrap:wrap}
+  .ma-tab{padding:9px 18px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid var(--border);border-bottom:none;border-radius:8px 8px 0 0;background:var(--panel2);color:var(--sub);transition:.15s;margin-right:4px}
+  .ma-tab:hover{color:var(--txt)}
+  .ma-tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .ma-tab .cnt{font-size:11px;margin-left:4px;opacity:.8}
+  .ma-tab-desc{font-size:12px;color:var(--sub);margin:8px 0;padding:8px 12px;background:var(--panel2);border-radius:8px;line-height:1.6}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1><span class="logo">选</span> A股智能选股系统 <span style="font-size:12px;color:var(--sub);font-weight:400">v1</span></h1>
+      <div class="sub">量价 · 趋势 · KDJ · 形态位置 多维叠加</div>
+    </div>
+    <div class="toolbar">
+      <span class="meta" id="cacheInfo">本地缓存: 加载中…</span>
+      <span class="meta" id="updated"></span>
+      <button class="ghost" id="refreshBtn">刷新结果</button>
+      <button class="ghost" id="cacheRefreshBtn" style="border:1px solid var(--gold);color:var(--gold)">刷新本地缓存</button>
+    </div>
+  </header>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="warn" id="warn">预估涨幅为技术信号推算，仅供参考，<b>非投资建议</b>。市场有风险，投资需谨慎。</div>
+
+  <div class="main-tabs" id="mainTabs">
+    <div class="main-tab active" data-pane="pane-ma">均线形态筛选</div>
+    <div class="main-tab" data-pane="pane-cond">选股条件</div>
+    <div class="main-tab" data-pane="pane-stock">个股分析</div>
+  </div>
+
+  <!-- Tab1: 均线形态筛选 -->
+  <div class="tab-pane active" id="pane-ma">
+    <div class="card" style="border-top:none;border-radius:0 0 12px 12px">
+      <div class="card-b" id="maBody" style="display:block">
+        <div class="ckbar" style="margin-bottom:10px">
+          <span class="meta" id="maUpdated">尚未筛选</span>
+          <button class="ghost" id="maRunBtn">开始筛选</button>
+        </div>
+        <div class="ma-tabs" id="maTabs"></div>
+        <div class="ma-tab-desc" id="maDesc"></div>
+        <div class="tbl-wrap" id="maTblWrap" style="border:none;border-radius:0;max-height:520px;overflow-y:auto">
+          <table id="tblMA">
+            <thead><tr>
+              <th class="l">#</th><th class="l">股票</th><th class="l">行业</th><th class="l">所属板块</th>
+              <th>今日涨跌</th><th>现价</th><th>MA5</th><th>MA10</th><th>MA20</th><th>MA60</th>
+              <th>成交额(亿)</th>
+            </tr></thead>
+            <tbody id="tbodyMA"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab2: 选股条件 -->
+  <div class="tab-pane" id="pane-cond">
+    <div class="card" style="border-top:none;border-radius:0 0 12px 12px">
+      <div class="card-b" id="condBody" style="display:block">
+        <div class="cond" id="condGrid"></div>
+        <div class="ckbar">
+          <span class="meta" id="condCnt">已勾选 0 项</span>
+          <button class="ghost" id="allBtn">全选</button>
+          <button class="ghost" id="noneBtn">全不选</button>
+          <button id="doneBtn">完成</button>
+          <span class="meta" style="color:var(--gold)">组内"满足其一"为或 · 组间为且 · 未勾选不约束 · A/D组为必选(须通过) · B/C组可选(允许差1)</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec-h" id="exactHead">完全命中 (4/4 全部条件)</div>
+    <div class="tbl-wrap">
+      <table id="tblExact">
+        <thead><tr>
+          <th class="l">#</th><th class="l">股票</th>
+          <th class="l">行业</th><th class="l">所属板块</th>
+          <th>今日涨跌</th><th>现价</th>
+          <th>流通市值(亿)</th><th>成交额(亿)</th>
+          <th>乖离率</th><th>MA5/10/20/60</th>
+          <th>预估5日</th><th>预估10日</th><th>预估20日</th>
+          <th class="l">信号标签</th>
+        </tr></thead>
+        <tbody id="tbodyExact"></tbody>
+      </table>
+    </div>
+
+    <div class="sec-h" style="margin-top:24px" id="nearHead">接近满足 (≥3/4) · 按达成度排序
+      <span style="font-weight:400;color:var(--sub);font-size:12px;margin-left:8px">达成:
+        <span class="lg" title="趋势结构">趋势</span>
+        <span class="lg" title="启动信号">启动</span>
+        <span class="lg" title="买点状态">买点</span>
+        <span class="lg" title="风控排除">风控</span>
+      </span>
+    </div>
+    <div class="tbl-wrap">
+      <table id="tblNear">
+        <thead><tr>
+          <th class="l">#</th><th class="l">股票</th>
+          <th class="l">行业</th><th class="l">所属板块</th>
+          <th>今日涨跌</th><th>现价</th>
+          <th>流通市值(亿)</th><th>成交额(亿)</th>
+          <th>乖离率</th><th>MA5/10/20/60</th>
+          <th>达成</th>
+          <th>预估5日</th><th>预估10日</th><th>预估20日</th>
+          <th class="l">信号标签</th>
+        </tr></thead>
+        <tbody id="tbodyNear"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Tab3: 个股分析 -->
+  <div class="tab-pane" id="pane-stock">
+    <div class="card" style="border-top:none;border-radius:0 0 12px 12px">
+      <div class="card-b" id="saBody" style="display:block">
+        <div class="sa-box">
+          <input class="sa-input" id="saInput" type="text" placeholder="输入股票代码(002907) / 名称(华阳) / 拼音首字母(hyjt)…" autocomplete="off" />
+          <div class="sa-dropdown" id="saDropdown"></div>
+        </div>
+        <div class="sa-panel" id="saPanel"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="meta" style="text-align:center;margin-top:18px">数据来源:新浪财经 · 沪深京A股 · K线拉取300日(MA250) · 结果缓存5分钟</div>
+</div>
+
+<script>
+const $ = s=>document.querySelector(s);
+// Tab切换
+document.querySelectorAll('.main-tab').forEach(t=>{
+  t.onclick=()=>{
+    document.querySelectorAll('.main-tab').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.tab-pane').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById(t.dataset.pane).classList.add('active');
+  };
+});
+const fmtPct = v=>{
+  if(v==null||isNaN(v)) return '—';
+  return `<span class="${v>=0?'up':'down'}">${v>=0?'+':''}${v.toFixed(2)}%</span>`;
+};
+const bar = (v,max=40)=>{
+  const w=Math.min(100,Math.abs(v)/max*100);
+  const col=v>=0?'var(--up)':'var(--down)';
+  return `<span class="bar"><i style="width:${w}%;background:${col}"></i></span>`;
+};
+// 各组达成圆点 (仅展示激活的组)
+const G_ORDER=[['gA','趋势'],['gB','启动'],['gC','买点'],['gD','风控']];
+const dots = (g,active)=>{
+  const act=active||{gA:1,gB:1,gC:1,gD:1};
+  const shown=G_ORDER.filter(([k])=>act[k]);
+  const items=shown.map(([k,l])=>{
+    const on=g[k];
+    return `<span class="dot ${on?'on':'off'}" title="${l}${on?'达成':'未达'}">${l[0]}</span>`;
+  }).join('');
+  const npass=shown.filter(([k])=>g[k]).length;
+  return items + ` <b style="margin-left:4px">${npass}/${shown.length}</b>`;
+};
+function rowHTML(s,i,near){
+  const maTxt = `${s.ma5}/${s.ma10}/${s.ma20}/${s.ma60}`;
+  const tags = (s.tags||[]).map(t=>`<span class="tag">${t}</span>`).join(' ') || '—';
+  const bcol = s.bias>=15?'var(--up)':(s.bias<0?'var(--down)':'var(--sub)');
+  const extra = near ? `<td>${dots(s.groups,s.active)}</td>` : '';
+  return `<tr>
+    <td class="l">${i+1}</td>
+    <td class="l"><a class="nm" href="https://stockpage.10jqka.com.cn/${s.code}/" target="_blank" rel="noopener" title="同花顺日K图 - ${s.name}">${s.name}</a><div class="code">${s.code}</div></td>
+    <td class="l">${s.industry}</td>
+    <td class="l">${s.concept}</td>
+    <td>${fmtPct(s.change_pct)}</td>
+    <td>${s.price}</td>
+    <td>${s.float_mv_yi}</td>
+    <td>${s.amount_yi}</td>
+    <td><span style="color:${bcol};font-weight:600">${s.bias}%</span></td>
+    <td style="font-size:11px;color:var(--sub)">${maTxt}</td>
+    ${extra}
+    <td>${bar(s.est_5d)}${fmtPct(s.est_5d)}</td>
+    <td>${bar(s.est_10d)}${fmtPct(s.est_10d)}</td>
+    <td>${bar(s.est_20d)}${fmtPct(s.est_20d)}</td>
+    <td class="l">${tags}</td>
+  </tr>`;
+}
+function render(d, syncConds=true){
+  const na=d.n_active||4;
+  const act=d.active||{gA:1,gB:1,gC:1,gD:1};
+  const lgHtml=G_ORDER.filter(([k])=>act[k]).map(([k,l])=>`<span class="lg" title="${l}">${l}</span>`).join('');
+  $('#updated').textContent = d.updated + (d.cached?' (缓存)':'') + ` · 耗时 ${d.elapsed_sec}s · 激活${na}组条件`;
+  $('#stats').innerHTML=[
+    ['总样本',d.universe],['预筛候选',d.candidates],
+    ['完全命中',d.matched],['接近满足',d.near_count]
+  ].map(x=>`<div class="stat"><div class="n ${x[0]==='完全命中'&&x[1]>0?'up':(x[0]==='接近满足'?'gold':'')}">${x[1]}</div><div class="l">${x[0]}</div></div>`).join('');
+  const ex=d.exact||[], nr=d.stocks||[];
+  $('#exactHead').innerHTML = `完全命中 (${na}/${na} 全部激活条件) <span class="cnt">${ex.length}</span>`;
+  $('#tbodyExact').innerHTML = !ex.length
+    ? `<tr><td colspan="14" class="empty">当前勾选条件下暂无同时满足全部 ${na} 组的标的 (趋势/启动/买点常存在时序差异; 见下方"接近满足")</td></tr>`
+    : ex.map((s,i)=>rowHTML(s,i,false)).join('');
+  $('#nearHead').innerHTML = `接近满足 (≥${Math.max(1,na-1)}/${na}) · 按达成度排序 <span style="font-weight:400;color:var(--sub);font-size:12px;margin-left:8px">达成: ${lgHtml}</span>`;
+  $('#tbodyNear').innerHTML = !nr.length
+    ? '<tr><td colspan="15" class="empty">暂无接近满足的标的</td></tr>'
+    : nr.map((s,i)=>rowHTML(s,i,true)).join('');
+  // 同步勾选状态为本次筛选使用的conds (刷新操作不打断用户未提交的勾选)
+  if(syncConds && Array.isArray(d.conds) && d.conds.length){
+    renderConds(d.conds);
+  }
+}
+// ===== 条件勾选面板 =====
+let COND_DEFS=[], COND_ALL=[];
+async function initConds(){
+  try{
+    const r=await fetch('/api/conds'); const d=await r.json();
+    COND_DEFS=d.defs||[]; COND_ALL=d.all||[];
+  }catch(e){ return; }
+  // 先用上次筛选的conds(若有缓存)或默认全选
+  let init = COND_ALL.slice();
+  try{
+    const r2=await fetch('/api/screen'); const dd=await r2.json();
+    if(Array.isArray(dd.conds) && dd.conds.length) init=dd.conds;
+  }catch(e){}
+  renderConds(init);
+}
+function renderConds(checked){
+  if(!COND_DEFS.length) return;
+  const set=new Set(checked);
+  $('#condGrid').innerHTML=COND_DEFS.map(g=>{
+    const items=g.items.map(it=>{
+      const ck=set.has(it.id)?'checked':'';
+      const h=it.hint?` <span class="hint">(${it.hint})</span>`:'';
+      return `<label class="ck"><input type="checkbox" data-id="${it.id}" ${ck}><span class="lb">${it.label}${h}</span></label>`;
+    }).join('');
+    const t=g.type==='or'?'满足其一':'全部满足';
+    return `<div class="g"><div class="gt">${g.group}<span class="gtype">${t}</span></div>${items}</div>`;
+  }).join('');
+  updateCondCnt();
+}
+function getChecked(){ return [...document.querySelectorAll('#condGrid input[type=checkbox]:checked')].map(c=>c.dataset.id); }
+function updateCondCnt(){
+  const n=getChecked().length;
+  $('#condCnt').textContent=`已勾选 ${n}/${COND_ALL.length} 项`;
+}
+$('#condGrid').addEventListener('change',updateCondCnt);
+$('#allBtn').onclick=()=>renderConds(COND_ALL);
+$('#noneBtn').onclick=()=>renderConds([]);
+
+async function startScreen(conds, refreshFirst){
+  const btn=$('#doneBtn');
+  btn.disabled=true; btn.innerHTML='<span class="spin"></span>筛选中…';
+  $('#refreshBtn').disabled=true;
+  $('#tbodyExact').innerHTML='<tr><td colspan="14" class="empty"><span class="spin"></span>正在后台多维筛选, 首次约需2-3分钟拉取候选股300日K线…</td></tr>';
+  $('#tbodyNear').innerHTML='';
+  // 1) 提交本次勾选的conds启动后台筛选(或仅刷新)
+  try{
+    if(refreshFirst){
+      await fetch('/api/screen/refresh',{method:'POST'});
+    }else{
+      await fetch('/api/screen/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({conds})});
+    }
+  }catch(e){}
+  // 2) 轮询直到完成
+  const syncConds = !refreshFirst;  // 完成时同步为新conds, 刷新时保留用户未提交的勾选
+  const poll=async()=>{
+    try{
+      const r=await fetch('/api/screen');
+      const d=await r.json();
+      if(d.universe>0){
+        render(d, syncConds);
+        btn.disabled=false; btn.textContent='完成';
+        $('#refreshBtn').disabled=false;
+        return;
+      }
+      if(d.error){
+        $('#tbodyExact').innerHTML='<tr><td colspan="14" class="empty">筛选出错: '+d.error+'</td></tr>';
+        btn.disabled=false; btn.textContent='完成';
+        $('#refreshBtn').disabled=false;
+        return;
+      }
+      $('#tbodyExact').innerHTML='<tr><td colspan="14" class="empty"><span class="spin"></span>'+(d.progress||'后台筛选中…')+' · 页面会自动刷新, 请稍候</td></tr>';
+      setTimeout(poll, 4000);
+    }catch(e){
+      $('#tbodyExact').innerHTML='<tr><td colspan="14" class="empty">加载失败: '+e.message+'</td></tr>';
+      btn.disabled=false; btn.textContent='完成';
+      $('#refreshBtn').disabled=false;
+    }
+  };
+  // 先取一次(可能已有缓存或上轮结果)
+  try{
+    const r=await fetch('/api/screen');
+    const d=await r.json();
+    if(d.universe>0 && !d.running){
+      render(d, syncConds); btn.disabled=false; btn.textContent='完成'; $('#refreshBtn').disabled=false; return;
+    }
+    setTimeout(poll, 4000);
+  }catch(e){
+    $('#tbodyExact').innerHTML='<tr><td colspan="14" class="empty">加载失败: '+e.message+'</td></tr>';
+    btn.disabled=false; btn.textContent='完成'; $('#refreshBtn').disabled=false;
+  }
+}
+$('#doneBtn').onclick=()=>{
+  const conds=getChecked();
+  if(!conds.length){ alert('请至少勾选一个条件'); return; }
+  startScreen(conds, false);
+};
+$('#refreshBtn').onclick=()=>startScreen(null, true);
+
+// ===== 本地缓存管理 =====
+async function loadCacheInfo(){
+  try{
+    const r=await fetch('/api/cache_info');
+    const d=await r.json();
+    if(!d.kline_count && !d.spot_size_mb){
+      $('#cacheInfo').textContent='本地缓存: 无';
+      return;
+    }
+    const mt=d.kline_mtime||d.spot_mtime||'—';
+    $('#cacheInfo').innerHTML=`本地缓存: <b style="color:var(--gold)">${d.cache_date}</b> · K线 ${d.kline_count}只/${d.kline_size_mb}MB · 行情 ${d.spot_size_mb}MB · 更新 ${mt}`;
+  }catch(e){
+    $('#cacheInfo').textContent='本地缓存: 获取失败';
+  }
+}
+$('#cacheRefreshBtn').onclick=async()=>{
+  if(!confirm('确认刷新本地缓存？将删除当前缓存数据并重新从服务拉取（约需2-3分钟）。')) return;
+  const btn=$('#cacheRefreshBtn');
+  btn.disabled=true; btn.textContent='刷新中…';
+  $('#cacheInfo').textContent='本地缓存: 正在清空并重新拉取…';
+  try{
+    await fetch('/api/cache_refresh',{method:'POST'});
+    // 轮询筛选进度
+    const poll=async()=>{
+      try{
+        const r=await fetch('/api/screen');
+        const d=await r.json();
+        if(d.running){
+          $('#cacheInfo').textContent=`本地缓存: 重新拉取中… ${d.progress||''}`;
+          btn.textContent='拉取中…';
+          setTimeout(poll, 3000);
+        }else{
+          btn.disabled=false; btn.textContent='刷新本地缓存';
+          loadCacheInfo();
+          startScreen(null, true);
+        }
+      }catch(e){
+        setTimeout(poll, 5000);
+      }
+    };
+    setTimeout(poll, 2000);
+  }catch(e){
+    btn.disabled=false; btn.textContent='刷新本地缓存';
+    $('#cacheInfo').textContent='本地缓存: 刷新失败';
+  }
+};
+loadCacheInfo();
+
+// ===== 个股分析模块 =====
+let saTimer=null;
+const saInput=$('#saInput'), saDD=$('#saDropdown'), saPanel=$('#saPanel');
+saInput.addEventListener('input',()=>{
+  const q=saInput.value.trim();
+  clearTimeout(saTimer);
+  if(!q){ saDD.classList.remove('show'); return; }
+  saTimer=setTimeout(()=>searchStock(q),300);
+});
+saInput.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){ saDD.classList.remove('show'); saInput.blur(); }
+});
+document.addEventListener('click',e=>{
+  if(!e.target.closest('.sa-box')) saDD.classList.remove('show');
+});
+async function searchStock(q){
+  try{
+    const r=await fetch('/api/stock/search?q='+encodeURIComponent(q));
+    const d=await r.json();
+    const items=d.items||[];
+    if(!items.length){ saDD.classList.remove('show'); return; }
+    saDD.innerHTML=items.map(it=>`<div class="sa-item" data-code="${it.code}"><span class="nm">${it.name}</span><span class="cd">${it.code}</span></div>`).join('');
+    saDD.classList.add('show');
+    saDD.querySelectorAll('.sa-item').forEach(el=>{
+      el.onclick=()=>{
+        const code=el.dataset.code;
+        saInput.value='';
+        saDD.classList.remove('show');
+        analyzeStock(code);
+      };
+    });
+  }catch(e){}
+}
+async function analyzeStock(code){
+  saPanel.classList.add('show');
+  saPanel.innerHTML='<div style="text-align:center;padding:30px"><span class="spin"></span>正在拉取K线并分析技术指标…</div>';
+  try{
+    const r=await fetch('/api/stock/analyze?code='+encodeURIComponent(code));
+    if(!r.ok){ const e=await r.json(); saPanel.innerHTML='<div class="empty">'+e.error+'</div>'; return; }
+    const d=await r.json();
+    renderAnalysis(d);
+  }catch(e){
+    saPanel.innerHTML='<div class="empty">加载失败: '+e.message+'</div>';
+  }
+}
+function renderAnalysis(d){
+  const chgCls=d.change_pct>=0?'up':'down';
+  const chgSign=d.change_pct>=0?'+':'';
+  const cells=[
+    ['现价', d.price, chgCls],
+    ['今日涨跌', `${chgSign}${d.change_pct}%`, chgCls],
+    ['近5日', `${d.change_5d>=0?'+':''}${d.change_5d}%`, d.change_5d>=0?'up':'down'],
+    ['近10日', `${d.change_10d>=0?'+':''}${d.change_10d}%`, d.change_10d>=0?'up':'down'],
+    ['近20日', `${d.change_20d>=0?'+':''}${d.change_20d}%`, d.change_20d>=0?'up':'down'],
+    ['成交额', `${d.amount_yi}亿`, ''],
+  ];
+  const gridHtml=cells.map(c=>`<div class="sa-cell"><div class="l">${c[0]}</div><div class="v ${c[2]||''}">${c[1]}</div></div>`).join('');
+  const rowsHtml=(d.analysis||[]).map(a=>`<div class="sa-row"><span class="item">${a.item}</span><span class="desc">${a.desc}</span><span class="st ${a.status}">${a.status}</span></div>`).join('');
+  // 简易K线图
+  const bars=d.bars||[];
+  const chartHtml=bars.length?buildMiniChart(bars):'';
+  // 所属板块 + 主营业务
+  const boardHtml=(d.industry||d.concept)?`
+    <div class="sa-row" style="margin-bottom:6px">
+      <span class="item">所属板块</span>
+      <span class="desc">${d.industry?`<span class="tag">${d.industry}</span>`:''} ${d.concept?`<span class="tag">${d.concept}</span>`:''}</span>
+    </div>`:'';
+  const bizHtml=d.main_business&&d.main_business!=='—'?`
+    <div class="sa-row" style="margin-bottom:6px">
+      <span class="item">主营业务</span>
+      <span class="desc">${d.main_business}</span>
+    </div>`:'';
+  saPanel.innerHTML=`
+    <div class="sa-head">
+      <a class="nm" href="https://stockpage.10jqka.com.cn/${d.code}/" target="_blank" rel="noopener" style="text-decoration:none;cursor:pointer">${d.name}</a>
+      <span class="cd">${d.code}</span>
+      <span class="meta" style="margin-left:auto">数据更新: ${d.updated}</span>
+    </div>
+    ${boardHtml}${bizHtml}
+    <div class="sa-grid">${gridHtml}</div>
+    ${chartHtml}
+    <div class="sec-h" style="margin-top:16px;font-size:14px">技术分析</div>
+    <div class="sa-analysis">${rowsHtml}</div>
+  `;
+}
+function buildMiniChart(bars){
+  const w=800,h=180,pad=10;
+  const closes=bars.map(b=>b.close);
+  const hi=Math.max(...bars.map(b=>b.high));
+  const lo=Math.min(...bars.map(b=>b.low));
+  const rng=hi-lo||1;
+  const n=bars.length;
+  const xStep=(w-pad*2)/(n-1);
+  const y=v=>h-pad-(v-lo)/rng*(h-pad*2);
+  const path=closes.map((c,i)=>`${i===0?'M':'L'}${pad+i*xStep},${y(c)}`).join(' ');
+  // 涨跌色块
+  const cols=bars.map((b,i)=>{
+    const x=pad+i*xStep;
+    const chg=b.chg||0;
+    const col=chg>=0?'rgba(255,77,79,0.25)':'rgba(38,166,154,0.25)';
+    const y1=y(b.high), y2=y(b.low);
+    return `<rect x="${x-2}" y="${y1}" width="4" height="${Math.max(0,y2-y1)}" fill="${col}"/>`;
+  }).join('');
+  return `
+    <div class="sa-chart">
+      <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:100%" preserveAspectRatio="none">
+        ${cols}
+        <path d="${path}" fill="none" stroke="#4f9dff" stroke-width="1.5"/>
+      </svg>
+    </div>
+  `;
+}
+
+// ===== 均线形态筛选模块 =====
+const MA_PATS=[
+  ['多头排列','MA5>MA10>MA20>MA60，四线今日均>5日前，收盘≥MA10，多头排列持续≥5日（稳健型）'],
+  ['多头排列向上发散','MA5>MA10>MA20，三线同步上行，间距扩大（不含MA60，宽松版）'],
+  ['粘合向上突破','近3日MA5/MA10/MA20间距<1.5%(粘合)，现转为多头排列，突破启动'],
+  ['空头排列向下发散','MA5<MA10<MA20，三线同步下行，间距扩大，弱势下降趋势'],
+  ['粘合向下突破','近3日MA5/MA10/MA20间距<1.5%(粘合)，现转为空头排列，破位下行'],
+];
+let maCurrentTab=0;
+let maData=null;
+function renderMATabs(){
+  const counts=(maData&&maData.counts)||{};
+  $('#maTabs').innerHTML=MA_PATS.map((p,i)=>{
+    const c=counts[p[0]]||0;
+    return `<div class="ma-tab ${i===maCurrentTab?'active':''}" data-i="${i}">${p[0]}<span class="cnt">${c}</span></div>`;
+  }).join('');
+  $('#maTabs').querySelectorAll('.ma-tab').forEach(t=>{
+    t.onclick=()=>{ maCurrentTab=+t.dataset.i; renderMATabs(); renderMATable(); };
+  });
+  $('#maDesc').textContent=MA_PATS[maCurrentTab][1];
+}
+function renderMATable(){
+  if(!maData||!maData.patterns){ return; }
+  const pat=MA_PATS[maCurrentTab][0];
+  const stocks=(maData.patterns[pat]||[]);
+  $('#maDesc').textContent=MA_PATS[maCurrentTab][1];
+  if(!stocks.length){
+    $('#tbodyMA').innerHTML='<tr><td colspan="11" class="empty">当前形态暂无匹配标的</td></tr>';
+    return;
+  }
+  $('#tbodyMA').innerHTML=stocks.map((s,i)=>`<tr>
+    <td class="l">${i+1}</td>
+    <td class="l"><a class="nm" href="https://stockpage.10jqka.com.cn/${s.code}/" target="_blank" rel="noopener">${s.name}</a><div class="code">${s.code}</div></td>
+    <td class="l">${s.industry||'—'}</td>
+    <td class="l">${s.concept||'—'}</td>
+    <td>${fmtPct(s.change_pct)}</td>
+    <td>${s.price}</td>
+    <td style="color:${s.price>s.ma5?'var(--up)':'var(--down)'}">${s.ma5}</td>
+    <td style="color:${s.price>s.ma10?'var(--up)':'var(--down)'}">${s.ma10}</td>
+    <td style="color:${s.price>s.ma20?'var(--up)':'var(--down)'}">${s.ma20}</td>
+    <td style="color:${s.price>s.ma60?'var(--up)':'var(--down)'}">${s.ma60||'—'}</td>
+    <td>${s.amount_yi}</td>
+  </tr>`).join('');
+}
+function renderMA(d){
+  maData=d;
+  $('#maUpdated').textContent=(d.updated||'')+(d.elapsed_sec?` · 耗时 ${d.elapsed_sec}s · 扫描 ${d.total_stocks||0} 只`:''+(d.running?' · 筛选中…':''));
+  renderMATabs();
+  renderMATable();
+}
+async function startMAScreen(){
+  const btn=$('#maRunBtn');
+  btn.disabled=true; btn.innerHTML='<span class="spin"></span>筛选中…';
+  $('#tbodyMA').innerHTML='<tr><td colspan="11" class="empty"><span class="spin"></span>正在扫描全市场均线形态, 首次约需1-2分钟…</td></tr>';
+  try{ await fetch('/api/ma-screen/run',{method:'POST'}); }catch(e){}
+  const poll=async()=>{
+    try{
+      const r=await fetch('/api/ma-screen');
+      const d=await r.json();
+      if(d.patterns&&Object.keys(d.patterns).length){
+        renderMA(d);
+        if(!d.running){ btn.disabled=false; btn.textContent='重新筛选'; return; }
+      }else if(d.error){
+        $('#tbodyMA').innerHTML='<tr><td colspan="11" class="empty">出错: '+d.error+'</td></tr>';
+        btn.disabled=false; btn.textContent='开始筛选'; return;
+      }else{
+        $('#tbodyMA').innerHTML='<tr><td colspan="11" class="empty"><span class="spin"></span>'+(d.progress||'后台筛选中…')+'</td></tr>';
+      }
+      setTimeout(poll,4000);
+    }catch(e){
+      $('#tbodyMA').innerHTML='<tr><td colspan="11" class="empty">加载失败: '+e.message+'</td></tr>';
+      btn.disabled=false; btn.textContent='开始筛选';
+    }
+  };
+  // 先取一次缓存
+  try{
+    const r=await fetch('/api/ma-screen');
+    const d=await r.json();
+    if(d.patterns&&Object.keys(d.patterns).length&&!d.running){ renderMA(d); btn.disabled=false; btn.textContent='重新筛选'; return; }
+    setTimeout(poll,4000);
+  }catch(e){ setTimeout(poll,4000); }
+}
+$('#maRunBtn').onclick=startMAScreen;
+
+// 启动
+initConds().then(()=>{
+  // 渲染已有缓存结果(若服务已预热)
+  fetch('/api/screen').then(r=>r.json()).then(d=>{ if(d.universe>0 && !d.running) render(d); else if(d.running){ $('#tbodyExact').innerHTML='<tr><td colspan="14" class="empty"><span class="spin"></span>'+(d.progress||'后台筛选中…')+'</td></tr>'; setTimeout(()=>startScreen(null,true).catch(()=>{}),0);} });
+});
+// 均线形态筛选: 渲染初始tabs并检查缓存
+renderMATabs();
+fetch('/api/ma-screen').then(r=>r.json()).then(d=>{ if(d.patterns&&Object.keys(d.patterns).length){ renderMA(d); } else if(d.running){ $('#tbodyMA').innerHTML='<tr><td colspan="11" class="empty"><span class="spin"></span>'+(d.progress||'后台筛选中…')+'</td></tr>'; } }).catch(()=>{});
+</script>
+</body>
+</html>
