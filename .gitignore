@@ -1,5 +1,5 @@
 # 缓存与临时文件
-cache/
+cache/klines/
 __pycache__/
 *.pyc
 .uploads/
@@ -18,7 +18,6 @@ start_tunnel.sh
 # 敏感信息
 .env
 *.token
-*_history.json
 
 # 飞书二维码 (本地临时文件)
 feishu_qrcode.png
