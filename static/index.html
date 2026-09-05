@@ -763,17 +763,16 @@ const mkt = c => {
   if (f === '4' || f === '8') return p + '.bj';
   return p;
 };
-// 点击股票名: 跳转同花顺网页端行情页
+// 点击股票名: 跳转同花顺网页端行情页 (新页签打开)
 function openStock(code, name, ev){
   if(ev){ ev.preventDefault(); ev.stopPropagation(); }
   var c = String(code).replace(/^[a-zA-Z]{2}/,'');
   var url = 'https://stockpage.10jqka.com.cn/'+c+'/';
-  // iframe沙箱中 window.open/_blank 常被拦截, 用 _top 跳出iframe
-  try { window.top.location.href = url; }catch(e){
-    // 跨域无 top 访问权时回退
-    try { window.open(url, '_blank'); }catch(e2){
-      var a=document.createElement('a'); a.href=url; a.target='_top';
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  // 优先新页签打开
+  try { window.open(url, '_blank'); }catch(e){
+    // 回退: 动态 a 标签
+    var a=document.createElement('a'); a.href=url; a.target='_blank'; a.rel='noopener';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
     }
   }
 }
@@ -854,7 +853,7 @@ function rowHTML(s,i,near){
   bsHtml = `<div title="${bsReason}\n${tipParts.join('\n')}" style="cursor:help">${bsHtml}</div>`;
   return `<tr>
     <td class="l">${i+1}</td>
-    <td class="l">${markNameHtml(s.code,s.name,s.price)}<div class="code"><a class="cd-link" title="同花顺个股信息" href="https://stockpage.10jqka.com.cn/${s.code}/" target="_top" rel="noopener" onclick="openStock('${s.code}','${s.name}',event)">${mkt(s.code)}</a></div></td>
+    <td class="l">${markNameHtml(s.code,s.name,s.price)}<div class="code"><a class="cd-link" title="同花顺个股信息" href="https://stockpage.10jqka.com.cn/${s.code}/" target="_blank" rel="noopener" onclick="openStock('${s.code}','${s.name}',event)">${mkt(s.code)}</a></div></td>
     <td class="l">${s.industry}</td>
     <td class="l">${s.concept}</td>
     <td>${fmtPct(s.change_pct)}</td>
@@ -2448,7 +2447,7 @@ function renderAnalysis(d){
     <div class="sa-head-sticky">
     <div class="sa-head">
       ${saPlusBtn}
-      <a class="nm" href="https://stockpage.10jqka.com.cn/${d.code}/" target="_top" rel="noopener" style="text-decoration:none;cursor:pointer" onclick="openStock('${d.code}','${d.name}',event)">${d.name}${saMarkBtn}</a>
+      <a class="nm" href="https://stockpage.10jqka.com.cn/${d.code}/" target="_blank" rel="noopener" style="text-decoration:none;cursor:pointer" onclick="openStock('${d.code}','${d.name}',event)">${d.name}${saMarkBtn}</a>
       <span class="cd">${mkt(d.code)}</span>
     </div>
     </div>
@@ -3016,7 +3015,7 @@ function maSplitConcept(c){
 // SSP 单行渲染（不同池子扩展列）
 function sspRowHtml(s, i, pool){
   const amt = (s.amount_y!==undefined? s.amount_y : (s.amount_yi!==undefined? s.amount_yi : null));
-  const nmLink = `${markNameHtml(s.code,s.name,s.price)}<div class="code"><a class="cd-link" title="同花顺个股信息" href="https://stockpage.10jqka.com.cn/${s.code}/" target="_top" rel="noopener" onclick="openStock('${s.code}','${s.name}',event)">${mkt(s.code)}</a></div>`;
+  const nmLink = `${markNameHtml(s.code,s.name,s.price)}<div class="code"><a class="cd-link" title="同花顺个股信息" href="https://stockpage.10jqka.com.cn/${s.code}/" target="_blank" rel="noopener" onclick="openStock('${s.code}','${s.name}',event)">${mkt(s.code)}</a></div>`;
   let extra = '';
   let bsBrief = '';
   if(pool==='new_signals'){
@@ -3104,7 +3103,7 @@ function maRowHtml(s,i){
   }
   return `<tr>
     <td class="l">${i+1}</td>
-    <td class="l">${markNameHtml(s.code,s.name,s.price)}<div class="code"><a class="cd-link" title="同花顺个股信息" href="https://stockpage.10jqka.com.cn/${s.code}/" target="_top" rel="noopener" onclick="openStock('${s.code}','${s.name}',event)">${mkt(s.code)}</a></div></td>
+    <td class="l">${markNameHtml(s.code,s.name,s.price)}<div class="code"><a class="cd-link" title="同花顺个股信息" href="https://stockpage.10jqka.com.cn/${s.code}/" target="_blank" rel="noopener" onclick="openStock('${s.code}','${s.name}',event)">${mkt(s.code)}</a></div></td>
     <td class="l">${indHtml}</td>
     <td class="l">${conHtml}</td>
     <td>${fmtPct(s.change_pct)}</td>
@@ -3772,7 +3771,7 @@ async function renderMkTable(){
         <td>${i+1}</td>
         <td class="l">
           ${markNameHtml(s.code, s.name, s.price)}
-          <div class="code"><a class="cd-link" href="https://stockpage.10jqka.com.cn/${s.code}/" target="_top" rel="noopener">${mkt(s.code)}</a></div>
+          <div class="code"><a class="cd-link" href="https://stockpage.10jqka.com.cn/${s.code}/" target="_blank" rel="noopener">${mkt(s.code)}</a></div>
         </td>
         <td class="l">${s.industry||'—'}</td>
         <td>${s.price||'—'}</td>
@@ -3828,7 +3827,7 @@ async function renderHoldingTable(){
         <td>${i+1}</td>
         <td class="l">
           ${markNameHtml(s.code, s.name, price)}
-          <div class="code"><a class="cd-link" href="https://stockpage.10jqka.com.cn/${s.code}/" target="_top" rel="noopener">${mkt(s.code)}</a></div>
+          <div class="code"><a class="cd-link" href="https://stockpage.10jqka.com.cn/${s.code}/" target="_blank" rel="noopener">${mkt(s.code)}</a></div>
         </td>
         <td><b style="color:var(--accent)">${lots}</b></td>
         <td>${avg>0?avg.toFixed(2):'—'}</td>
@@ -3888,7 +3887,7 @@ async function renderClosedTable(){
         <td>${i+1}</td>
         <td class="l">
           ${markNameHtml(s.code, s.name, s.price)}
-          <div class="code"><a class="cd-link" href="https://stockpage.10jqka.com.cn/${s.code}/" target="_top" rel="noopener">${mkt(s.code)}</a></div>
+          <div class="code"><a class="cd-link" href="https://stockpage.10jqka.com.cn/${s.code}/" target="_blank" rel="noopener">${mkt(s.code)}</a></div>
         </td>
         <td class="mk-time">${firstBuy}</td>
         <td class="mk-time">${lastSell}</td>
@@ -3958,7 +3957,7 @@ async function renderTodayOpsTable(){
         <td>${i+1}</td>
         <td class="l">
           <a class="nm" title="点击跳转个股分析" onclick="gotoStockAnalyze('${o.code}','${(o.name||'').replace(/'/g,"\\'")}')" style="cursor:pointer">${esc(o.name||'—')}</a>
-          <div class="code"><a class="cd-link" href="https://stockpage.10jqka.com.cn/${o.code}/" target="_top" rel="noopener">${mkt(o.code)}</a></div>
+          <div class="code"><a class="cd-link" href="https://stockpage.10jqka.com.cn/${o.code}/" target="_blank" rel="noopener">${mkt(o.code)}</a></div>
         </td>
         <td style="color:${dirClr};font-weight:600">${dirTxt}</td>
         <td><b>${o.lots}</b></td>
