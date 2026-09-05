@@ -1,0 +1,96 @@
+{
+  "601018": {
+    "code": "601018",
+    "name": "宁波港",
+    "lots": 9,
+    "avg_cost": 3.47,
+    "total_cost": 3123.0,
+    "operations": [
+      {
+        "id": 33,
+        "type": "buy",
+        "lots": 4,
+        "price": 3.47,
+        "amount": 1388.0,
+        "date": "2026-09-05",
+        "time": "2026-09-05 09:17:13"
+      },
+      {
+        "id": 34,
+        "type": "buy",
+        "lots": 3,
+        "price": 3.47,
+        "amount": 1041.0,
+        "date": "2026-09-05",
+        "time": "2026-09-05 09:17:19"
+      },
+      {
+        "id": 37,
+        "type": "buy",
+        "lots": 2,
+        "price": 3.47,
+        "amount": 694.0,
+        "date": "2026-09-05",
+        "time": "2026-09-05 09:23:33"
+      }
+    ],
+    "realized_pnl": 0.0,
+    "is_closed": false,
+    "created_at": "2026-09-05 09:17:13",
+    "updated_at": "2026-09-05 09:23:33"
+  },
+  "000526": {
+    "code": "000526",
+    "name": "学大教育",
+    "lots": 0,
+    "avg_cost": 0.0,
+    "total_cost": 0.0,
+    "operations": [
+      {
+        "id": 35,
+        "type": "buy",
+        "lots": 3,
+        "price": 37.14,
+        "amount": 11142.0,
+        "date": "2026-09-05",
+        "time": "2026-09-05 09:18:50"
+      },
+      {
+        "id": 36,
+        "type": "sell",
+        "lots": 3,
+        "price": 37.14,
+        "amount": 11142.0,
+        "realized_pnl": 0.0,
+        "date": "2026-09-05",
+        "time": "2026-09-05 09:19:04"
+      }
+    ],
+    "realized_pnl": 0.0,
+    "is_closed": true,
+    "created_at": "2026-09-05 09:18:50",
+    "updated_at": "2026-09-05 09:19:04"
+  },
+  "600075": {
+    "code": "600075",
+    "name": "新疆天业",
+    "lots": 2,
+    "avg_cost": 4.96,
+    "total_cost": 992.0,
+    "operations": [
+      {
+        "id": 38,
+        "type": "buy",
+        "lots": 2,
+        "price": 4.96,
+        "amount": 992.0,
+        "date": "2026-09-05",
+        "time": "2026-09-05 09:28:34"
+      }
+    ],
+    "realized_pnl": 0.0,
+    "is_closed": false,
+    "created_at": "2026-09-05 09:28:34",
+    "updated_at": "2026-09-05 09:28:34"
+  }
+}

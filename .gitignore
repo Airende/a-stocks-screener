@@ -20,6 +20,5 @@ start_tunnel.sh
 *.token
 *_history.json
 
-# 个人数据 (持仓/标记, 不提交到公开仓库)
-data/
+# 飞书二维码 (本地临时文件)
 feishu_qrcode.png
