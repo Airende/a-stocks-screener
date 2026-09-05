@@ -4,7 +4,12 @@ __pycache__/
 *.pyc
 .uploads/
 .trae-html-share-packages/
+.trae/
 *.log
+
+# 本地虚拟环境
+.venv/
+venv/
 
 # 隧道相关(本地专用)
 tunnel_watchdog.sh
@@ -14,3 +19,7 @@ start_tunnel.sh
 .env
 *.token
 *_history.json
+
+# 个人数据 (持仓/标记, 不提交到公开仓库)
+data/
+feishu_qrcode.png
