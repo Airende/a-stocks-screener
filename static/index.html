@@ -757,6 +757,7 @@
           <span class="meta">⏱ 历史时点复盘:</span>
           <input type="date" id="saDate" style="padding:6px 10px;font-size:13px;border:1px solid var(--border);border-radius:8px;background:var(--panel2);color:var(--txt);outline:none">
           <button class="ghost" id="saDateBtn" style="padding:6px 14px;font-size:13px">按此日分析</button>
+          <button class="ghost" id="saTodayBtn" style="padding:6px 14px;font-size:13px;border-color:var(--accent);color:var(--accent)" title="清空基准日, 恢复为最新数据分析">回到今天</button>
           <span class="meta" id="saDateHint">以选定日期为最后一天, 回看当天的买卖点/量价/风格判定</span>
         </div>
         <div class="sa-hist" id="saHist">
@@ -1550,6 +1551,12 @@ if($('#saDateBtn')) $('#saDateBtn').onclick = ()=>{
   if(!v){ alert('请先选择基准日期'); return; }
   if(!_curAnalysis || !_curAnalysis.code){ alert('请先搜索一只股票'); return; }
   analyzeStock(_curAnalysis.code, v);
+};
+if($('#saTodayBtn')) $('#saTodayBtn').onclick = ()=>{
+  // 回到今天: 清空基准日并按最新数据分析 (20260906)
+  if(!_curAnalysis || !_curAnalysis.code){ alert('请先搜索一只股票'); return; }
+  if(saDateInput) saDateInput.value = '';
+  analyzeStock(_curAnalysis.code);
 };
 
 async function searchStock(q){
