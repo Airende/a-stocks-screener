@@ -5727,6 +5727,11 @@ def api_ssp_screen():
         ns = list(_SSP_STATE["new_signals"]); wp = list(_SSP_STATE["watch_pool"])
         cp = list(_SSP_STATE["confirmed_pool"])
     counts = {"上试盘·新信号": len(ns), "上试盘·观察池": len(wp), "上试盘·已确认": len(cp)}
+    # 弱市兜底 (20260906): 沪深300破MA20时强制清空确认池, 保证红banner与
+    # 确认池内容永远一致 (正常扫描流程已在 proc() 里跳过弱市确认, 此为双保险)
+    if not mkt:
+        cp = []
+        counts["上试盘·已确认"] = 0
     return JSONResponse({"running": running, "progress": progress, "error": err,
                          "updated": updated, "mkt_filter": mkt,
                          "new_signals": ns, "watch_pool": wp, "confirmed_pool": cp,
