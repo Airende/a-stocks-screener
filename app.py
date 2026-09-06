@@ -5635,9 +5635,9 @@ def _run_ssp_scan_thread():
                                 invalidate_price=round(sig_l,2))
                             matched["B"] = rec
                     # 情况 C：确认日 = 今日
+                    # 20260906 用户改: 弱市(沪深300破MA20)不再从确认池剔除股票,
+                    # 仅在前端以红色横幅警示 —— 确认信号照常入池供跟踪参考
                     if entry_i == last_i and matched["C"] is None:
-                        # 大盘过滤
-                        if not mkt_ok: continue
                         entry_p = float(closes[entry_i])
                         stop = sig_l * (1 - P["stop_buf"])
                         tgt = entry_p * (1 + P["target"])
@@ -5727,11 +5727,7 @@ def api_ssp_screen():
         ns = list(_SSP_STATE["new_signals"]); wp = list(_SSP_STATE["watch_pool"])
         cp = list(_SSP_STATE["confirmed_pool"])
     counts = {"上试盘·新信号": len(ns), "上试盘·观察池": len(wp), "上试盘·已确认": len(cp)}
-    # 弱市兜底 (20260906): 沪深300破MA20时强制清空确认池, 保证红banner与
-    # 确认池内容永远一致 (正常扫描流程已在 proc() 里跳过弱市确认, 此为双保险)
-    if not mkt:
-        cp = []
-        counts["上试盘·已确认"] = 0
+    # 20260906 用户改: 弱市仅横幅警示, 不再强制清空确认池(移除此前的兜底清空逻辑)
     return JSONResponse({"running": running, "progress": progress, "error": err,
                          "updated": updated, "mkt_filter": mkt,
                          "new_signals": ns, "watch_pool": wp, "confirmed_pool": cp,

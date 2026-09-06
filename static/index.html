@@ -3156,7 +3156,7 @@ function renderMATabs(){
   if(_isSspTab() && sspData){
     const tag = sspData.mkt_filter
       ? '<span class="ssp-mkt ok">🟢 沪深300在MA20上方 · 允许买入</span>'
-      : '<span class="ssp-mkt no">🔴 沪深300破MA20 · 弱市禁止买入(确认池清空)</span>';
+      : '<span class="ssp-mkt no">🔴 沪深300破MA20 · 弱市慎买（确认信号仅供跟踪参考，不自动剔除）</span>';
     const up = sspData.updated ? `更新：${sspData.updated}` : '';
     sspInfo = `<div style="margin:6px 0 8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">${tag}${up?`<span class="meta">${up}</span>`:''}</div>`;
   }
@@ -3239,10 +3239,6 @@ function renderMATable(){
       }
       if(!sspData){
         return `<tr><td colspan="12" class="empty"><span class="spin"></span>初始化上试盘扫描数据…</td></tr>`;
-      }
-      // 弱市提示: 确认池为空且大盘过滤未通过时, 明确说明原因 (20260906)
-      if(pool==='confirmed_pool' && sspData.mkt_filter===false){
-        return `<tr><td colspan="12" class="empty">🔴 弱市(沪深300破MA20)禁止买入 · 确认池已清空<br><span style="font-size:11px">即使今日有个股放量突破试盘高点, 也不产生确认买入信号; 待大盘收复MA20后恢复</span></td></tr>`;
       }
       return `<tr><td colspan="12" class="empty">${pool==='new_signals'?'今日无新试盘信号':(pool==='watch_pool'?'观察池为空':'今日无刚确认买入的标的')}</td></tr>`;
     };
