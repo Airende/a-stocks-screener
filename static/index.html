@@ -22,8 +22,8 @@
   .sub{color:var(--sub);font-size:13px;margin-top:2px}
   .toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
   /* 个股分析头部: 不吸顶, 正常滚动 */
-  /* 个股分析头部: 滚动时吸顶 (20260906 用户要求) */
-  .sa-head-sticky{position:sticky;top:0;z-index:20;background:var(--bg);padding:6px 0;margin-bottom:8px}
+  /* 个股分析头部: 滚动时吸顶 (20260906 用户要求); 背景与卡片背景(--panel)一致, 避免色块差 */
+  .sa-head-sticky{position:sticky;top:0;z-index:20;background:var(--panel);padding:6px 0;margin-bottom:8px}
   button{cursor:pointer;border:none;border-radius:8px;padding:9px 18px;font-size:14px;font-weight:600;background:var(--accent);color:#fff;transition:.15s}
   button:hover{filter:brightness(1.1)}
   button:disabled{opacity:.5;cursor:not-allowed}
