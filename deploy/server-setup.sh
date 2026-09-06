@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================
-# A股选股系统 · 云服务器一键部署脚本 (20260906)
+# ARD选股系统 · 云服务器一键部署脚本 (20260906)
 # 适用: Ubuntu 22.04 / 24.04 (Debian 系), 以 root 运行
 # 用法: 在服务器上执行
 #   DATABASE_URL='postgresql://...' DOMAIN='airende.xyz' bash server-setup.sh
@@ -49,7 +49,7 @@ chmod 600 "$APP_DIR/.env"
 echo "[5/6] systemd 服务 (开机自启 + 崩溃自动重启)..."
 cat > /etc/systemd/system/stocks-screener.service <<EOF
 [Unit]
-Description=A股选股系统 (FastAPI/uvicorn)
+Description=ARD选股系统 (FastAPI/uvicorn)
 After=network.target
 
 [Service]

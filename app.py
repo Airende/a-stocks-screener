@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-A股选股系统 - 后端
+ARD选股系统 - 后端
 数据来源: 新浪财经 (经沙箱代理可达; 东方财富在该代理下不可用)
 提供:
   - 全市场实时行情快照 (流通市值/成交额/今日涨跌)
@@ -4254,7 +4254,7 @@ def run_screen(conds=None) -> dict:
 # ============================================================
 # FastAPI
 # ============================================================
-app = FastAPI(title="A股选股系统")
+app = FastAPI(title="ARD选股系统")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 SCREEN_TTL = 300  # 选股结果缓存 5 分钟

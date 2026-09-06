@@ -1,4 +1,4 @@
-# A股智能选股系统
+# ARD选股系统
 
 单文件 FastAPI 应用 (`app.py`) + 单页前端 (`static/index.html`)。数据来源为新浪财经公开行情接口。
 
