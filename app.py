@@ -630,28 +630,12 @@ def fetch_spot_all() -> list[dict]:
 # ============================================================
 # 数据层: 个股日K线 (含当日)
 # ============================================================
-def fetch_kline(symbol: str, datalen: int = 40) -> list[dict]:
-    """返回 [{day,open,high,low,close,volume}, ...] 含当日。
-    优先使用本地缓存(按交易日); 无缓存则从服务拉取并保存。
-    收盘后若K线最后一天不是今天，用spot快照补全当日K线。
-    20260906 容灾: 新浪主源失败(或熔断期内)自动切换腾讯备源。"""
-    cache_date = _cache_date_for_fetch()
-    # 检查本地缓存
-    cached = _load_kline_cache(cache_date, symbol)
-    if cached is not None and len(cached) >= datalen:
-        # 收盘后检查缓存是否含今天数据，缺则用spot补全
-        if _is_after_close() and cached:
-            today_str = _latest_trade_date_str()
-            last_day = (cached[-1].get("day") or "")[:10].replace("-", "")
-            if last_day != today_str:
-                patched = _patch_today_bar_from_spot(cached, symbol, today_str)
-                if patched is not cached:
-                    _save_kline_cache(cache_date, symbol, patched)
-                    return patched
-        return cached
+def _fetch_kline_remote(symbol: str, datalen: int) -> list[dict]:
+    """K线远程拉取三级源: 新浪 → 腾讯 → 东财 (20260906 容灾)"""
     out: list[dict] = []
     sina_err = ""
-    if _sina_available():
+    tried_sina = _sina_available()
+    if tried_sina:
         try:
             data = _get(SINA_KLINE, {"symbol": symbol, "scale": 240, "ma": "no", "datalen": datalen})
             if isinstance(data, list):
@@ -685,14 +669,63 @@ def fetch_kline(symbol: str, datalen: int = 40) -> list[dict]:
             except Exception as e:  # noqa: BLE001
                 print(f"[source] [{bj_now()}] K线三源均失败 {symbol}: 新浪:{sina_err[:40]} / 东财:{str(e)[:60]}", flush=True)
                 return []
-    # 收盘后：若新浪K线未更新今天，用spot快照补全
-    if _is_after_close() and out:
-        today_str = _latest_trade_date_str()
-        last_day = (out[-1].get("day") or "")[:10].replace("-", "")
-        if last_day != today_str:
-            out = _patch_today_bar_from_spot(out, symbol, today_str)
-    # 保存缓存
-    if out:
+    return out
+
+
+def _kline_has_today(bars: list[dict] | None, today_str: str) -> bool:
+    """判断K线序列最后一根是否已是最近交易日 (20260906 缓存策略核心判据)"""
+    if not bars:
+        return False
+    return (bars[-1].get("day") or "")[:10].replace("-", "") >= today_str
+
+
+def fetch_kline(symbol: str, datalen: int = 40) -> list[dict]:
+    """返回 [{day,open,high,low,close,volume}, ...] 含最近交易日。
+    20260906 缓存策略 (按用户要求):
+      交易日15:00后刷新时, 先检查数据源是否有'今日最新数据':
+      · 本地缓存已含最近交易日 → 直接用, 不再下载;
+      · 缓存缺最近交易日 → 检查远端, 有今日数据则更新本地(之后不再下载),
+        远端也没有则用spot快照补全当日bar并落盘;
+      · 都没有今日数据 → 用历史数据顶上, 且【不落盘】(不锁死缓存),
+        后续刷新会继续检查, 直到拿到今日最新数据。
+    容灾: 新浪主源失败(或熔断期内)自动切换腾讯/东财备源。"""
+    after_close = _is_after_close()
+    cache_date = _cache_date_for_fetch()
+    today_str = _latest_trade_date_str()
+
+    cached = _load_kline_cache(cache_date, symbol)
+    if cached is not None and len(cached) >= datalen:
+        if not after_close:
+            # 盘中/盘前/周末: 缓存含最近交易日即为有效(维持原有行为)
+            return cached
+        if _kline_has_today(cached, today_str):
+            # 收盘后缓存已含今日最新数据 → 直接用, 不再下载
+            return cached
+        # 收盘后缓存缺今日 → 主动检查远端是否已更新出今日数据
+        fresh = _fetch_kline_remote(symbol, datalen)
+        if _kline_has_today(fresh, today_str):
+            _save_kline_cache(cache_date, symbol, fresh)
+            return fresh
+        # 远端暂无今日 → 用spot快照补全当日bar, 成功则落盘
+        patched = _patch_today_bar_from_spot(cached, symbol, today_str)
+        if _kline_has_today(patched, today_str):
+            _save_kline_cache(cache_date, symbol, patched)
+            return patched
+        # 都没有今日数据 → 用历史数据(不落盘, 下次刷新继续检查)
+        return cached
+
+    # 无缓存或缓存不足 → 远程拉取
+    out = _fetch_kline_remote(symbol, datalen)
+    if not out:
+        return []
+    if not _kline_has_today(out, today_str):
+        # 源数据缺最近交易日 → 尝试用spot快照补全
+        out = _patch_today_bar_from_spot(out, symbol, today_str)
+    # 落盘策略:
+    #   收盘后: 只有含最近交易日的完整数据才写入缓存(避免数据滞后时把不完整
+    #   数据锁死一整天); 否则只用历史数据, 不落盘, 后续刷新继续检查。
+    #   盘中/盘前: 维持原有落盘行为。
+    if out and (_kline_has_today(out, today_str) or not after_close):
         _save_kline_cache(cache_date, symbol, out)
     return out
 
