@@ -4362,11 +4362,15 @@ bindMkTabs();
 // 股票代码悬浮K线预览 (20260906): 鼠标停在代码上弹出近半年日K迷你图
 // 事件委托绑定所有 a.cd-link, 无需逐个渲染函数接入; 每只股票前端缓存一次
 // ============================================================
-let _kdTimer = null, _kdPopup = null;
+let _kdTimer = null, _kdPopup = null, _kdHideTimer = null;
 const _kdCache = {};
+function _kdRemove(){ if(_kdPopup){ _kdPopup.remove(); _kdPopup = null; } }
+function _kdCancelHide(){ if(_kdHideTimer){ clearTimeout(_kdHideTimer); _kdHideTimer = null; } }
 function _kdHide(){
+  // 20260906: 延迟500ms隐藏, 给鼠标从代码移动到弹框留时间
   clearTimeout(_kdTimer);
-  if(_kdPopup){ _kdPopup.remove(); _kdPopup = null; }
+  if(_kdHideTimer) return;
+  _kdHideTimer = setTimeout(() => { _kdHideTimer = null; _kdRemove(); }, 500);
 }
 function _kdPlace(pop, anchor){
   const rect = anchor.getBoundingClientRect();
@@ -4422,11 +4426,12 @@ function kdMultiChart(bars){
   _chartReg[cid1]={bars, w, h:h1, padL, padR, n,
     tipFn:(b)=>{ const c=(b.chg!=null&&!isNaN(b.chg));
       return `<b>${esc(b.day||'')}</b><br>开 ${b.open} · 高 ${b.high}<br>低 ${b.low} · 收 <b>${b.close}</b> ${c?'<span style="color:'+(b.chg>=0?'#ff4d4f':'#26a69a')+'">'+(b.chg>=0?'+':'')+b.chg.toFixed(2)+'%</span>':''}`; }};
+  // 20260906 修复: maPath 返回完整path元素, 直接输出(此前又包了一层<path d=...>导致均线不渲染)
   const p1=`<div class="sa-chart" id="${cid1}" style="height:${h1}px"><svg viewBox="0 0 ${w} ${h1}" width="${w}" height="${h1}">
     ${grid1}${candles}
-    <path d="${maPath(ma5,'#f5c842',1)}" fill="none"/>
-    <path d="${maPath(ma10,'#4f9dff',1)}" fill="none"/>
-    <path d="${maPath(ma20,'#a06bff',1)}" fill="none"/>
+    ${maPath(ma5,'#f5c842',1)}
+    ${maPath(ma10,'#4f9dff',1)}
+    ${maPath(ma20,'#a06bff',1)}
     <text x="${padL}" y="10" fill="#f5c842" font-size="9">MA5</text><text x="${padL+32}" y="10" fill="#4f9dff" font-size="9">MA10</text><text x="${padL+64}" y="10" fill="#a06bff" font-size="9">MA20</text>
   </svg></div>`;
 
@@ -4475,15 +4480,17 @@ function kdMultiChart(bars){
   return p1+p2+p3final;
 }
 async function showKlinePreview(code, anchor){
-  _kdHide();
+  _kdCancelHide();   // 若有延迟隐藏排队中, 先取消(如鼠标在代码和弹框间往返)
+  _kdRemove();
   const pop = document.createElement('div');
   pop.className = 'kd-preview';
   pop.innerHTML = '<div style="padding:10px;font-size:12px;color:var(--sub)"><span class="spin"></span>加载 ' + esc(code) + ' 近半年K线…</div>';
   document.body.appendChild(pop);
   pop.classList.add('show');
   _kdPopup = pop;
-  // 弹框可交互(十字光标/OHLC悬浮): 鼠标移入弹框保持, 移出弹框即消失 (20260906)
-  pop.addEventListener('mouseleave', () => { if(_kdPopup === pop) _kdHide(); });
+  // 弹框可交互: 移入弹框取消隐藏, 移出弹框延迟500ms消失 (20260906)
+  pop.addEventListener('mouseenter', _kdCancelHide);
+  pop.addEventListener('mouseleave', _kdHide);
   _kdPlace(pop, anchor);
   try{
     if(!_kdCache[code]){
@@ -4512,6 +4519,7 @@ document.addEventListener('mouseover', e => {
   if(!a) return;
   const m = (a.getAttribute('href')||'').match(/(\d{6})/);
   if(!m) return;
+  _kdCancelHide();  // 回到代码上时取消延迟隐藏 (20260906)
   clearTimeout(_kdTimer);
   _kdTimer = setTimeout(() => showKlinePreview(m[1], a), 350);
 });
