@@ -308,6 +308,122 @@ def _should_use_spot_cache() -> bool:
     return _is_after_close()
 
 
+# ============================================================
+# 行情源容灾 (20260906)
+# 此前全站仅依赖新浪, 新浪接口偶发限流/不可用时选股、K线、个股分析全部瘫痪。
+# 策略: 新浪为主源; 主源请求失败即熔断 _SINA_COOLDOWN 秒(期间直接走腾讯备源);
+# K线备源=腾讯 ifzq.gtimg.cn (前复权, 字段序 [date,open,close,high,low,volume]);
+# 全市场快照备源=用本地任一日期缓存的股票池 + 腾讯 qt.gtimg.cn 批量刷新价格。
+# 板块映射(申万/概念树)仅新浪提供, 备源期间板块显示"—"属预期行为。
+# ============================================================
+_SINA_COOLDOWN_SEC = 600  # 主源熔断时长(秒)
+_SOURCE_BREAKER = {"sina_down_until": 0.0}
+_SOURCE_BREAKER_LOCK = threading.Lock()
+
+
+def _sina_available() -> bool:
+    with _SOURCE_BREAKER_LOCK:
+        return time.time() >= _SOURCE_BREAKER.get("sina_down_until", 0.0)
+
+
+def _mark_sina_down(reason: str = "") -> None:
+    with _SOURCE_BREAKER_LOCK:
+        _SOURCE_BREAKER["sina_down_until"] = time.time() + _SINA_COOLDOWN_SEC
+    print(f"[source] [{bj_now()}] 新浪主源异常({reason}), 熔断{_SINA_COOLDOWN_SEC}s 内改用腾讯备源", flush=True)
+
+
+_TENCENT_KLINE_URL = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+
+
+def _fetch_kline_tencent(symbol: str, datalen: int = 40) -> list[dict]:
+    """腾讯日K备源(前复权): 返回与新浪一致的 [{day,open,high,low,close,volume}]。
+    注意腾讯字段序为 [日期,开盘,收盘,最高,最低,成交量], 与新浪不同。"""
+    data = _get(_TENCENT_KLINE_URL, {"param": f"{symbol},day,,,{datalen},qfq"}, timeout=10)
+    node = {}
+    if isinstance(data, dict):
+        node = (data.get("data") or {}).get(symbol) or {}
+    rows = node.get("qfqday") or node.get("day") or []
+    out: list[dict] = []
+    for r in rows:
+        try:
+            out.append({
+                "day": r[0],
+                "open": float(r[1]), "close": float(r[2]),
+                "high": float(r[3]), "low": float(r[4]),
+                "volume": float(r[5]),
+            })
+        except (IndexError, ValueError, TypeError):
+            continue
+    return out
+
+
+_TENCENT_SPOT_URL = "https://qt.gtimg.cn/q="
+
+
+def _fetch_spot_tencent(codes: list[str]) -> list[dict]:
+    """腾讯实时行情备源: qt.gtimg.cn 批量查询(GBK文本), 输出与新浪 spot 行对齐的字典。
+    股票池由调用方提供(本地缓存), 本函数只负责刷新价格字段。"""
+    import re as _re
+    out: list[dict] = []
+    CHUNK = 60
+    for i in range(0, len(codes), CHUNK):
+        chunk = codes[i:i + CHUNK]
+        try:
+            r = requests.get(_TENCENT_SPOT_URL + ",".join(chunk), headers=HEADERS, timeout=10)
+            r.encoding = "gbk"
+            text = r.text
+        except Exception:  # noqa: BLE001
+            continue
+        for line in text.split(";"):
+            line = line.strip()
+            m = _re.search(r'v_(sh|sz|bj)(\d{6})="([^"]*)"', line)
+            if not m:
+                continue
+            sym = m.group(1) + m.group(2)
+            f = m.group(3).split("~")
+            if len(f) < 46:
+                continue
+            try:
+                def _f(idx, default=0.0):
+                    try:
+                        return float(f[idx])
+                    except (ValueError, TypeError, IndexError):
+                        return default
+                out.append({
+                    "code": m.group(2),
+                    "symbol": sym,
+                    "name": f[1],
+                    "trade": _f(3),
+                    "open": _f(5),
+                    "high": _f(33),
+                    "low": _f(34),
+                    # 新浪 volume 单位=股, 腾讯=手; amount 新浪=元, 腾讯=万元; nmc 新浪=万元, 腾讯=亿元
+                    "volume": _f(6) * 100,
+                    "changepercent": _f(32),
+                    "amount": _f(37) * 1e4,
+                    "nmc": _f(44) * 1e4,
+                })
+            except Exception:  # noqa: BLE001
+                continue
+    return out
+
+
+def _load_any_spot_universe() -> list[dict]:
+    """容灾用股票池: 读本地任一日期的快照缓存(取代码/名称), 找不到则空。"""
+    import glob as _glob
+    files = sorted(_glob.glob(os.path.join(CACHE_DIR, "spot_*.json")), reverse=True)
+    for fp in files:
+        try:
+            with open(fp, "r", encoding="utf-8") as f:
+                rows = json.load(f)
+            if isinstance(rows, list) and rows:
+                return [{"code": r.get("code", ""), "symbol": r.get("symbol", ""), "name": r.get("name", "")}
+                        for r in rows if r.get("code")]
+        except Exception:  # noqa: BLE001
+            continue
+    return []
+
+
 def _get(url: str, params: dict | None = None, timeout: int = 15) -> Any:
     """带重试的 GET 请求, 返回 JSON 或原始文本"""
     last = None
@@ -331,36 +447,52 @@ def _get(url: str, params: dict | None = None, timeout: int = 15) -> Any:
 # ============================================================
 def fetch_spot_all() -> list[dict]:
     """拉取沪深A股 + 北交所 全部实时快照, 返回扁平化字典列表。
-    收盘后优先使用本地缓存; 盘中实时拉取。"""
+    收盘后优先使用本地缓存; 盘中实时拉取。
+    20260906 容灾: 新浪主源失败(或熔断期内)时, 用本地缓存的股票池 + 腾讯批量行情兜底。"""
     # 收盘后: 优先用本地缓存
     if _should_use_spot_cache():
         cache_date = _cache_date_for_fetch()
         cached = _load_spot_cache(cache_date)
         if cached is not None:
             return cached
-    # 先取总数
-    total = _get(SINA_NODE_COUNT, {"node": "hs_a"})
-    if not isinstance(total, (int, str)) or int(total) <= 0:
-        total = 5500
-    total = int(total)
-    page_size = 100
-    pages = (total + page_size - 1) // page_size
+    try:
+        if not _sina_available():
+            raise RuntimeError("新浪主源熔断中")
+        # 先取总数
+        total = _get(SINA_NODE_COUNT, {"node": "hs_a"})
+        if not isinstance(total, (int, str)) or int(total) <= 0:
+            total = 5500
+        total = int(total)
+        page_size = 100
+        pages = (total + page_size - 1) // page_size
 
-    def fetch_page(page: int) -> list[dict]:
-        data = _get(SINA_HQ, {"page": page, "num": page_size, "node": "hs_a"})
-        return data if isinstance(data, list) else []
+        def fetch_page(page: int) -> list[dict]:
+            data = _get(SINA_HQ, {"page": page, "num": page_size, "node": "hs_a"})
+            return data if isinstance(data, list) else []
 
-    rows: list[dict] = []
-    futs = [POOL.submit(fetch_page, p) for p in range(1, pages + 1)]
-    for f in as_completed(futs):
-        try:
-            rows.extend(f.result())
-        except Exception:  # noqa: BLE001
-            continue
-    # 收盘后保存缓存
-    if _should_use_spot_cache() and rows:
-        _save_spot_cache(_cache_date_for_fetch(), rows)
-    return rows
+        rows: list[dict] = []
+        futs = [POOL.submit(fetch_page, p) for p in range(1, pages + 1)]
+        for f in as_completed(futs):
+            try:
+                rows.extend(f.result())
+            except Exception:  # noqa: BLE001
+                continue
+        if len(rows) < 100:
+            raise RuntimeError(f"新浪快照仅返回{len(rows)}条, 判定主源异常")
+        # 收盘后保存缓存
+        if _should_use_spot_cache() and rows:
+            _save_spot_cache(_cache_date_for_fetch(), rows)
+        return rows
+    except Exception as e:  # noqa: BLE001
+        # ---- 腾讯备源: 本地股票池 + 批量刷新价格 ----
+        _mark_sina_down(str(e)[:80])
+        universe = _load_any_spot_universe()
+        if not universe:
+            raise RuntimeError(f"新浪主源失败({str(e)[:60]})且本地无股票池缓存, 备源不可用") from e
+        rows = _fetch_spot_tencent([u["symbol"] or u["code"] for u in universe])
+        if not rows:
+            raise RuntimeError(f"新浪主源失败且腾讯备源亦无数据: {str(e)[:60]}") from e
+        return rows
 
 
 # ============================================================
@@ -369,7 +501,8 @@ def fetch_spot_all() -> list[dict]:
 def fetch_kline(symbol: str, datalen: int = 40) -> list[dict]:
     """返回 [{day,open,high,low,close,volume}, ...] 含当日。
     优先使用本地缓存(按交易日); 无缓存则从服务拉取并保存。
-    收盘后若K线最后一天不是今天，用spot快照补全当日K线。"""
+    收盘后若K线最后一天不是今天，用spot快照补全当日K线。
+    20260906 容灾: 新浪主源失败(或熔断期内)自动切换腾讯备源。"""
     cache_date = _cache_date_for_fetch()
     # 检查本地缓存
     cached = _load_kline_cache(cache_date, symbol)
@@ -384,22 +517,37 @@ def fetch_kline(symbol: str, datalen: int = 40) -> list[dict]:
                     _save_kline_cache(cache_date, symbol, patched)
                     return patched
         return cached
-    data = _get(SINA_KLINE, {"symbol": symbol, "scale": 240, "ma": "no", "datalen": datalen})
-    if not isinstance(data, list):
-        return []
-    out = []
-    for d in data:
+    out: list[dict] = []
+    sina_err = ""
+    if _sina_available():
         try:
-            out.append({
-                "day": d.get("day"),
-                "open": float(d["open"]),
-                "high": float(d["high"]),
-                "low": float(d["low"]),
-                "close": float(d["close"]),
-                "volume": float(d["volume"]),
-            })
-        except (KeyError, ValueError, TypeError):
-            continue
+            data = _get(SINA_KLINE, {"symbol": symbol, "scale": 240, "ma": "no", "datalen": datalen})
+            if isinstance(data, list):
+                for d in data:
+                    try:
+                        out.append({
+                            "day": d.get("day"),
+                            "open": float(d["open"]),
+                            "high": float(d["high"]),
+                            "low": float(d["low"]),
+                            "close": float(d["close"]),
+                            "volume": float(d["volume"]),
+                        })
+                    except (KeyError, ValueError, TypeError):
+                        continue
+            if not out:
+                sina_err = "新浪K线返回为空"
+        except Exception as e:  # noqa: BLE001
+            sina_err = str(e)[:80]
+    if not out:
+        # ---- 腾讯备源 ----
+        if sina_err:
+            _mark_sina_down(sina_err)
+        try:
+            out = _fetch_kline_tencent(symbol, datalen)
+        except Exception as e:  # noqa: BLE001
+            print(f"[source] [{bj_now()}] K线双源均失败 {symbol}: {sina_err} / {str(e)[:60]}", flush=True)
+            return []
     # 收盘后：若新浪K线未更新今天，用spot快照补全
     if _is_after_close() and out:
         today_str = _latest_trade_date_str()
@@ -3961,6 +4109,18 @@ def _run_screen_thread(conds=None):
             _state["error"] = None
             _state["progress"] = ""
             _state["last_conds"] = c
+        # 每日信号归档 (20260906): 当日重扫覆盖当日记录, 失败不影响主流程
+        try:
+            _archive_put(bj_now("%Y-%m-%d"), "screen", {
+                "updated": data.get("updated"),
+                "conds": sorted(c),
+                "universe": data.get("universe"), "candidates": data.get("candidates"),
+                "matched": data.get("matched"), "near_count": data.get("near_count"),
+                "exact": (data.get("exact") or [])[:100],
+                "stocks": (data.get("stocks") or [])[:60],
+            })
+        except Exception as ae:  # noqa: BLE001
+            print(f"[archive] 筛选结果归档失败: {ae}", flush=True)
     except Exception as e:  # noqa: BLE001
         with _screen_lock:
             _state["error"] = str(e)
@@ -4179,6 +4339,55 @@ def cache_refresh():
     if not _state["running"]:
         threading.Thread(target=_run_screen_thread, daemon=True).start()
     return {"ok": True, "cleared": cache_date, "running": _state["running"]}
+
+
+# ============================================================
+# 磁盘缓存自动清理 (20260906)
+# K线缓存按日期目录(cache/klines/<YYYYMMDD>/)与快照(spot_<YYYYMMDD>.json)
+# 只增不减, 长期运行磁盘会持续膨胀; 启动时与每日定时各清一次,
+# 只保留最近 _CACHE_KEEP_DAYS 天(盘前回退最近交易日需要跨日数据, 5天足够宽裕)。
+# ============================================================
+_CACHE_KEEP_DAYS = 5
+
+
+def _cleanup_old_cache(keep_days: int = _CACHE_KEEP_DAYS) -> int:
+    """删除超过 keep_days 天的K线缓存目录与行情快照文件, 返回删除对象数。"""
+    import glob as _glob
+    import re as _re
+    import shutil
+    cutoff = (datetime.now(_BJ_TZ) - timedelta(days=keep_days)).strftime("%Y%m%d")
+    removed = 0
+    klines_root = os.path.join(CACHE_DIR, "klines")
+    if os.path.isdir(klines_root):
+        for d in os.listdir(klines_root):
+            if _re.fullmatch(r"\d{8}", d or "") and d < cutoff:
+                shutil.rmtree(os.path.join(klines_root, d), ignore_errors=True)
+                removed += 1
+    for fp in _glob.glob(os.path.join(CACHE_DIR, "spot_*.json")):
+        m = _re.search(r"spot_(\d{8})\.json$", fp)
+        if m and m.group(1) < cutoff:
+            try:
+                os.remove(fp)
+                removed += 1
+            except OSError:
+                pass
+    if removed:
+        print(f"[cache] [{bj_now()}] 已清理 {removed} 个过期缓存对象 (保留最近{keep_days}天)", flush=True)
+    return removed
+
+
+def _cache_cleaner_loop():
+    """常驻线程: 每天北京时间 09:00 后清理一次过期缓存 (20260906)"""
+    last_day = None
+    while True:
+        try:
+            now = datetime.now(_BJ_TZ)
+            if now.hour >= 9 and now.strftime("%Y-%m-%d") != last_day:
+                _cleanup_old_cache()
+                last_day = now.strftime("%Y-%m-%d")
+        except Exception as e:  # noqa: BLE001
+            print(f"[cache] 清理线程异常: {e}", flush=True)
+        time.sleep(600)
 
 
 # ============================================================
@@ -4883,6 +5092,15 @@ def _run_ma_screen_thread():
             "elapsed_sec": round(time.time() - t0, 1),
             "updated": bj_now(),
         }
+        # 每日信号归档 (20260906)
+        try:
+            _archive_put(bj_now("%Y-%m-%d"), "ma", {
+                "updated": out["updated"], "counts": out["counts"],
+                "total_stocks": total, "elapsed_sec": out["elapsed_sec"],
+                "patterns": {p: results[p][:100] for p in MA_PATTERNS},
+            })
+        except Exception as ae:  # noqa: BLE001
+            print(f"[archive] 均线结果归档失败: {ae}", flush=True)
         with _ma_state["lock"]:
             _ma_state["data"] = out
             _ma_state["running"] = False
@@ -5284,6 +5502,19 @@ def _run_ssp_scan_thread():
         watch_pool.sort(key=lambda x: (x.get("days_since",99), -abs(x.get("break_price",0) - x.get("price",0))))
         confirmed_today.sort(key=lambda x: x.get("change_pct") or 0, reverse=True)
 
+        # 每日信号归档 (20260906)
+        try:
+            _archive_put(_dt.date.today().strftime("%Y-%m-%d"), "ssp", {
+                "updated": _dt.date.today().strftime("%Y-%m-%d"),
+                "mkt_filter": mkt_ok,
+                "counts": {"上试盘·新信号": len(new_sigs), "上试盘·观察池": len(watch_pool),
+                           "上试盘·已确认": len(confirmed_today)},
+                "new_signals": new_sigs[:100], "watch_pool": watch_pool[:100],
+                "confirmed_pool": confirmed_today[:50],
+            })
+        except Exception as ae:  # noqa: BLE001
+            print(f"[archive] 上试盘结果归档失败: {ae}", flush=True)
+
         # 20260906 修复: 原写法 `'bars' in dir()` / `'today_date' in dir()` 恒为 False
         # (这两个变量只存在于嵌套函数 proc 的局部作用域, 静态检查也因此报未定义名),
         # 实际效果是 updated 一直取本机日期, 而非本次扫描 K 线的真实交易日。
@@ -5357,6 +5588,29 @@ def api_ssp_single(code: str):
     if not bars:
         return JSONResponse({"signals": [], "active_watch": None})
     return ssp_single_stock_signals(bars, True)
+
+
+# ============================================================
+# 历史信号复盘 API (20260906): 每日归档的选股/均线/上试盘结果
+# ============================================================
+@app.get("/api/history/dates")
+def api_history_dates():
+    """已归档日期列表 (新→旧)"""
+    return {"dates": _archive_dates()}
+
+
+@app.get("/api/history")
+def api_history(date: str = ""):
+    """某日归档记录: 选股(screen)/均线(ma)/上试盘(ssp) 三部分; date 缺省取最新一天"""
+    date = (date or "").strip()
+    if not date:
+        ds = _archive_dates()
+        date = ds[0] if ds else bj_now("%Y-%m-%d")
+    rec = _archive_get(date)
+    if rec is None:
+        return JSONResponse({"date": date, "record": None,
+                             "error": f"{date} 无归档数据 (归档自 20260906 版本起生效)"}, status_code=404)
+    return {"date": date, "record": rec}
 
 
 # ============================================================
@@ -6334,6 +6588,8 @@ def _startup():
     threading.Thread(target=_run_screen_thread, daemon=True).start()
     # 上试盘: 启动即开跑 + 常驻工作日 16:30 自动重扫
     threading.Thread(target=_ssp_daily_runner, daemon=True).start()
+    # 磁盘缓存清理: 启动清一次 + 常驻每天09:00清一次 (20260906)
+    threading.Thread(target=_cache_cleaner_loop, daemon=True).start()
 
 
 # ---------- 上试盘·每日定时更新 ----------
@@ -6396,6 +6652,9 @@ def _ssp_daily_runner():
 # 云端为读取优先源, 本地文件始终同步写一份作为备份镜像;
 # 首次接入云端时若表为空而本地文件有数据, 自动迁移(种子上传)。
 # ============================================================
+import json as _json
+import os as _os
+
 _DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 _storage_backend = None   # None=未初始化; 初始化后: 'postgres' | 'sqlite' | 'file'
 _STORAGE_LOG_TAG = "[storage]"
@@ -6543,6 +6802,83 @@ def _kv_write_local_file(path: str, value: dict) -> None:
             _json.dump(value, f, ensure_ascii=False, indent=2)
     except OSError as e:
         _kv_log(f"本地文件写入失败 {path}: {e}")
+
+
+def _kv_list(prefix: str) -> list[str]:
+    """列出云端 kv_state 中以 prefix 开头的 key (按 key 降序 = 新→旧); 未启用云端返回 []"""
+    if _kv_storage_init() not in ("postgres", "sqlite"):
+        return []
+    try:
+        if _storage_backend == "postgres":
+            conn = _kv_connect_postgres()
+            ph = "%s"
+        else:
+            conn = _kv_connect_sqlite()
+            ph = "?"
+        try:
+            cur = conn.cursor()
+            cur.execute(f"SELECT key FROM kv_state WHERE key LIKE {ph} ORDER BY key DESC", (prefix + "%",))
+            rows = cur.fetchall()
+        finally:
+            conn.close()
+        return [r[0] for r in rows]
+    except Exception as e:  # noqa: BLE001
+        _kv_log(f"列出 {prefix}* 失败: {e}")
+        return []
+
+
+# ============================================================
+# 每日信号归档 (20260906): 选股/均线形态/上试盘结果按日存档, 供历史复盘
+# 云端: kv_state key = 'signals_<YYYY-MM-DD>'; 未配云端时: cache/signal_history.json
+# 每日一条记录, 三个模块各自更新自己的 section (同日重扫覆盖当日数据);
+# 本地文件最多保留 _SIGNAL_KEEP_DAYS 天, 云端数据量极小暂不清理。
+# ============================================================
+_SIGNAL_HISTORY_FILE = _os.path.join(CACHE_DIR, "signal_history.json")
+_SIGNAL_KEEP_DAYS = 120
+
+
+def _archive_local_load() -> dict:
+    data = _kv_read_local_file(_SIGNAL_HISTORY_FILE)
+    return data if isinstance(data, dict) else {}
+
+
+def _archive_local_save(d: dict) -> None:
+    # 只保留最近 N 天, 防止本地文件无限膨胀
+    keys = sorted(d.keys(), reverse=True)[:_SIGNAL_KEEP_DAYS]
+    _kv_write_local_file(_SIGNAL_HISTORY_FILE, {k: d[k] for k in keys})
+
+
+def _archive_get(date: str) -> dict | None:
+    if _kv_storage_init() in ("postgres", "sqlite"):
+        cloud = _kv_get(f"signals_{date}")
+        if cloud is not None:
+            return cloud
+    local = _archive_local_load()
+    return local.get(date)
+
+
+def _archive_put(date: str, section: str, payload: dict) -> None:
+    """合并写入某日某模块的信号结果 (cloud + 本地镜像双写)"""
+    rec = _archive_get(date) or {}
+    rec[section] = payload
+    rec["date"] = date
+    rec["updated_at"] = bj_now()
+    if _kv_storage_init() in ("postgres", "sqlite"):
+        if not _kv_set(f"signals_{date}", rec):
+            _kv_log(f"信号归档上云失败({date}/{section}), 仅保留本地镜像")
+    local = _archive_local_load()
+    local[date] = rec
+    _archive_local_save(local)
+
+
+def _archive_dates() -> list[str]:
+    """已归档日期列表(新→旧): 云端 keys + 本地 keys 合并去重"""
+    dates = set()
+    for k in _kv_list("signals_"):
+        if k.startswith("signals_") and len(k) == len("signals_2026-09-06"):
+            dates.add(k[len("signals_"):])
+    dates.update(_archive_local_load().keys())
+    return sorted(dates, reverse=True)[:_SIGNAL_KEEP_DAYS]
 
 
 # ============================================================
