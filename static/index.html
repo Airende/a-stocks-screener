@@ -351,6 +351,10 @@
   .ma-tab{padding:9px 18px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid var(--border);border-bottom:none;border-radius:8px 8px 0 0;background:var(--panel2);color:var(--sub);transition:.15s;margin-right:4px}
   .ma-tab:hover{color:var(--txt)}
   .ma-tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+  /* 看跌形态tab用绿色 (20260906): 空头排列向下发散 / 粘合向下突破 */
+  .ma-tab.bear{color:var(--down)}
+  .ma-tab.bear:hover{color:var(--down)}
+  .ma-tab.bear.active{background:var(--down);border-color:var(--down);color:#fff}
   .ma-tab .cnt{font-size:11px;margin-left:4px;opacity:.8}
   .ma-tab.ssp-tab{background:linear-gradient(180deg,rgba(245,200,66,.16),var(--panel2));
                   border-color:rgba(245,200,66,.55);color:#b38600}
@@ -3145,7 +3149,9 @@ function renderMATabs(){
     let c = _isSspTab(i) ? (sspCounts[p[0]]||0) : (maCounts[p[0]]||0);
     const isSsp = _isSspTab(i);
     const title = isSsp ? `上试盘策略 ${['A池·新信号','B池·观察','C池·已确认买入'][i-SSP_KIND_TAB_OFFSET]||''}` : '';
-    return `<div class="ma-tab ${i===maCurrentTab?'active':''} ${isSsp?'ssp-tab':''}" title="${title||p[1]}" data-i="${i}">${p[0]}<span class="cnt">${c}</span></div>`;
+    // 看跌形态(名称含"向下")加绿色标识 (20260906)
+    const bearCls = (!isSsp && p[0].includes('向下')) ? ' bear' : '';
+    return `<div class="ma-tab ${i===maCurrentTab?'active':''} ${isSsp?'ssp-tab':''}${bearCls}" title="${title||p[1]}" data-i="${i}">${p[0]}<span class="cnt">${c}</span></div>`;
   }).join('');
   $('#maTabs').querySelectorAll('.ma-tab').forEach(t=>{
     t.onclick=()=>{
