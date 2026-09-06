@@ -667,6 +667,14 @@
           <span class="meta" id="maUpdated">尚未筛选</span>
           <button class="ghost" id="maRunBtn">开始筛选</button>
         </div>
+        <!-- ATR波动过滤 (20260906): 多选满足其一, 默认勾选3~8%波段弹性 -->
+        <div class="ckbar" style="margin-bottom:10px">
+          <span class="meta" style="font-weight:700;color:var(--txt)">ATR过滤:</span>
+          <label style="display:inline-flex;align-items:center;gap:5px;margin-right:8px;font-size:13px;cursor:pointer"><input type="checkbox" data-atr="e1"> ATR%&lt;4%（趋势票）</label>
+          <label style="display:inline-flex;align-items:center;gap:5px;margin-right:8px;font-size:13px;cursor:pointer"><input type="checkbox" data-atr="e2" checked> ATR%3~8%（波段弹性）</label>
+          <label style="display:inline-flex;align-items:center;gap:5px;margin-right:8px;font-size:13px;cursor:pointer"><input type="checkbox" data-atr="e3"> ATR收缩（蓄势）</label>
+          <span class="meta">可多选=满足其一即保留; 改动立即生效并用于下次扫描</span>
+        </div>
         <div class="ma-tabs" id="maTabs"></div>
         <div class="ma-tab-desc" id="maDesc"></div>
         <!-- 均线/上试盘 扫描进度条 (20260906) -->
@@ -3107,6 +3115,22 @@ let sspPollTimer=null;
 let maSortMode='default';
 let maSortDir='desc';
 let maFilterConcept=null; // 当前选中的板块筛选(null=全部)
+// ATR过滤勾选项 (20260906): 多选满足其一, 默认勾选e2(3~8%波段弹性)
+let maAtrConds = ['e2'];
+function passMaAtr(s){
+  if(!maAtrConds.length) return true;
+  if(s.atr_pct == null) return true;  // 旧扫描结果无ATR字段时不隐藏
+  if(maAtrConds.includes('e1') && s.atr_pct < 4) return true;
+  if(maAtrConds.includes('e2') && s.atr_pct >= 3 && s.atr_pct <= 8) return true;
+  if(maAtrConds.includes('e3') && s.atr_shrink) return true;
+  return false;
+}
+document.querySelectorAll('#maBody input[data-atr]').forEach(cb => {
+  cb.addEventListener('change', () => {
+    maAtrConds = [...document.querySelectorAll('#maBody input[data-atr]:checked')].map(c => c.dataset.atr);
+    renderMATable();  // 立即按当前勾选过滤已扫描结果
+  });
+});
 
 // 判断当前 tab 是否上试盘子 tab
 function _isSspTab(i){ return (i===undefined?maCurrentTab:i) >= SSP_KIND_TAB_OFFSET; }
@@ -3138,7 +3162,7 @@ function renderMAHeaders(){
       <th class="l ma-th" data-sort="default" title="点击恢复默认排序(综合分)">股票</th>
       <th class="l ma-th col-opt" data-sort="industry" title="点击按行业股票数排序, 再点切换升降序">行业 <span class="sort-arrow"></span></th>
       <th class="l ma-th col-opt" data-sort="concept" title="点击按板块股票数排序(子概念拆分), 再点切换升降序">所属板块 <span class="sort-arrow"></span></th>
-      <th>今日涨跌</th><th>现价</th><th class="col-opt">成交额(亿)</th><th class="l">买卖点</th>`;
+      <th>今日涨跌</th><th>现价</th><th>ATR%</th><th class="col-opt">成交额(亿)</th><th class="l">买卖点</th>`;
   }
 }
 function renderMATabs(){
@@ -3273,13 +3297,13 @@ function renderMATable(){
   const pat=MA_PATS[maCurrentTab][0];
   const rawStocks=(maData.patterns[pat]||[]);
   $('#maDesc').textContent=MA_PATS[maCurrentTab][1];
-  renderMADist(rawStocks);
   updateMASortArrows();
-  // --- 板块筛选(单选): 只显示 concept 包含选中板块的股票 ---
-  let stocks = rawStocks.slice();
+  // --- ATR过滤(20260906, 多选满足其一) + 板块筛选(单选) ---
+  let stocks = rawStocks.slice().filter(passMaAtr);
   if(maFilterConcept){
     stocks = stocks.filter(s=> maSplitConcept(s.concept).includes(maFilterConcept));
   }
+  renderMADist(stocks);
   if(!stocks.length){
     const msg = maFilterConcept ? `板块「${maFilterConcept}」暂无匹配标的` : '当前形态暂无匹配标的';
     $('#tbodyMA').innerHTML=`<tr><td colspan="6" class="empty">${msg}</td></tr>`;
@@ -3329,7 +3353,7 @@ function renderMATable(){
   }
   const show = stocks.slice(0, maPage*PAGE_SIZE);  // 分页加载 (20260906)
   let html = show.map((s,i)=>maRowHtml(s,i)).join('');
-  if(stocks.length > show.length) html += loadMoreRow(show.length, stocks.length, 8, 'maPage++;renderMATable()');
+  if(stocks.length > show.length) html += loadMoreRow(show.length, stocks.length, 9, 'maPage++;renderMATable()');
   $('#tbodyMA').innerHTML=html;
 }
 // 板块子概念拆分(宽松: 按、,，/分隔)
@@ -3408,6 +3432,7 @@ function maRowHtml(s,i){
     <td class="l col-opt">${conHtml}</td>
     <td>${fmtPct(s.change_pct)}</td>
     <td>${s.price}</td>
+    <td>${s.atr_pct!=null? '<span style="color:'+(s.atr_pct>=8?'var(--up)':(s.atr_pct<4?'var(--sub)':'var(--gold)'))+'">'+s.atr_pct+'%</span>':'—'}</td>
     <td class="col-opt">${s.amount_yi}</td>
     <td class="l">${bsHtml}</td>
   </tr>`;
@@ -3474,7 +3499,7 @@ async function startMAScreen(){
   btn.disabled=true; btn.innerHTML='<span class="spin"></span>筛选中…';
   updateProgLine('#maProg','准备中…',true);
   $('#tbodyMA').innerHTML='<tr><td colspan="6" class="empty"><span class="spin"></span>正在扫描全市场均线形态, 首次约需1-2分钟…</td></tr>';
-  try{ await fetch('/api/ma-screen/run',{method:'POST'}); }catch(e){}
+  try{ await fetch('/api/ma-screen/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({atr:maAtrConds})}); }catch(e){}
   const poll=async()=>{
     try{
       const r=await fetch('/api/ma-screen');
