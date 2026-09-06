@@ -411,8 +411,7 @@
   .mark-badge.m-star{color:#f5c842;background:rgba(245,200,66,.12)}  /* * 黄色关注 */
   .mark-badge.m-bang{color:#ef4444;background:rgba(239,68,68,.12)}  /* ! 红色特别关注 */
   .mark-badge.removed{position:relative}
-  .mark-badge.removed::after{content:'';position:absolute;left:0;right:0;top:50%;
-                             height:2px;background:currentColor;opacity:.55;transform:rotate(-8deg)}
+  /* 20260906: 徽章上的删除线已废弃, 忽略标识统一为名称后的 .removed-x 绿色小叉叉 */
   .mk-trigger{transition:transform .12s,opacity .15s}
   .mk-trigger:hover{transform:scale(1.25)}
   .mk-trigger.empty{opacity:0;margin-left:-2px;padding:0}
@@ -438,7 +437,12 @@
   .mk-tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
   .mk-tab .cnt{margin-left:5px;font-size:11px;opacity:.85}
   .mk-time{font-size:11px;color:var(--sub)}
-  .mk-strike{text-decoration:line-through;text-decoration-color:var(--sub);opacity:.6}
+  /* 20260906: 忽略/已删除股票的标识由删除线改为名称后的绿色小叉叉 */
+  .removed-x{display:inline-flex;align-items:center;justify-content:center;
+             width:15px;height:15px;margin-left:4px;border-radius:4px;
+             color:var(--down);font-size:12px;font-weight:800;line-height:1;
+             vertical-align:middle;cursor:default;opacity:.85;transition:.12s;user-select:none}
+  .removed-x:hover{opacity:1;background:rgba(38,166,154,.14)}
   /* 持仓 (买卖点) 相关 */
   .nm-cell{position:relative;display:inline-flex;flex-direction:column;gap:1px;vertical-align:middle}
   .nm-cell .nm{position:relative;display:inline-block;align-self:flex-start;width:fit-content}
@@ -3628,12 +3632,13 @@ function markNameHtml(code, name, price){
   const p = _POSITIONS[code];
   const nm = esc(name||'—');
   let nameStyle = '';
+  let removedX = '';   // 忽略/已删除股票: 名称后的绿色小叉叉 (20260906, 替代原删除线)
   let triggerCls = 'mk-trigger empty';
   let triggerCh = '+';
   let triggerColor = 'var(--sub)';
   let triggerTitle = '点击设置标记';
   if(m){
-    if(m.removed) nameStyle = 'text-decoration:line-through;text-decoration-color:var(--sub);text-decoration-thickness:1.5px';
+    if(m.removed) removedX = '<span class="removed-x" title="已忽略此股">×</span>';
     if(m.mark){
       const mk = MARK_META[markKey(m.mark)];
       if(mk){
@@ -3670,7 +3675,7 @@ function markNameHtml(code, name, price){
   const plusBtn = `<span class="mk-trigger empty pos-plus" title="买卖操作" onclick="event.stopPropagation();openTradeMenu('${code}','${nmSafe}',${price||'null'},event)" oncontextmenu="event.stopPropagation();openTradeMenu('${code}','${nmSafe}',${price||'null'},event);return false">+</span>`;
   // 持仓信息 (bN + 金额) 放在名称上方
   const posTop = (posBadge||posInfo) ? `<div class="pos-top">${posBadge}${posInfo}</div>` : '';
-  return `<div class="nm-cell">${posTop}<a class="nm" title="点击跳转个股分析" onclick="gotoStockAnalyze('${code}','${nmSafe}')" style="cursor:pointer;${nameStyle?' '+nameStyle:''}">${plusBtn}${nm}<span class="${triggerCls}" title="${triggerTitle}" style="${trigStyle}" onclick="event.stopPropagation();openMarkMenu('${code}','${nmSafe}',event)" oncontextmenu="event.stopPropagation();openMarkMenu('${code}','${nmSafe}',event);return false">${triggerCh}</span></a></div>`;
+  return `<div class="nm-cell">${posTop}<a class="nm" title="点击跳转个股分析" onclick="gotoStockAnalyze('${code}','${nmSafe}')" style="cursor:pointer;${nameStyle?' '+nameStyle:''}">${plusBtn}${nm}${removedX}<span class="${triggerCls}" title="${triggerTitle}" style="${trigStyle}" onclick="event.stopPropagation();openMarkMenu('${code}','${nmSafe}',event)" oncontextmenu="event.stopPropagation();openMarkMenu('${code}','${nmSafe}',event);return false">${triggerCh}</span></a></div>`;
 }
 
 // ===== 买卖操作菜单 =====
