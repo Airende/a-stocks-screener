@@ -4390,8 +4390,9 @@ function kdMultiChart(bars){
   const xi=i=>padL+i*xStep+xStep/2;
   const bw=Math.max(1.2, xStep*0.6);
   // MA5/MA10/MA20
+  // 20260906 修复: 减法漏了.close, 减去的是K线对象 -> 累加器NaN, 均线只剩孤立点不显示
   const maCalc=(p)=>{ const r=new Array(n).fill(NaN); let s=0;
-    for(let i=0;i<n;i++){ s+=bars[i].close; if(i>=p) s-=bars[i-p]; if(i>=p-1) r[i]=s/p; }
+    for(let i=0;i<n;i++){ s+=bars[i].close; if(i>=p) s-=bars[i-p].close; if(i>=p-1) r[i]=s/p; }
     return r; };
   const ma5=maCalc(5), ma10=maCalc(10), ma20=maCalc(20);
   const maPath=(arr,col,wd)=>{ let path='',st=false;
