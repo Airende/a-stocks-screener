@@ -769,11 +769,12 @@ function openStock(code, name, ev){
   var c = String(code).replace(/^[a-zA-Z]{2}/,'');
   var url = 'https://stockpage.10jqka.com.cn/'+c+'/';
   // 优先新页签打开
+  // 20260906 修复: 本函数结尾多写了一个 '}', 导致整个内联脚本语法解析失败,
+  // 前端所有初始化(initConds/loadMarketSnap/loadMarks等)都没有执行, 页面卡在"加载中"
   try { window.open(url, '_blank'); }catch(e){
     // 回退: 动态 a 标签
     var a=document.createElement('a'); a.href=url; a.target='_blank'; a.rel='noopener';
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    }
   }
 }
 // 从均线筛选/选股条件 跳转到个股分析 tab, 并直接搜索该股票
