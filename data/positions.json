@@ -74,9 +74,9 @@
   "600075": {
     "code": "600075",
     "name": "新疆天业",
-    "lots": 2,
-    "avg_cost": 4.96,
-    "total_cost": 992.0,
+    "lots": 0,
+    "avg_cost": 0.0,
+    "total_cost": 0.0,
     "operations": [
       {
         "id": 38,
@@ -86,11 +86,21 @@
         "amount": 992.0,
         "date": "2026-09-05",
         "time": "2026-09-05 09:28:34"
+      },
+      {
+        "id": 39,
+        "type": "sell",
+        "lots": 2,
+        "price": 4.96,
+        "amount": 992.0,
+        "realized_pnl": 0.0,
+        "date": "2026-09-06",
+        "time": "2026-09-06 16:59:26"
       }
     ],
     "realized_pnl": 0.0,
-    "is_closed": false,
+    "is_closed": true,
     "created_at": "2026-09-05 09:28:34",
-    "updated_at": "2026-09-05 09:28:34"
+    "updated_at": "2026-09-06 16:59:26"
   }
 }

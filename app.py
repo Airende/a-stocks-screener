@@ -5108,7 +5108,8 @@ def api_stock_analyze(code: str = "", date: str = ""):
 MA_PATTERNS = ["多头排列", "多头排列向上发散", "粘合向上突破", "空头排列向下发散", "粘合向下突破"]
 
 _ma_state = {"data": None, "running": False, "error": None, "progress": "",
-             "ts": 0.0, "lock": threading.Lock()}
+             "ts": 0.0, "lock": threading.Lock(),
+             "atr_conds": ["e2"]}  # ATR过滤勾选项 (20260906): e1/e2/e3 多选满足其一
 _MA_CACHE_TTL = 300  # 5分钟
 
 
@@ -5243,6 +5244,7 @@ def _run_ma_screen_thread():
         _ma_state["running"] = True
         _ma_state["error"] = None
         _ma_state["progress"] = "拉取全市场行情…"
+        atr_conds = set(_ma_state.get("atr_conds") or [])  # ATR过滤勾选项 (20260906)
     t0 = time.time()
     try:
         spot = fetch_spot_all()
@@ -5282,12 +5284,30 @@ def _run_ma_screen_thread():
             ma20 = sma(closes, 20)
             ma60 = sma(closes, 60)
             chg = (closes[-1] / closes[-2] - 1) * 100 if len(closes) >= 2 else 0
+            # ATR过滤 (20260906): atr_conds 非空时, 满足任一勾选项才保留
+            highs_a = [b["high"] for b in bars]
+            lows_a = [b["low"] for b in bars]
+            trs = [max(highs_a[i] - lows_a[i], abs(highs_a[i] - closes[i-1]), abs(lows_a[i] - closes[i-1]))
+                   for i in range(1, len(bars))]
+            atr14 = (sum(trs[-14:]) / min(14, len(trs))) if trs else 0.0
+            atr60 = (sum(trs[-60:]) / min(60, len(trs))) if trs else 0.0
+            price = closes[-1]
+            atr_pct = (atr14 / price * 100) if price > 0 else 0.0
+            atr_shrink = (atr14 > 0 and atr60 > 0 and atr14 < atr60 * 0.8)
+            if atr_conds:
+                ok = (("e1" in atr_conds and atr_pct < 4)
+                      or ("e2" in atr_conds and 3 <= atr_pct <= 8)
+                      or ("e3" in atr_conds and atr_shrink))
+                if not ok:
+                    return None
             # 买卖点分析
             bs = analyze_buy_sell(bars)
             return pat, {
                 "code": cand["code"], "name": cand["name"],
                 "price": round(closes[-1], 2),
                 "change_pct": round(chg, 2),
+                "atr_pct": round(atr_pct, 2),
+                "atr_shrink": bool(atr_shrink),
                 "ma5": round(ma5[-1], 2) if not math.isnan(ma5[-1]) else 0,
                 "ma10": round(ma10[-1], 2) if not math.isnan(ma10[-1]) else 0,
                 "ma20": round(ma20[-1], 2) if not math.isnan(ma20[-1]) else 0,
@@ -5365,8 +5385,14 @@ def _ensure_ma_screen():
 
 
 @app.post("/api/ma-screen/run")
-def api_ma_screen_run():
-    """触发均线形态筛选"""
+def api_ma_screen_run(payload: dict = None):
+    """触发均线形态筛选; 可选body {atr:["e1","e2","e3"]} 指定ATR过滤勾选 (20260906)"""
+    if isinstance(payload, dict):
+        atr = payload.get("atr")
+        if isinstance(atr, list):
+            atr = [a for a in atr if a in ("e1", "e2", "e3")]
+            with _ma_state["lock"]:
+                _ma_state["atr_conds"] = atr
     if not _ma_state["running"]:
         with _ma_state["lock"]:
             _ma_state["data"] = None
@@ -5384,13 +5410,16 @@ def api_ma_screen():
         running = _ma_state["running"]
         err = _ma_state["error"]
         progress = _ma_state["progress"]
+        atr_conds = list(_ma_state.get("atr_conds") or [])
     data = _ma_state["data"]
     if data:
         out = dict(data)
         out["running"] = running
         out["error"] = err
+        out["atr_conds"] = atr_conds
         return out
     return JSONResponse({"running": running, "error": err, "progress": progress,
+                         "atr_conds": atr_conds,
                          "patterns": {}, "counts": {}})
 
 
@@ -6899,6 +6928,30 @@ def _ssp_daily_runner():
 import json as _json
 import os as _os
 
+
+def _load_dotenv_env():
+    """轻量 .env 读取 (20260906): 启动时从 app.py 同目录的 .env 加载
+    DATABASE_URL 等配置, 本地开发/多机部署免配环境变量。.env 不入 git。
+    只补充系统环境变量里缺失的键, 不覆盖已有值。"""
+    try:
+        p = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+        if not os.path.isfile(p):
+            return
+        with open(p, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, _, v = line.partition("=")
+                k = k.strip()
+                v = v.strip().strip('"').strip("'")
+                if k and k not in os.environ:
+                    os.environ[k] = v
+    except Exception as e:
+        print(f"[storage] .env 读取失败: {e}", flush=True)
+
+
+_load_dotenv_env()
 _DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 _storage_backend = None   # None=未初始化; 初始化后: 'postgres' | 'sqlite' | 'file'
 _STORAGE_LOG_TAG = "[storage]"
@@ -7143,19 +7196,44 @@ _MARKS_LOCK = threading.Lock()
 # removed=True   -> 删除线(移除关注)
 _MARKS: dict[str, dict] = {}
 
+def _merge_newer(cloud: dict, local: dict) -> dict:
+    """多机同步合并 (20260906): 逐只股票比较 updated_at, 较新的一方胜出。
+    用于云端与本地文件双写场景 —— 两台电脑分别改动时互不覆盖对方的新记录。"""
+    merged = dict(cloud)
+    newer = []
+    for code, rec in local.items():
+        cur = merged.get(code)
+        if not cur or (rec.get("updated_at") or "") > (cur.get("updated_at") or ""):
+            merged[code] = rec
+            newer.append(code)
+    return merged, newer
+
+
 def _load_marks():
-    """加载标记: 云端优先; 云端无数据而本地文件有 → 自动迁移上云; 全失败用空表 (20260906)"""
+    """加载标记: 云端优先; 云端与本地按每只股票 updated_at 新者合并(多机同步);
+    云端无数据而本地文件有 → 自动迁移上云; 全失败用空表 (20260906)"""
     global _MARKS
     if _kv_storage_init() in ("postgres", "sqlite"):
         cloud = _kv_get("marks")
+        local = _kv_read_local_file(_MARKS_FILE)
         if cloud is not None:
             _MARKS = cloud
+            if isinstance(local, dict) and local:
+                merged, newer = _merge_newer(cloud, local)
+                if newer:
+                    _kv_set("marks", merged)
+                    _kv_log(f"本地较新的 {len(newer)} 条标记已合并推送到云端")
+                if merged != cloud:
+                    _kv_write_local_file(_MARKS_FILE, merged)
+                _MARKS = merged
+                _kv_log(f"标记加载(云端+本地合并): {len(_MARKS)} 条")
+            else:
+                _kv_log(f"标记加载(云端): {len(_MARKS)} 条")
             return
-        seed = _kv_read_local_file(_MARKS_FILE)
-        if seed is not None:
-            _MARKS = seed
-            if _kv_set("marks", seed):
-                _kv_log(f"标记数据已从本地文件迁移上云 ({len(seed)} 条)")
+        if isinstance(local, dict) and local:
+            _MARKS = local
+            if _kv_set("marks", local):
+                _kv_log(f"标记数据已从本地文件迁移上云 ({len(local)} 条)")
             return
     if not _os.path.isfile(_MARKS_FILE):
         _MARKS = {}
@@ -7167,6 +7245,7 @@ def _load_marks():
             _MARKS = data
     except Exception:
         _MARKS = {}
+
 
 def _save_marks():
     """保存标记: 云端模式=云端 upsert + 本地文件镜像备份; 文件模式=仅本地 (20260906)"""
@@ -7311,17 +7390,44 @@ _UNDO_BUFFER: list[dict] = []  # 撤销缓冲区: 存放最近被删除的操作
 _UNDO_MAX = 50  # 最多保留 50 条撤销记录
 
 def _load_positions():
-    """加载持仓: 云端优先; 云端无数据而本地文件有 → 自动迁移上云; 全失败用空表 (20260906)"""
+    """加载持仓: 云端优先; 云端与本地按每只股票 updated_at 新者合并(多机同步);
+    云端无数据而本地文件有 → 自动迁移上云; 全失败用空表 (20260906)"""
     global _POSITIONS, _OP_ID
     data = None
     if _kv_storage_init() in ("postgres", "sqlite"):
-        data = _kv_get("positions")
-        if data is None:
-            seed = _kv_read_local_file(_POSITIONS_FILE)
-            if seed is not None:
-                data = seed
-                if _kv_set("positions", seed):
-                    _kv_log(f"持仓数据已从本地文件迁移上云 ({len(seed)} 只)")
+        cloud = _kv_get("positions")
+        local = None
+        if _os.path.isfile(_POSITIONS_FILE):
+            try:
+                with open(_POSITIONS_FILE, "r", encoding="utf-8") as f:
+                    d = _json.load(f)
+                if isinstance(d, dict):
+                    local = d
+            except Exception:
+                local = None
+        if cloud is not None:
+            data = cloud
+            if isinstance(local, dict) and local:
+                merged = dict(cloud)
+                newer = []
+                for code, rec in local.items():
+                    cur = merged.get(code)
+                    if not cur or (rec.get("updated_at") or "") > (cur.get("updated_at") or ""):
+                        merged[code] = rec
+                        newer.append(code)
+                if newer:
+                    _kv_set("positions", merged)
+                    _kv_log(f"本地较新的 {len(newer)} 只持仓已合并推送到云端")
+                if merged != cloud:
+                    _kv_write_local_file(_POSITIONS_FILE, merged)
+                data = merged
+                _kv_log(f"持仓加载(云端+本地合并): {len(data)} 只")
+            else:
+                _kv_log(f"持仓加载(云端): {len(data)} 只")
+        elif isinstance(local, dict) and local:
+            data = local
+            if _kv_set("positions", local):
+                _kv_log(f"持仓数据已从本地文件迁移上云 ({len(local)} 只)")
     if data is None:
         if not _os.path.isfile(_POSITIONS_FILE):
             _POSITIONS = {}
@@ -7339,6 +7445,7 @@ def _load_positions():
             for op in p.get("operations", []):
                 if op.get("id", 0) > _OP_ID:
                     _OP_ID = op["id"]
+
 
 def _save_positions():
     """保存持仓: 云端模式=云端 upsert + 本地文件镜像备份; 文件模式=仅本地 (20260906)"""
