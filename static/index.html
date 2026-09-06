@@ -4367,10 +4367,10 @@ const _kdCache = {};
 function _kdRemove(){ if(_kdPopup){ _kdPopup.remove(); _kdPopup = null; } }
 function _kdCancelHide(){ if(_kdHideTimer){ clearTimeout(_kdHideTimer); _kdHideTimer = null; } }
 function _kdHide(){
-  // 20260906: 延迟200ms隐藏(用户要求, 原300ms), 给鼠标移动留缓冲
+  // 20260906: 延迟100ms隐藏(用户要求, 原200ms)
   clearTimeout(_kdTimer);
   if(_kdHideTimer) return;
-  _kdHideTimer = setTimeout(() => { _kdHideTimer = null; _kdRemove(); }, 200);
+  _kdHideTimer = setTimeout(() => { _kdHideTimer = null; _kdRemove(); }, 100);
 }
 function _kdPlace(pop, anchor){
   const rect = anchor.getBoundingClientRect();
