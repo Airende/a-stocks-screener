@@ -4483,7 +4483,9 @@ def cache_info():
 
 @app.post("/api/cache_refresh")
 def cache_refresh():
-    """清空本地文件缓存(所有日期), 触发重新拉取。返回新缓存任务状态。"""
+    """清空本地文件缓存(所有日期), 触发重新拉取。返回新缓存任务状态。
+    20260906 升级为强制刷新: 除磁盘缓存外, 同步清空内存中的搜索索引/
+    板块映射/指数K线/行情快照缓存, 确保点一次按钮全部数据重新拉取。"""
     import shutil
     import glob as _glob
     cache_date = _cache_date_for_fetch()
@@ -4506,6 +4508,17 @@ def cache_refresh():
         _state["data"] = None
         _state["ts"] = 0.0
         _state["error"] = None
+    # 强制刷新: 同步清空各类内存缓存, 下次访问时全部重建/重拉 (20260906)
+    _board_cache["built_at"] = 0.0
+    _board_cache["industry"] = {}
+    _board_cache["industry2"] = {}
+    _board_cache["industry3"] = {}
+    _board_cache["concept"] = {}
+    _INDEX_KLINE_CACHE.clear()
+    _stock_search_cache["items"] = []
+    _stock_search_cache["built_at"] = 0.0
+    _MARKET_SNAP_CACHE["ts"] = 0.0
+    _MARKET_SNAP_CACHE["data"] = None
     if not _state["running"]:
         threading.Thread(target=_run_screen_thread, daemon=True).start()
     return {"ok": True, "cleared": cache_date, "running": _state["running"]}
