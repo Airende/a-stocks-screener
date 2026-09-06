@@ -1342,20 +1342,18 @@ COND_DEFS = [
         {"id": "d4", "label": "排除停牌", "hint": "无法买入"},
         {"id": "d5", "label": "排除上市不足60日", "hint": "新股数据不稳"},
         {"id": "d6", "label": "排除当日一字板", "hint": "无法买入"},
-        {"id": "d7", "label": "排除科创板(688)", "hint": "按需勾选"},
     ]},
     {"group": "五、波动过滤 ATR%", "gid": "gE", "type": "or", "items": [
         {"id": "e1", "label": "ATR% < 4%（趋势票偏好）", "hint": "低波动, 适合趋势长持"},
         {"id": "e2", "label": "ATR% 3~8%（波段弹性）", "hint": "弹性足够又不失控, 默认勾选"},
         {"id": "e3", "label": "ATR 收缩中（ATR14 < ATR60×0.8）", "hint": "波动收敛蓄势, 变盘临近弹性大"},
-        {"id": "d8", "label": "ATR% > 8%（波动过大）", "hint": "剔除门: 勾选即硬剔除ATR%>8%的票(与e1/e2/e3的入选逻辑相反), 默认不勾选"},
     ]},
 ]
 # 全部条件ID (默认全勾选)
 COND_ALL = [it["id"] for g in COND_DEFS for it in g["items"]]
 # 默认勾选集 (20260906): 全部条件中, ATR组默认只勾"ATR% 3~8%(波段弹性)"(e2);
 # e1/e3/d8(排除ATR%>8%) 默认不勾。首次启动筛选与前端初始渲染均以此为准。
-COND_DEFAULT = [c for c in COND_ALL if c not in ("e1", "e3", "d8")]
+COND_DEFAULT = [c for c in COND_ALL if c not in ("e1", "e3")]
 # 各组包含的"评分叶子" (d3-d8 是剔除门, 不计入gD评分)
 GROUP_LEAVES = {
     "gA": ["t1", "t2", "t3", "t4"],
@@ -1365,7 +1363,7 @@ GROUP_LEAVES = {
     "gE": ["e1", "e2", "e3"],
 }
 # 剔除门条件 (勾选则剔除, 不参与评分)
-GATE_CONDS = {"d3", "d4", "d5", "d6", "d7", "d8"}
+GATE_CONDS = {"d3", "d4", "d5", "d6"}
 
 
 # ============================================================
@@ -3853,10 +3851,6 @@ def check_stock(row: dict, bars: list[dict], conds=None) -> dict | None:
     # 剔除门 (可勾选): ST/*ST
     if "d3" in conds and ("ST" in name or "退" in name or "*ST" in name):
         return None
-    # 剔除门: 科创板
-    if "d7" in conds and code.startswith("688"):
-        return None
-
     closes = [b["close"] for b in bars]
     highs = [b["high"] for b in bars]
     lows = [b["low"] for b in bars]
@@ -3892,9 +3886,6 @@ def check_stock(row: dict, bars: list[dict], conds=None) -> dict | None:
     atr14 = _atr(14)
     atr60 = _atr(60)
     atr_pct = (atr14 / c * 100) if c > 0 else 0.0
-    # 剔除门: 排除 ATR% > 8% (波动过大, 风险不可控)
-    if "d8" in conds and atr_pct > 8:
-        return None
 
     ma5 = sma(closes, 5)
     ma10 = sma(closes, 10)
@@ -4208,8 +4199,6 @@ def run_screen(conds=None) -> dict:
     for r in spot:
         code = r.get("code", "")
         name = r.get("name", "")
-        if "d7" in conds and code.startswith("688"):
-            continue
         if "d3" in conds and ("ST" in name or "退" in name or "*ST" in name):
             continue
         candidates.append(r)
