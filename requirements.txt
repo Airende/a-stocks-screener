@@ -2,3 +2,4 @@ fastapi==0.141.1
 uvicorn[standard]==0.52.4
 requests==2.34.2
 pypinyin
+numpy>=1.26  # 20260906 补充声明: 顶栏指数快照/行情研判(_analyze_regime)和上试盘(SSP)模块都在函数内 import numpy, 之前未声明导致这些模块 ImportError 被静默吞掉

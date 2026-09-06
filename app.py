@@ -6534,10 +6534,14 @@ def _limit_pct(code: str, name: str = "") -> float:
         return 0.30
     return 0.10
 
-def _is_limit_up(code: str, name: str, change_pct: float) -> bool:
+# 20260906 修复: 原名 _is_limit_up/_is_limit_down 与回测引擎的 (bar, prev_close) 版本
+# (约5607行) 重名, 且定义在其后, 全局遮蔽了回测版本 —— 单股回测调用时直接抛
+# TypeError(_is_limit_up() missing 1 required positional argument: 'change_pct')。
+# 此处两个函数仅用于持仓买卖时基于实时涨跌幅的涨跌停判断, 改名以消除遮蔽。
+def _spot_is_limit_up(code: str, name: str, change_pct: float) -> bool:
     return change_pct >= _limit_pct(code, name) * 100 - 0.1
 
-def _is_limit_down(code: str, name: str, change_pct: float) -> bool:
+def _spot_is_limit_down(code: str, name: str, change_pct: float) -> bool:
     return change_pct <= -_limit_pct(code, name) * 100 + 0.1
 
 def _next_op_id():
@@ -6642,7 +6646,7 @@ def api_position_buy(payload: dict):
             pass
     if price <= 0:
         return JSONResponse({"ok": False, "msg": "无法获取当前价格, 请稍后重试"}, status_code=400)
-    if change_pct is not None and _is_limit_up(code, name, change_pct):
+    if change_pct is not None and _spot_is_limit_up(code, name, change_pct):
         return JSONResponse({"ok": False, "msg": "涨停板不可买入"}, status_code=400)
     with _POSITIONS_LOCK:
         cur = _ensure_position(code, name)
@@ -6705,7 +6709,7 @@ def api_position_sell(payload: dict):
             pass
     if price <= 0:
         return JSONResponse({"ok": False, "msg": "无法获取当前价格, 请稍后重试"}, status_code=400)
-    if change_pct is not None and _is_limit_down(code, name, change_pct):
+    if change_pct is not None and _spot_is_limit_down(code, name, change_pct):
         return JSONResponse({"ok": False, "msg": "跌停板不可卖出"}, status_code=400)
     with _POSITIONS_LOCK:
         cur = _POSITIONS.get(code)
