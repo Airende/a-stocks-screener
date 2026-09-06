@@ -589,11 +589,12 @@
              padding:5px 9px;font-size:11px;line-height:1.7;color:var(--txt);white-space:nowrap;
              box-shadow:0 4px 14px rgba(0,0,0,.45);font-variant-numeric:tabular-nums}
   .chart-tip b{font-weight:700}
-  /* 股票代码悬浮K线预览弹框 (20260906) */
-  .kd-preview{position:fixed;z-index:10000;pointer-events:none;display:none;
-              background:var(--panel);border:1px solid var(--border);border-radius:10px;
-              box-shadow:0 8px 24px rgba(0,0,0,.45);overflow:hidden;width:512px}
+  /* 股票代码悬浮K线预览弹框 (20260906): 可交互(十字光标/OHLC悬浮) */
+  .kd-preview{position:fixed;z-index:10000;background:var(--panel);
+              border:1px solid var(--border);border-radius:10px;
+              box-shadow:0 8px 24px rgba(0,0,0,.45);overflow:hidden;width:584px}
   .kd-preview.show{display:block}
+  .kd-preview .sa-chart{border:none;border-radius:0;background:transparent}
   /* 窄屏适配: tab横向滚动 / 隐藏次要列 / 条件单列 */
   @media (max-width:760px){
     .main-tabs{overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
@@ -1049,8 +1050,9 @@ function bindChartInteractivity(rootEl){
       const px = reg.padL + i*xStep + xStep/2;
       vline.setAttribute('x1', px); vline.setAttribute('x2', px);
       vline.style.display='';
-      const chg = (b.chg!=null && !isNaN(b.chg)) ? `<span style="color:${b.chg>=0?'#ff4d4f':'#26a69a'}">${b.chg>=0?'+':''}${b.chg.toFixed(2)}%</span>` : '';
-      tip.innerHTML = `<b>${esc(b.day||'')}</b><br>开 ${b.open} · 高 ${b.high}<br>低 ${b.low} · 收 <b>${b.close}</b> ${chg}`;
+      // 悬浮内容: 注册了 tipFn 的图表(悬浮预览的量/KDJ副图)用自定义内容, 其余默认OHLC (20260906)
+      tip.innerHTML = reg.tipFn ? reg.tipFn(b, i) :
+        `<b>${esc(b.day||'')}</b><br>开 ${b.open} · 高 ${b.high}<br>低 ${b.low} · 收 <b>${b.close}</b> ${((b.chg!=null&&!isNaN(b.chg))?'<span style="color:'+(b.chg>=0?'#ff4d4f':'#26a69a')+'">'+(b.chg>=0?'+':'')+b.chg.toFixed(2)+'%</span>':'')}`;
       tip.style.display='block';
       // 悬浮框跟随鼠标, 靠右时翻转到左侧
       const tw = tip.offsetWidth, th = tip.offsetHeight;
@@ -4374,45 +4376,103 @@ function _kdPlace(pop, anchor){
   if(y + ph > innerHeight - 8) y = Math.max(8, rect.top - ph - 6);
   pop.style.left = x + 'px'; pop.style.top = y + 'px';
 }
-function kdMiniChart(bars){
-  // 迷你K线: 460x150, 蜡烛(红涨绿跌) + MA20 + 右侧最新价刻度
-  const w=460,h=150,padL=6,padR=46,padT=8,padB=14;
+function kdMultiChart(bars){
+  // 悬停预览三面板 (20260906): K线+三均线 / 成交量副图(判断放量缩量) / KDJ副图
+  // 三个面板共享同一 x 轴映射, 均注册进 _chartReg 复用十字光标+自定义悬浮
+  const w=560, padL=6, padR=52;
   const n=bars.length;
   if(n<2) return '';
-  const hi=Math.max(...bars.map(b=>b.high));
-  const lo=Math.min(...bars.map(b=>b.low));
-  const rng=(hi-lo)||1;
-  const plotW=w-padL-padR, plotH=h-padT-padB;
-  const xStep=plotW/n;
-  const bw=Math.max(1.5, xStep*0.6);
-  const y=v=>padT+(hi-v)/rng*plotH;
-  const closes=bars.map(b=>b.close);
-  // MA20
-  const ma=[];
-  let s=0;
-  for(let i=0;i<n;i++){ s+=closes[i]; if(i>=20) s-=closes[i-20]; if(i>=19) ma.push({x:padL+i*xStep+xStep/2, v:s/20}); }
-  const maPath=ma.map((p,i)=>(i?'L':'M')+p.x.toFixed(1)+','+y(p.v).toFixed(1)).join(' ');
+  const xStep=(w-padL-padR)/n;
+  const xi=i=>padL+i*xStep+xStep/2;
+  const bw=Math.max(1.2, xStep*0.6);
+  // MA5/MA10/MA20
+  const maCalc=(p)=>{ const r=new Array(n).fill(NaN); let s=0;
+    for(let i=0;i<n;i++){ s+=bars[i].close; if(i>=p) s-=bars[i-p]; if(i>=p-1) r[i]=s/p; }
+    return r; };
+  const ma5=maCalc(5), ma10=maCalc(10), ma20=maCalc(20);
+  const maPath=(arr,col,wd)=>{ let path='',st=false;
+    for(let i=0;i<n;i++){ if(isNaN(arr[i])) continue;
+      path+=(st?'L':'M')+xi(i).toFixed(1)+','+yFn1(arr[i]).toFixed(1)+' '; st=true; }
+    return path?`<path d="${path}" fill="none" stroke="${col}" stroke-width="${wd}" opacity="0.9"/>`:''; };
+  // KDJ(9,3,3) 与 VR(5日均量比)
+  const K=[],D=[],J=[]; let pk=50,pd=50;
+  for(let i=0;i<n;i++){ let hh=-1e9,ll=1e9;
+    for(let j=Math.max(0,i-8);j<=i;j++){ hh=Math.max(hh,bars[j].high); ll=Math.min(ll,bars[j].low); }
+    const rsv=hh===ll?50:(bars[i].close-ll)/(hh-ll)*100;
+    pk=(pk*2+rsv)/3; pd=(pd*2+pk)/3; K.push(pk); D.push(pd); J.push(3*pk-2*pd); }
+  const vr=[]; for(let i=0;i<n;i++){ let s=0,c=0;
+    for(let j=Math.max(0,i-5);j<i;j++){ s+=bars[j].volume; c++; }
+    vr.push(c?bars[i].volume/(s/c):1); }
+
+  // ---- 面板1: K线 + 三均线 ----
+  const h1=170, padT1=8, padB1=6;
+  const hi=Math.max(...bars.map(b=>b.high)), lo=Math.min(...bars.map(b=>b.low));
+  const rng1=(hi-lo)||1;
+  const yFn1=v=>padT1+(hi-v)/rng1*(h1-padT1-padB1);
   const candles=bars.map((b,i)=>{
-    const x=padL+i*xStep+xStep/2;
     const col=(b.chg||0)>=0?'#ff4d4f':'#26a69a';
-    const yO=y(b.open), yC=y(b.close);
-    const bodyTop=Math.min(yO,yC), bodyH=Math.max(1,Math.abs(yC-yO));
-    return `<line x1="${x.toFixed(1)}" y1="${y(b.high).toFixed(1)}" x2="${x.toFixed(1)}" y2="${y(b.low).toFixed(1)}" stroke="${col}" stroke-width="0.8"/>`+
-           `<rect x="${(x-bw/2).toFixed(1)}" y="${bodyTop.toFixed(1)}" width="${bw.toFixed(1)}" height="${bodyH.toFixed(1)}" fill="${col}"/>`;
+    const yO=yFn1(b.open), yC=yFn1(b.close), bodyTop=Math.min(yO,yC);
+    return `<line x1="${xi(i).toFixed(1)}" y1="${yFn1(b.high).toFixed(1)}" x2="${xi(i).toFixed(1)}" y2="${yFn1(b.low).toFixed(1)}" stroke="${col}" stroke-width="0.8"/>`+
+           `<rect x="${(xi(i)-bw/2).toFixed(1)}" y="${bodyTop.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(1,Math.abs(yC-yO)).toFixed(1)}" fill="${col}"/>`;
   }).join('');
-  const last=bars[n-1];
-  const labels=[0,0.5,1].map(f=>{
-    const v=hi-f*rng, yy=y(v);
-    return `<text x="${w-padR+3}" y="${(yy+3).toFixed(1)}" fill="#5a6a82" font-size="9">${v.toFixed(2)}</text>`;
-  }).join('') + `<text x="${w-padR+3}" y="${(y(last.close)+3).toFixed(1)}" fill="${(last.chg||0)>=0?'#ff4d4f':'#26a69a'}" font-size="9" font-weight="700">${last.close.toFixed(2)}</text>`;
-  const dateTxt=`<text x="${padL}" y="${h-3}" fill="#5a6a82" font-size="9">${(bars[0].day||'').slice(2)}</text>`+
-                `<text x="${w-padR}" y="${h-3}" fill="#5a6a82" font-size="9">${(last.day||'').slice(2)}</text>`;
-  return `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" style="display:block">
-    <line x1="${padL}" y1="${y(last.close).toFixed(1)}" x2="${w-padR}" y2="${y(last.close).toFixed(1)}" stroke="rgba(255,255,255,.15)" stroke-dasharray="3,2"/>
-    ${candles}
-    <path d="${maPath}" fill="none" stroke="#f5c842" stroke-width="1" opacity="0.9"/>
-    ${labels}${dateTxt}
-  </svg>`;
+  const grid1=[0,0.5,1].map(f=>{ const v=hi-f*rng1, yy=yFn1(v);
+    return `<line x1="${padL}" y1="${yy.toFixed(1)}" x2="${w-padR}" y2="${yy.toFixed(1)}" stroke="rgba(255,255,255,.05)"/>`+
+           `<text x="${w-padR+3}" y="${(yy+3).toFixed(1)}" fill="#5a6a82" font-size="9">${v.toFixed(2)}</text>`; }).join('');
+  const cid1='kd'+(++_chartSeq);
+  _chartReg[cid1]={bars, w, h:h1, padL, padR, n,
+    tipFn:(b)=>{ const c=(b.chg!=null&&!isNaN(b.chg));
+      return `<b>${esc(b.day||'')}</b><br>开 ${b.open} · 高 ${b.high}<br>低 ${b.low} · 收 <b>${b.close}</b> ${c?'<span style="color:'+(b.chg>=0?'#ff4d4f':'#26a69a')+'">'+(b.chg>=0?'+':'')+b.chg.toFixed(2)+'%</span>':''}`; }};
+  const p1=`<div class="sa-chart" id="${cid1}" style="height:${h1}px"><svg viewBox="0 0 ${w} ${h1}" width="${w}" height="${h1}">
+    ${grid1}${candles}
+    <path d="${maPath(ma5,'#f5c842',1)}" fill="none"/>
+    <path d="${maPath(ma10,'#4f9dff',1)}" fill="none"/>
+    <path d="${maPath(ma20,'#a06bff',1)}" fill="none"/>
+    <text x="${padL}" y="10" fill="#f5c842" font-size="9">MA5</text><text x="${padL+32}" y="10" fill="#4f9dff" font-size="9">MA10</text><text x="${padL+64}" y="10" fill="#a06bff" font-size="9">MA20</text>
+  </svg></div>`;
+
+  // ---- 面板2: 成交量副图 ----
+  const h2=58, padT2=10, padB2=4;
+  const vmax=Math.max(...bars.map(b=>b.volume))||1;
+  const yFn2=v=>padT2+(1-v/vmax)*(h2-padT2-padB2);
+  const vbars=bars.map((b,i)=>{
+    const col=(b.chg||0)>=0?'rgba(255,77,79,.85)':'rgba(38,166,154,.85)';
+    const yv=yFn2(b.volume), bh=Math.max(1,h2-padT2-padB2-(yv-padT2));
+    return `<rect x="${(xi(i)-bw/2).toFixed(1)}" y="${yv.toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" fill="${col}"/>`;
+  }).join('');
+  // 5日均量线
+  const vmaPath=(()=>{ let p='',st=false;
+    for(let i=0;i<n;i++){ let s=0,c=0; for(let j=Math.max(0,i-4);j<=i;j++){s+=bars[j].volume;c++;}
+      const a=s/c; p+=(st?'L':'M')+xi(i).toFixed(1)+','+yFn2(a).toFixed(1)+' '; st=true; }
+    return `<path d="${p}" fill="none" stroke="#f5c842" stroke-width="0.8" stroke-dasharray="3,2"/>`; })();
+  const cid2='kd'+(++_chartSeq);
+  _chartReg[cid2]={bars, w, h:h2, padL, padR, n,
+    tipFn:(b,i)=>{ const v=b.volume/1e6, r=vr[i];
+      const tag=r>=1.5?'<span style="color:#ff4d4f">放量</span>':(r<=0.8?'<span style="color:#26a69a">缩量</span>':'平量');
+      return `<b>${esc(b.day||'')}</b><br>量 ${v.toFixed(2)}万手 · VR ${r.toFixed(2)} ${tag}`; }};
+  const p2=`<div class="sa-chart" id="${cid2}" style="height:${h2}px;margin-top:2px"><svg viewBox="0 0 ${w} ${h2}" width="${w}" height="${h2}">
+    <line x1="${padL}" y1="${yFn2(vmax).toFixed(1)}" x2="${w-padR}" y2="${yFn2(vmax).toFixed(1)}" stroke="rgba(255,255,255,.05)"/>
+    ${vbars}${vmaPath}
+    <text x="${padL}" y="9" fill="#9fb0c6" font-size="9">成交量</text>
+  </svg></div>`;
+
+  // ---- 面板3: KDJ副图 ----
+  const h3=64, padT3=10, padB3=4;
+  const jmin=Math.min(0,...J)-5, jmax=Math.max(100,...J)+5;
+  const yFn3=v=>padT3+(jmax-v)/(jmax-jmin)*(h3-padT3-padB3);
+  const line=(arr,col,wd)=>{ let p='',st=false;
+    for(let i=0;i<n;i++){ if(isNaN(arr[i])) continue;
+      p+=(st?'L':'M')+xi(i).toFixed(1)+','+yFn3(arr[i]).toFixed(1)+' '; st=true; }
+    return p?`<path d="${p}" fill="none" stroke="${col}" stroke-width="${wd}"/>`:''; };
+  const ref80=`<line x1="${padL}" y1="${yFn3(80).toFixed(1)}" x2="${w-padR}" y2="${yFn3(80).toFixed(1)}" stroke="rgba(255,77,79,.25)" stroke-dasharray="3,2"/>`;
+  const ref20=`<line x1="${padL}" y1="${yFn3(20).toFixed(1)}" x2="${w-padR}" y2="${yFn3(20).toFixed(1)}" stroke="rgba(38,166,154,.25)" stroke-dasharray="3,2"/>`;
+  const cid3='kd'+(++_chartSeq);
+  _chartReg[cid3]={bars, w, h:h3, padL, padR, n,
+    tipFn:(b,i)=>`<b>${esc(b.day||'')}</b><br>K ${K[i].toFixed(1)} · D ${D[i].toFixed(1)} · <b>J ${J[i].toFixed(1)}</b>`};
+
+  // ---- 底部日期轴并入KDJ面板 ----
+  const dates=[0,Math.floor(n/2),n-1].map(i=>`<text x="${xi(i).toFixed(1)}" y="${h3-1}" fill="#5a6a82" font-size="8" text-anchor="middle">${(bars[i].day||'').slice(2)}</text>`).join('');
+  const p3final=`<div class="sa-chart" id="${cid3}" style="height:${h3}px;margin-top:2px"><svg viewBox="0 0 ${w} ${h3}" width="${w}" height="${h3}">${ref80}${ref20}${line(K,'#e8eef6',1)}${line(D,'#f5c842',1)}${line(J,'#a06bff',1)}<text x="${padL}" y="9" fill="#e8eef6" font-size="9">K</text><text x="${padL+12}" y="9" fill="#f5c842" font-size="9">D</text><text x="${padL+24}" y="9" fill="#a06bff" font-size="9">J</text>${dates}</svg></div>`;
+  return p1+p2+p3final;
 }
 async function showKlinePreview(code, anchor){
   _kdHide();
@@ -4422,6 +4482,8 @@ async function showKlinePreview(code, anchor){
   document.body.appendChild(pop);
   pop.classList.add('show');
   _kdPopup = pop;
+  // 弹框可交互(十字光标/OHLC悬浮): 鼠标移入弹框保持, 移出弹框即消失 (20260906)
+  pop.addEventListener('mouseleave', () => { if(_kdPopup === pop) _kdHide(); });
   _kdPlace(pop, anchor);
   try{
     if(!_kdCache[code]){
@@ -4437,9 +4499,10 @@ async function showKlinePreview(code, anchor){
     const chgTxt = `<span style="color:${(last.chg||0)>=0?'var(--up)':'var(--down)'}">${(last.chg||0)>=0?'+':''}${last.chg}%</span>`;
     pop.innerHTML = `<div style="padding:6px 10px 2px;font-size:12px;font-weight:700">
         ${d.name ? esc(d.name)+' ' : ''}<span class="meta">${code}</span> ${chgTxt}
-        <span class="meta" style="margin-left:6px">近半年日K · MA20</span>
-      </div>` + kdMiniChart(bars);
+        <span class="meta" style="margin-left:6px">近半年日K · 三均线 · 量 · KDJ</span>
+      </div>` + kdMultiChart(bars);
     _kdPlace(pop, anchor);
+    bindChartInteractivity(pop);  // 三个面板各自绑定十字光标+悬浮 (20260906)
   }catch(e){
     if(_kdPopup === pop) pop.innerHTML = '<div class="empty">加载失败</div>';
   }
@@ -4456,7 +4519,8 @@ document.addEventListener('mouseout', e => {
   const a = e.target && e.target.closest ? e.target.closest('a.cd-link') : null;
   if(!a) return;
   const to = e.relatedTarget;
-  if(to && to.closest && to.closest('a.cd-link') === a) return;  // 在同一链接内部移动不隐藏
+  // 移入弹框内部不隐藏(弹框可交互), 否则隐藏
+  if(to && to.closest && ((_kdPopup && _kdPopup.contains(to)) || to.closest('a.cd-link') === a)) return;
   _kdHide();
 });
 
