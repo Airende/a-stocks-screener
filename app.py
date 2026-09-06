@@ -311,13 +311,17 @@ def _should_use_spot_cache() -> bool:
 # ============================================================
 # 行情源容灾 (20260906)
 # 此前全站仅依赖新浪, 新浪接口偶发限流/不可用时选股、K线、个股分析全部瘫痪。
-# 策略: 新浪为主源; 主源请求失败即熔断 _SINA_COOLDOWN 秒(期间直接走腾讯备源);
-# K线备源=腾讯 ifzq.gtimg.cn (前复权, 字段序 [date,open,close,high,low,volume]);
-# 全市场快照备源=用本地任一日期缓存的股票池 + 腾讯 qt.gtimg.cn 批量刷新价格。
+# 策略: 新浪为主源; 腾讯为备源(K线 ifzq.gtimg.cn / 快照 qt.gtimg.cn)。
+# 熔断: 全市场级失败(如 fetch_spot_all)立即熔断 _SINA_COOLDOWN_SEC;
+#       单只K线级失败按频次累计(_SINA_FAIL_THRESHOLD 次内熔断), 避免单次
+#       超时就全局切源造成抖动 —— 修复: 初版单次失败即熔断, 而备源快照又
+#       依赖本地股票池缓存(收盘后才生成), 导致盘中单次超时引发全站瘫痪。
 # 板块映射(申万/概念树)仅新浪提供, 备源期间板块显示"—"属预期行为。
 # ============================================================
-_SINA_COOLDOWN_SEC = 600  # 主源熔断时长(秒)
-_SOURCE_BREAKER = {"sina_down_until": 0.0}
+_SINA_COOLDOWN_SEC = 600          # 主源熔断时长(秒)
+_SINA_FAIL_WINDOW_SEC = 60        # 单只K线失败计数窗口
+_SINA_FAIL_THRESHOLD = 5          # 窗口内失败次数达到阈值才熔断
+_SOURCE_BREAKER = {"sina_down_until": 0.0, "fails": []}
 _SOURCE_BREAKER_LOCK = threading.Lock()
 
 
@@ -326,10 +330,18 @@ def _sina_available() -> bool:
         return time.time() >= _SOURCE_BREAKER.get("sina_down_until", 0.0)
 
 
-def _mark_sina_down(reason: str = "") -> None:
+def _record_sina_failure(reason: str = "", immediate: bool = False) -> None:
+    """记录主源失败。immediate=全市场级失败直接熔断; 否则窗口内累计达阈值才熔断。"""
     with _SOURCE_BREAKER_LOCK:
-        _SOURCE_BREAKER["sina_down_until"] = time.time() + _SINA_COOLDOWN_SEC
-    print(f"[source] [{bj_now()}] 新浪主源异常({reason}), 熔断{_SINA_COOLDOWN_SEC}s 内改用腾讯备源", flush=True)
+        now = time.time()
+        fails = [t for t in _SOURCE_BREAKER.get("fails", []) if now - t < _SINA_FAIL_WINDOW_SEC]
+        fails.append(now)
+        _SOURCE_BREAKER["fails"] = fails
+        if not (immediate or len(fails) >= _SINA_FAIL_THRESHOLD):
+            return
+        _SOURCE_BREAKER["sina_down_until"] = now + _SINA_COOLDOWN_SEC
+        _SOURCE_BREAKER["fails"] = []
+    print(f"[source] [{bj_now()}] 新浪主源异常({reason[:80]}), 熔断{_SINA_COOLDOWN_SEC}s 内改用腾讯备源", flush=True)
 
 
 _TENCENT_KLINE_URL = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
@@ -408,8 +420,28 @@ def _fetch_spot_tencent(codes: list[str]) -> list[dict]:
     return out
 
 
+_UNIVERSE_FILE = os.path.join(CACHE_DIR, "universe_latest.json")
+
+
+def _save_universe(rows: list[dict]) -> None:
+    """保存股票池快照(代码/名称), 供主源故障时腾讯备源批量刷新价格 (20260906)"""
+    try:
+        slim = [{"code": r.get("code", ""), "symbol": r.get("symbol", ""), "name": r.get("name", "")}
+                for r in rows if r.get("code")]
+        if slim:
+            _os.makedirs(CACHE_DIR, exist_ok=True)
+            with open(_UNIVERSE_FILE, "w", encoding="utf-8") as f:
+                _json.dump(slim, f, ensure_ascii=False)
+    except OSError:
+        pass
+
+
 def _load_any_spot_universe() -> list[dict]:
-    """容灾用股票池: 读本地任一日期的快照缓存(取代码/名称), 找不到则空。"""
+    """容灾用股票池: 优先读 universe_latest.json(每次成功拉取后更新),
+    其次读本地任一日期的快照缓存; 都没有则空。"""
+    data = _kv_read_local_file(_UNIVERSE_FILE)
+    if isinstance(data, list) and data:
+        return data
     import glob as _glob
     files = sorted(_glob.glob(os.path.join(CACHE_DIR, "spot_*.json")), reverse=True)
     for fp in files:
@@ -479,13 +511,15 @@ def fetch_spot_all() -> list[dict]:
                 continue
         if len(rows) < 100:
             raise RuntimeError(f"新浪快照仅返回{len(rows)}条, 判定主源异常")
+        # 保存股票池供容灾使用 (20260906)
+        _save_universe(rows)
         # 收盘后保存缓存
         if _should_use_spot_cache() and rows:
             _save_spot_cache(_cache_date_for_fetch(), rows)
         return rows
     except Exception as e:  # noqa: BLE001
         # ---- 腾讯备源: 本地股票池 + 批量刷新价格 ----
-        _mark_sina_down(str(e)[:80])
+        _record_sina_failure(str(e)[:80], immediate=True)
         universe = _load_any_spot_universe()
         if not universe:
             raise RuntimeError(f"新浪主源失败({str(e)[:60]})且本地无股票池缓存, 备源不可用") from e
@@ -542,7 +576,7 @@ def fetch_kline(symbol: str, datalen: int = 40) -> list[dict]:
     if not out:
         # ---- 腾讯备源 ----
         if sina_err:
-            _mark_sina_down(sina_err)
+            _record_sina_failure(sina_err)  # 单只K线失败按频次累计, 不立即熔断 (20260906 修复)
         try:
             out = _fetch_kline_tencent(symbol, datalen)
         except Exception as e:  # noqa: BLE001
