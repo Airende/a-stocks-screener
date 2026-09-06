@@ -7644,12 +7644,27 @@ def api_kline(code: str = "", datalen: int = 122):
             "close": b["close"], "volume": b["volume"],
             "chg": round(c, 2) if not math.isnan(c) else 0}
            for b, c in zip(bars, chgs)]
-    # 名称仅在搜索索引已建立时附带, 不触发额外拉取
+    # 名称获取 (20260906 修复浮窗只显示代码没有名称):
+    # 1) 搜索索引; 2) 股票池快照universe_latest.json(每次成功拉取行情后更新,
+    #    服务重启后也立即可用)。均为本地读取, 不触发额外拉取。
     name = ""
     for it in _stock_search_cache.get("items", []):
         if it.get("code") == code or it.get("symbol") == symbol:
             name = it.get("name", "")
             break
+    if not name:
+        # 注意: universe_latest.json 是list类型, 不能用只认dict的_kv_read_local_file
+        try:
+            if os.path.isfile(_UNIVERSE_FILE):
+                with open(_UNIVERSE_FILE, "r", encoding="utf-8") as f:
+                    uni = json.load(f)
+                if isinstance(uni, list):
+                    for it in uni:
+                        if it.get("code") == code or it.get("symbol") == symbol:
+                            name = it.get("name", "")
+                            break
+        except Exception:  # noqa: BLE001
+            pass
     return {"code": code, "symbol": symbol, "name": name, "bars": out}
 
 
