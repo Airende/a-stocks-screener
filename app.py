@@ -437,11 +437,18 @@ def _save_universe(rows: list[dict]) -> None:
 
 
 def _load_any_spot_universe() -> list[dict]:
-    """容灾用股票池: 优先读 universe_latest.json(每次成功拉取后更新),
-    其次读本地任一日期的快照缓存; 都没有则空。"""
-    data = _kv_read_local_file(_UNIVERSE_FILE)
-    if isinstance(data, list) and data:
-        return data
+    """容灾用股票池: 优先读 universe_latest.json(每次成功拉取后更新, 内容为 list),
+    其次读本地任一日期的快照缓存; 都没有则空。
+    20260906 修复: 初版误用只接受 dict 的 _kv_read_local_file 读 list 型股票池,
+    导致备源永远判定'无股票池缓存'。"""
+    try:
+        if os.path.isfile(_UNIVERSE_FILE):
+            with open(_UNIVERSE_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, list) and data:
+                return data
+    except Exception:  # noqa: BLE001
+        pass
     import glob as _glob
     files = sorted(_glob.glob(os.path.join(CACHE_DIR, "spot_*.json")), reverse=True)
     for fp in files:
