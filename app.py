@@ -4053,6 +4053,65 @@ def health():
 
 
 # ============================================================
+# SSE 事件流 (20260906 UI优化配套)
+# 每2秒推送一次三个后台模块(选股/均线形态/上试盘)的轻量状态快照,
+# 状态无变化时发送 keep-alive 注释行。前端 EventSource 订阅:
+#   - 进度文本实时驱动进度条 (原方案只在轮询时更新)
+#   - ts 变化时前端才拉取全量数据, 替代"固定间隔盲目轮询"
+# 前端保留原有轮询作为断连兜底 (见 index.html connectEvents)
+# ============================================================
+from fastapi.responses import StreamingResponse as _SSEStreamingResponse
+import asyncio as _asyncio
+
+
+@app.get("/api/events")
+async def api_events():
+    """SSE: 推送 screen/ma/ssp 三模块轻量状态。data 字段为单行 JSON。"""
+
+    def _screen_snapshot() -> dict:
+        with _screen_lock:
+            return {"running": _state["running"], "progress": _state["progress"],
+                    "ts": round(_state["ts"], 1), "error": _state["error"]}
+
+    def _ma_snapshot() -> dict:
+        with _ma_state["lock"]:
+            data = _ma_state["data"]
+            return {"running": _ma_state["running"], "progress": _ma_state["progress"],
+                    "ts": round(_ma_state["ts"], 1), "error": _ma_state["error"],
+                    "counts": dict(data["counts"]) if data else {}}
+
+    def _ssp_snapshot() -> dict:
+        with _SSP_STATE["lock"]:
+            return {"running": _SSP_STATE["running"], "progress": _SSP_STATE["progress"],
+                    "scan_ts": round(_SSP_STATE["scan_ts"], 1),
+                    "updated": _SSP_STATE["updated"], "error": _SSP_STATE["error"],
+                    "mkt_filter": bool(_SSP_STATE["mkt_filter"]),
+                    "counts": {"上试盘·新信号": len(_SSP_STATE["new_signals"]),
+                               "上试盘·观察池": len(_SSP_STATE["watch_pool"]),
+                               "上试盘·已确认": len(_SSP_STATE["confirmed_pool"])}}
+
+    async def _gen():
+        try:
+            last_line = None
+            while True:
+                payload = {"screen": _screen_snapshot(), "ma": _ma_snapshot(),
+                           "ssp": _ssp_snapshot(), "now": bj_now()}
+                line = json.dumps(payload, ensure_ascii=False)
+                if line != last_line:
+                    yield f"data: {line}\n\n"
+                    last_line = line
+                else:
+                    yield ": keep-alive\n\n"
+                await _asyncio.sleep(2)
+        except _asyncio.CancelledError:
+            # 客户端断开连接, 正常退出
+            return
+
+    return _SSEStreamingResponse(_gen(), media_type="text/event-stream",
+                                 headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+# ============================================================
 # 本地缓存管理 API
 # ============================================================
 @app.get("/api/cache_info")
