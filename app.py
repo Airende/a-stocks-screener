@@ -4049,7 +4049,8 @@ def api_refresh():
 @app.get("/api/health")
 def health():
     return {"ok": True, "time": bj_now(),
-            "running": _state["running"], "cached": _state["data"] is not None}
+            "running": _state["running"], "cached": _state["data"] is not None,
+            "storage": _kv_storage_init()}
 
 
 # ============================================================
@@ -6385,6 +6386,166 @@ def _ssp_daily_runner():
 
 
 # ============================================================
+# 云端存储 (20260906): 持仓/标记持久化到云端数据库, 解决 Render 免费档
+# 重启后 data/*.json 丢失的问题。
+# 通过环境变量 DATABASE_URL 启用, 未配置时回退本地 JSON 文件(行为不变):
+#   - postgres://... / postgresql://...  → Supabase / Neon 等免费 Postgres (psycopg2)
+#   - sqlite:///相对或绝对路径.db        → SQLite (标准库, 也可指向托管 SQLite)
+# 表结构: kv_state(key TEXT PRIMARY KEY, value TEXT, updated_at TEXT)
+# marks/positions 各存一行整包 JSON, 读写语义与原文件完全一致;
+# 云端为读取优先源, 本地文件始终同步写一份作为备份镜像;
+# 首次接入云端时若表为空而本地文件有数据, 自动迁移(种子上传)。
+# ============================================================
+_DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
+_storage_backend = None   # None=未初始化; 初始化后: 'postgres' | 'sqlite' | 'file'
+_STORAGE_LOG_TAG = "[storage]"
+
+
+def _kv_log(msg: str) -> None:
+    print(f"{_STORAGE_LOG_TAG} [{bj_now()}] {msg}", flush=True)
+
+
+def _kv_dsn_kind(url: str) -> str | None:
+    """识别 DATABASE_URL 类型"""
+    if url.startswith(("postgres://", "postgresql://")):
+        return "postgres"
+    if url.startswith("sqlite:///"):
+        return "sqlite"
+    return None
+
+
+def _kv_connect_postgres():
+    """连接 Postgres (Supabase/Neon 等托管库普遍要求 SSL, 缺省补 sslmode=require)"""
+    import psycopg2
+    url = _DATABASE_URL
+    if "sslmode=" not in url:
+        url += ("&" if "?" in url else "?") + "sslmode=require"
+    return psycopg2.connect(url, connect_timeout=10)
+
+
+def _kv_sqlite_path() -> str:
+    """sqlite:/// 后面的路径; 相对路径以 app.py 所在目录为基准"""
+    path = _DATABASE_URL[len("sqlite:///"):]
+    if not os.path.isabs(path):
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), path)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    return path
+
+
+def _kv_connect_sqlite():
+    import sqlite3
+    conn = sqlite3.connect(_kv_sqlite_path(), timeout=10)
+    return conn
+
+
+def _kv_storage_init() -> str:
+    """初始化存储后端(幂等): 建表 + 返回实际后端。失败一律回退本地文件。"""
+    global _storage_backend
+    if _storage_backend is not None:
+        return _storage_backend
+    kind = _kv_dsn_kind(_DATABASE_URL) if _DATABASE_URL else None
+    if kind is None:
+        if _DATABASE_URL:
+            _kv_log("DATABASE_URL 无法识别(仅支持 postgres:// 或 sqlite:///), 使用本地文件")
+        _storage_backend = "file"
+        return _storage_backend
+    try:
+        ddl = ("CREATE TABLE IF NOT EXISTS kv_state ("
+               "key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT '')")
+        if kind == "postgres":
+            conn = _kv_connect_postgres()
+        else:
+            conn = _kv_connect_sqlite()
+        try:
+            cur = conn.cursor()
+            cur.execute(ddl)
+            conn.commit()
+        finally:
+            conn.close()
+        _storage_backend = kind
+        _kv_log(f"云端存储已启用: {kind}")
+    except Exception as e:  # noqa: BLE001
+        _kv_log(f"云端存储连接失败({type(e).__name__}: {e}), 回退本地文件")
+        _storage_backend = "file"
+    return _storage_backend
+
+
+def _kv_get(key: str) -> dict | None:
+    """从云端读取整包 JSON; 未启用/读失败返回 None (调用方回退本地文件)"""
+    if _kv_storage_init() not in ("postgres", "sqlite"):
+        return None
+    try:
+        if _storage_backend == "postgres":
+            conn = _kv_connect_postgres()
+            ph = "%s"
+        else:
+            conn = _kv_connect_sqlite()
+            ph = "?"
+        try:
+            cur = conn.cursor()
+            cur.execute(f"SELECT value FROM kv_state WHERE key={ph}", (key,))
+            row = cur.fetchone()
+        finally:
+            conn.close()
+        if not row:
+            return None
+        data = json.loads(row[0])
+        return data if isinstance(data, dict) else None
+    except Exception as e:  # noqa: BLE001
+        _kv_log(f"读取 {key} 失败: {e}")
+        return None
+
+
+def _kv_set(key: str, value: dict) -> bool:
+    """整包 upsert 到云端; 返回是否成功(失败时内存数据仍在, 下次写入重试)"""
+    if _kv_storage_init() not in ("postgres", "sqlite"):
+        return False
+    try:
+        payload = json.dumps(value, ensure_ascii=False)
+        now = bj_now()
+        if _storage_backend == "postgres":
+            conn = _kv_connect_postgres()
+            sql = ("INSERT INTO kv_state(key, value, updated_at) VALUES (%s, %s, %s) "
+                   "ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=EXCLUDED.updated_at")
+        else:
+            conn = _kv_connect_sqlite()
+            sql = ("INSERT INTO kv_state(key, value, updated_at) VALUES (?, ?, ?) "
+                   "ON CONFLICT (key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at")
+        try:
+            cur = conn.cursor()
+            cur.execute(sql, (key, payload, now))
+            conn.commit()
+        finally:
+            conn.close()
+        return True
+    except Exception as e:  # noqa: BLE001
+        _kv_log(f"写入 {key} 失败: {e}")
+        return False
+
+
+def _kv_read_local_file(path: str) -> dict | None:
+    """读本地 JSON 文件(迁移种子/回退源), 失败返回 None"""
+    if not os.path.isfile(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = _json.load(f)
+        return data if isinstance(data, dict) else None
+    except Exception:
+        return None
+
+
+def _kv_write_local_file(path: str, value: dict) -> None:
+    """本地 JSON 文件镜像写入 (云端模式下的备份, 文件模式下的主存储)"""
+    _os.makedirs(_os.path.dirname(path), exist_ok=True)
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            _json.dump(value, f, ensure_ascii=False, indent=2)
+    except OSError as e:
+        _kv_log(f"本地文件写入失败 {path}: {e}")
+
+
+# ============================================================
 # 股票标记模块 (3 级留意 + 移除关注 + 标注时间)
 # ============================================================
 import json as _json
@@ -6403,7 +6564,19 @@ _MARKS_LOCK = threading.Lock()
 _MARKS: dict[str, dict] = {}
 
 def _load_marks():
+    """加载标记: 云端优先; 云端无数据而本地文件有 → 自动迁移上云; 全失败用空表 (20260906)"""
     global _MARKS
+    if _kv_storage_init() in ("postgres", "sqlite"):
+        cloud = _kv_get("marks")
+        if cloud is not None:
+            _MARKS = cloud
+            return
+        seed = _kv_read_local_file(_MARKS_FILE)
+        if seed is not None:
+            _MARKS = seed
+            if _kv_set("marks", seed):
+                _kv_log(f"标记数据已从本地文件迁移上云 ({len(seed)} 条)")
+            return
     if not _os.path.isfile(_MARKS_FILE):
         _MARKS = {}
         return
@@ -6416,9 +6589,10 @@ def _load_marks():
         _MARKS = {}
 
 def _save_marks():
-    _os.makedirs(_MARKS_DIR, exist_ok=True)
-    with open(_MARKS_FILE, "w", encoding="utf-8") as f:
-        _json.dump(_MARKS, f, ensure_ascii=False, indent=2)
+    """保存标记: 云端模式=云端 upsert + 本地文件镜像备份; 文件模式=仅本地 (20260906)"""
+    if _storage_backend in ("postgres", "sqlite"):
+        _kv_set("marks", _MARKS)
+    _kv_write_local_file(_MARKS_FILE, _MARKS)
 
 _load_marks()
 
@@ -6557,27 +6731,40 @@ _UNDO_BUFFER: list[dict] = []  # 撤销缓冲区: 存放最近被删除的操作
 _UNDO_MAX = 50  # 最多保留 50 条撤销记录
 
 def _load_positions():
+    """加载持仓: 云端优先; 云端无数据而本地文件有 → 自动迁移上云; 全失败用空表 (20260906)"""
     global _POSITIONS, _OP_ID
-    if not _os.path.isfile(_POSITIONS_FILE):
-        _POSITIONS = {}
-        return
-    try:
-        with open(_POSITIONS_FILE, "r", encoding="utf-8") as f:
-            data = _json.load(f)
-        if isinstance(data, dict):
-            _POSITIONS = data
-            # 重建最大操作ID
-            for p in _POSITIONS.values():
-                for op in p.get("operations", []):
-                    if op.get("id", 0) > _OP_ID:
-                        _OP_ID = op["id"]
-    except Exception:
-        _POSITIONS = {}
+    data = None
+    if _kv_storage_init() in ("postgres", "sqlite"):
+        data = _kv_get("positions")
+        if data is None:
+            seed = _kv_read_local_file(_POSITIONS_FILE)
+            if seed is not None:
+                data = seed
+                if _kv_set("positions", seed):
+                    _kv_log(f"持仓数据已从本地文件迁移上云 ({len(seed)} 只)")
+    if data is None:
+        if not _os.path.isfile(_POSITIONS_FILE):
+            _POSITIONS = {}
+            return
+        try:
+            with open(_POSITIONS_FILE, "r", encoding="utf-8") as f:
+                data = _json.load(f)
+        except Exception:
+            _POSITIONS = {}
+            return
+    if isinstance(data, dict):
+        _POSITIONS = data
+        # 重建最大操作ID
+        for p in _POSITIONS.values():
+            for op in p.get("operations", []):
+                if op.get("id", 0) > _OP_ID:
+                    _OP_ID = op["id"]
 
 def _save_positions():
-    _os.makedirs(_MARKS_DIR, exist_ok=True)
-    with open(_POSITIONS_FILE, "w", encoding="utf-8") as f:
-        _json.dump(_POSITIONS, f, ensure_ascii=False, indent=2)
+    """保存持仓: 云端模式=云端 upsert + 本地文件镜像备份; 文件模式=仅本地 (20260906)"""
+    if _storage_backend in ("postgres", "sqlite"):
+        _kv_set("positions", _POSITIONS)
+    _kv_write_local_file(_POSITIONS_FILE, _POSITIONS)
 
 _load_positions()
 

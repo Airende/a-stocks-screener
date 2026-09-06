@@ -7,3 +7,9 @@ services:
     startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /
     autoDeploy: true
+    # 20260906: 持仓/标记云端持久化。sync=false 表示 Blueprint 部署时
+    # Render 会提示填写该值(填 Supabase/Neon 等 Postgres 连接串);
+    # 留空则回退本地文件存储(Render 重启会丢失写入的数据)。
+    envVars:
+      - key: DATABASE_URL
+        sync: false
