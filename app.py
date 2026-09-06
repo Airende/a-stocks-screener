@@ -1343,19 +1343,29 @@ COND_DEFS = [
         {"id": "d5", "label": "排除上市不足60日", "hint": "新股数据不稳"},
         {"id": "d6", "label": "排除当日一字板", "hint": "无法买入"},
         {"id": "d7", "label": "排除科创板(688)", "hint": "按需勾选"},
+        {"id": "d8", "label": "排除 ATR% > 8%（波动过大）", "hint": "单日波动太剧烈风险不可控, 剔除门"},
+    ]},
+    {"group": "五、波动过滤 ATR%", "gid": "gE", "type": "or", "items": [
+        {"id": "e1", "label": "ATR% < 4%（趋势票偏好）", "hint": "低波动, 适合趋势长持"},
+        {"id": "e2", "label": "ATR% 3~8%（波段弹性）", "hint": "弹性足够又不失控, 默认勾选"},
+        {"id": "e3", "label": "ATR 收缩中（ATR14 < ATR60×0.8）", "hint": "波动收敛蓄势, 变盘临近弹性大"},
     ]},
 ]
 # 全部条件ID (默认全勾选)
 COND_ALL = [it["id"] for g in COND_DEFS for it in g["items"]]
-# 各组包含的"评分叶子" (d3-d7 是剔除门, 不计入gD评分)
+# 默认勾选集 (20260906): 全部条件中, ATR组默认只勾"ATR% 3~8%(波段弹性)"(e2)
+# 和剔除门d8; e1/e3 默认不勾。首次启动筛选与前端初始渲染均以此为准。
+COND_DEFAULT = [c for c in COND_ALL if c not in ("e1", "e3")]
+# 各组包含的"评分叶子" (d3-d8 是剔除门, 不计入gD评分)
 GROUP_LEAVES = {
     "gA": ["t1", "t2", "t3", "t4"],
     "gB": ["b1", "b2", "b3"],
     "gC": ["c1", "c2"],
     "gD": ["d1", "d2"],
+    "gE": ["e1", "e2", "e3"],
 }
 # 剔除门条件 (勾选则剔除, 不参与评分)
-GATE_CONDS = {"d3", "d4", "d5", "d6", "d7"}
+GATE_CONDS = {"d3", "d4", "d5", "d6", "d7", "d8"}
 
 
 # ============================================================
@@ -3833,7 +3843,7 @@ def check_stock(row: dict, bars: list[dict], conds=None) -> dict | None:
     其余始终返回结果, 含 score(0-4) 与各组布尔, 以便展示"接近满足"的标的。
     """
     if conds is None:
-        conds = set(COND_ALL)
+        conds = set(COND_DEFAULT)
     else:
         conds = set(conds)
     code = row.get("code", "")
@@ -3869,6 +3879,22 @@ def check_stock(row: dict, bars: list[dict], conds=None) -> dict | None:
         _chg = chgs[-1] if not math.isnan(chgs[-1]) else 0
         if (_hb == _lb) or (_ob == _cb == _hb == _lb) or (_chg >= limit * 0.99 and _hb == _lb):
             return None
+
+    # ---- ATR 波动过滤数据 (20260906 新增e组/d8) ----
+    # TR = max(高-低, |高-昨收|, |低-昨收|); ATR14/ATR60 为对应周期简单平均
+    trs = []
+    for i in range(1, len(bars)):
+        pc = closes[i - 1]
+        trs.append(max(highs[i] - lows[i], abs(highs[i] - pc), abs(lows[i] - pc)))
+    def _atr(p):
+        seg = trs[-p:] if len(trs) >= p else trs
+        return (sum(seg) / len(seg)) if seg else 0.0
+    atr14 = _atr(14)
+    atr60 = _atr(60)
+    atr_pct = (atr14 / c * 100) if c > 0 else 0.0
+    # 剔除门: 排除 ATR% > 8% (波动过大, 风险不可控)
+    if "d8" in conds and atr_pct > 8:
+        return None
 
     ma5 = sma(closes, 5)
     ma10 = sma(closes, 10)
@@ -3964,11 +3990,17 @@ def check_stock(row: dict, bars: list[dict], conds=None) -> dict | None:
     if not math.isnan(ma60[-1]) and len(ma60) >= 11 and not math.isnan(ma60[-11]):
         d2 = ma60[-1] >= ma60[-11]
 
+    # ---- E组: 波动过滤 ATR% 叶子 (20260906 新增) ----
+    e1 = atr_pct < 4                      # 趋势票偏好: 低波动
+    e2 = (3 <= atr_pct <= 8)              # 波段弹性: 有肉又不失控
+    e3 = (atr14 > 0 and atr60 > 0 and atr14 < atr60 * 0.8)  # ATR收缩=蓄势
+
     leaf = {
         "t1": t1, "t2": t2, "t3": t3, "t4": t4,
         "b1": b1, "b2": b2, "b3": b3,
         "c1": c1, "c2": c2,
         "d1": d1, "d2": d2,
+        "e1": e1, "e2": e2, "e3": e3,
     }
 
     # ---- 各组通过情况 (尊重 conds) ----
@@ -3981,7 +4013,8 @@ def check_stock(row: dict, bars: list[dict], conds=None) -> dict | None:
         return any(leaf[k] for k in chk) if chk else True
 
     groups = {"gA": and_group("gA"), "gB": or_group("gB"),
-              "gC": or_group("gC"), "gD": and_group("gD")}
+              "gC": or_group("gC"), "gD": and_group("gD"),
+              "gE": or_group("gE")}
     active = {gid: any(k in conds for k in GROUP_LEAVES[gid]) for gid in GROUP_LEAVES}
     n_active = sum(active.values())
     score = sum(groups[g] for g in groups if active[g])
@@ -4012,6 +4045,13 @@ def check_stock(row: dict, bars: list[dict], conds=None) -> dict | None:
     if active["gD"]:
         if "d1" in conds and leaf["d1"]:
             hits.append("乖离安全")
+    if active["gE"]:
+        if "e1" in conds and leaf["e1"]:
+            hits.append("低波动")
+        if "e2" in conds and leaf["e2"]:
+            hits.append("波段弹性")
+        if "e3" in conds and leaf["e3"]:
+            hits.append("ATR蓄势")
 
     est = estimate_gains(bars, ma5, ma10, ma20, _j)
     est["tags"] = hits + [t for t in est["tags"] if t not in hits]
@@ -4035,6 +4075,7 @@ def check_stock(row: dict, bars: list[dict], conds=None) -> dict | None:
         "ma250": round(ma250[-1], 2) if not math.isnan(ma250[-1]) else 0,
         "bias": round(bias, 2),
         "kdj_j": round(J_t, 2),
+        "atr_pct": round(atr_pct, 2),
         "score": score,
         "n_active": n_active,
         "groups": groups,
@@ -4155,7 +4196,7 @@ def _set_screen_progress(msg: str) -> None:
 
 def run_screen(conds=None) -> dict:
     if conds is None:
-        conds = set(COND_ALL)
+        conds = set(COND_DEFAULT)
     else:
         conds = set(conds)
     t0 = time.time()
@@ -4260,7 +4301,7 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 SCREEN_TTL = 300  # 选股结果缓存 5 分钟
 # 后台筛选状态: data/缓存时间/是否运行中/上次错误/进度/上次使用的conds
 _state = {"data": None, "ts": 0.0, "running": False, "error": None,
-          "progress": "", "last_conds": set(COND_ALL)}
+          "progress": "", "last_conds": set(COND_DEFAULT)}
 _screen_lock = threading.Lock()
 
 
@@ -4311,8 +4352,8 @@ def _ensure_screen():
 
 @app.get("/api/conds")
 def api_conds():
-    """返回条件定义(单一数据源) + 全部ID(默认全选)。"""
-    return {"defs": COND_DEFS, "all": COND_ALL}
+    """返回条件定义(单一数据源) + 全部ID + 默认勾选集 (20260906 新增ATR组默认只勾e2)。"""
+    return {"defs": COND_DEFS, "all": COND_ALL, "default": COND_DEFAULT}
 
 
 @app.get("/api/screen")

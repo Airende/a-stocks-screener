@@ -926,9 +926,9 @@ const bar = (v,max=40)=>{
   return `<span class="bar"><i style="width:${w}%;background:${col}"></i></span>`;
 };
 // 各组达成圆点 (仅展示激活的组)
-const G_ORDER=[['gA','趋势'],['gB','启动'],['gC','买点'],['gD','风控']];
+const G_ORDER=[['gA','趋势'],['gB','启动'],['gC','买点'],['gD','风控'],['gE','波动']];
 const dots = (g,active)=>{
-  const act=active||{gA:1,gB:1,gC:1,gD:1};
+  const act=active||{gA:1,gB:1,gC:1,gD:1,gE:1};
   const shown=G_ORDER.filter(([k])=>act[k]);
   const items=shown.map(([k,l])=>{
     const on=g[k];
@@ -1174,10 +1174,10 @@ let COND_DEFS=[], COND_ALL=[];
 async function initConds(){
   try{
     const r=await fetch('/api/conds'); const d=await r.json();
-    COND_DEFS=d.defs||[]; COND_ALL=d.all||[];
+    COND_DEFS=d.defs||[]; COND_ALL=d.all||[]; COND_DEFAULT=d.default||d.all||[];
   }catch(e){ return; }
-  // 先用上次筛选的conds(若有缓存)或默认全选
-  let init = COND_ALL.slice();
+  // 先用上次筛选的conds(若有缓存)或后端默认勾选集 (20260906: ATR组默认只勾e2)
+  let init = (COND_DEFAULT||[]).slice();
   try{
     const r2=await fetch('/api/screen'); const dd=await r2.json();
     if(Array.isArray(dd.conds) && dd.conds.length) init=dd.conds;
