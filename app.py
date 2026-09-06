@@ -5277,11 +5277,20 @@ def _run_ma_screen_thread():
             if not pat:
                 return None
             closes = [b["close"] for b in bars]
+            highs = [b["high"] for b in bars]
+            lows = [b["low"] for b in bars]
             ma5 = sma(closes, 5)
             ma10 = sma(closes, 10)
             ma20 = sma(closes, 20)
             ma60 = sma(closes, 60)
             chg = (closes[-1] / closes[-2] - 1) * 100 if len(closes) >= 2 else 0
+            # ATR14 波动率% (与选股端 check_stock 算法一致: TR简单平均14期 / 收盘价)
+            trs = []
+            for i in range(1, len(bars)):
+                pc = closes[i - 1]
+                trs.append(max(highs[i] - lows[i], abs(highs[i] - pc), abs(lows[i] - pc)))
+            atr14 = (sum(trs[-14:]) / len(trs[-14:])) if trs else 0.0
+            atr_pct = (atr14 / closes[-1] * 100) if closes[-1] > 0 else 0.0
             # 买卖点分析
             bs = analyze_buy_sell(bars)
             return pat, {
@@ -5292,6 +5301,7 @@ def _run_ma_screen_thread():
                 "ma10": round(ma10[-1], 2) if not math.isnan(ma10[-1]) else 0,
                 "ma20": round(ma20[-1], 2) if not math.isnan(ma20[-1]) else 0,
                 "ma60": round(ma60[-1], 2) if not math.isnan(ma60[-1]) else 0,
+                "atr_pct": round(atr_pct, 2),
                 "amount_yi": round(float(cand["row"].get("amount", 0)) / 1e8, 2),
                 "industry": get_industry(cand["code"]),
                 "concept": get_concepts(cand["code"]),
