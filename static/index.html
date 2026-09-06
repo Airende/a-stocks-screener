@@ -589,6 +589,11 @@
              padding:5px 9px;font-size:11px;line-height:1.7;color:var(--txt);white-space:nowrap;
              box-shadow:0 4px 14px rgba(0,0,0,.45);font-variant-numeric:tabular-nums}
   .chart-tip b{font-weight:700}
+  /* 股票代码悬浮K线预览弹框 (20260906) */
+  .kd-preview{position:fixed;z-index:10000;pointer-events:none;display:none;
+              background:var(--panel);border:1px solid var(--border);border-radius:10px;
+              box-shadow:0 8px 24px rgba(0,0,0,.45);overflow:hidden;width:512px}
+  .kd-preview.show{display:block}
   /* 窄屏适配: tab横向滚动 / 隐藏次要列 / 条件单列 */
   @media (max-width:760px){
     .main-tabs{overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
@@ -4351,6 +4356,110 @@ async function undoDelete(){
 loadMarks();
 loadPositions();
 bindMkTabs();
+// ============================================================
+// 股票代码悬浮K线预览 (20260906): 鼠标停在代码上弹出近半年日K迷你图
+// 事件委托绑定所有 a.cd-link, 无需逐个渲染函数接入; 每只股票前端缓存一次
+// ============================================================
+let _kdTimer = null, _kdPopup = null;
+const _kdCache = {};
+function _kdHide(){
+  clearTimeout(_kdTimer);
+  if(_kdPopup){ _kdPopup.remove(); _kdPopup = null; }
+}
+function _kdPlace(pop, anchor){
+  const rect = anchor.getBoundingClientRect();
+  let x = rect.left, y = rect.bottom + 6;
+  const pw = pop.offsetWidth || 510, ph = pop.offsetHeight || 200;
+  if(x + pw > innerWidth - 8) x = Math.max(8, innerWidth - pw - 8);
+  if(y + ph > innerHeight - 8) y = Math.max(8, rect.top - ph - 6);
+  pop.style.left = x + 'px'; pop.style.top = y + 'px';
+}
+function kdMiniChart(bars){
+  // 迷你K线: 460x150, 蜡烛(红涨绿跌) + MA20 + 右侧最新价刻度
+  const w=460,h=150,padL=6,padR=46,padT=8,padB=14;
+  const n=bars.length;
+  if(n<2) return '';
+  const hi=Math.max(...bars.map(b=>b.high));
+  const lo=Math.min(...bars.map(b=>b.low));
+  const rng=(hi-lo)||1;
+  const plotW=w-padL-padR, plotH=h-padT-padB;
+  const xStep=plotW/n;
+  const bw=Math.max(1.5, xStep*0.6);
+  const y=v=>padT+(hi-v)/rng*plotH;
+  const closes=bars.map(b=>b.close);
+  // MA20
+  const ma=[];
+  let s=0;
+  for(let i=0;i<n;i++){ s+=closes[i]; if(i>=20) s-=closes[i-20]; if(i>=19) ma.push({x:padL+i*xStep+xStep/2, v:s/20}); }
+  const maPath=ma.map((p,i)=>(i?'L':'M')+p.x.toFixed(1)+','+y(p.v).toFixed(1)).join(' ');
+  const candles=bars.map((b,i)=>{
+    const x=padL+i*xStep+xStep/2;
+    const col=(b.chg||0)>=0?'#ff4d4f':'#26a69a';
+    const yO=y(b.open), yC=y(b.close);
+    const bodyTop=Math.min(yO,yC), bodyH=Math.max(1,Math.abs(yC-yO));
+    return `<line x1="${x.toFixed(1)}" y1="${y(b.high).toFixed(1)}" x2="${x.toFixed(1)}" y2="${y(b.low).toFixed(1)}" stroke="${col}" stroke-width="0.8"/>`+
+           `<rect x="${(x-bw/2).toFixed(1)}" y="${bodyTop.toFixed(1)}" width="${bw.toFixed(1)}" height="${bodyH.toFixed(1)}" fill="${col}"/>`;
+  }).join('');
+  const last=bars[n-1];
+  const labels=[0,0.5,1].map(f=>{
+    const v=hi-f*rng, yy=y(v);
+    return `<text x="${w-padR+3}" y="${(yy+3).toFixed(1)}" fill="#5a6a82" font-size="9">${v.toFixed(2)}</text>`;
+  }).join('') + `<text x="${w-padR+3}" y="${(y(last.close)+3).toFixed(1)}" fill="${(last.chg||0)>=0?'#ff4d4f':'#26a69a'}" font-size="9" font-weight="700">${last.close.toFixed(2)}</text>`;
+  const dateTxt=`<text x="${padL}" y="${h-3}" fill="#5a6a82" font-size="9">${(bars[0].day||'').slice(2)}</text>`+
+                `<text x="${w-padR}" y="${h-3}" fill="#5a6a82" font-size="9">${(last.day||'').slice(2)}</text>`;
+  return `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" style="display:block">
+    <line x1="${padL}" y1="${y(last.close).toFixed(1)}" x2="${w-padR}" y2="${y(last.close).toFixed(1)}" stroke="rgba(255,255,255,.15)" stroke-dasharray="3,2"/>
+    ${candles}
+    <path d="${maPath}" fill="none" stroke="#f5c842" stroke-width="1" opacity="0.9"/>
+    ${labels}${dateTxt}
+  </svg>`;
+}
+async function showKlinePreview(code, anchor){
+  _kdHide();
+  const pop = document.createElement('div');
+  pop.className = 'kd-preview';
+  pop.innerHTML = '<div style="padding:10px;font-size:12px;color:var(--sub)"><span class="spin"></span>加载 ' + esc(code) + ' 近半年K线…</div>';
+  document.body.appendChild(pop);
+  pop.classList.add('show');
+  _kdPopup = pop;
+  _kdPlace(pop, anchor);
+  try{
+    if(!_kdCache[code]){
+      const r = await fetch('/api/kline?code=' + encodeURIComponent(code) + '&datalen=122');
+      const d = await r.json();
+      if(!d.bars || !d.bars.length){ pop.innerHTML = '<div class="empty">无K线数据</div>'; return; }
+      _kdCache[code] = d;
+    }
+    if(_kdPopup !== pop) return;  // 鼠标已移走, 丢弃过期弹框
+    const d = _kdCache[code];
+    const bars = d.bars;
+    const last = bars[bars.length-1];
+    const chgTxt = `<span style="color:${(last.chg||0)>=0?'var(--up)':'var(--down)'}">${(last.chg||0)>=0?'+':''}${last.chg}%</span>`;
+    pop.innerHTML = `<div style="padding:6px 10px 2px;font-size:12px;font-weight:700">
+        ${d.name ? esc(d.name)+' ' : ''}<span class="meta">${code}</span> ${chgTxt}
+        <span class="meta" style="margin-left:6px">近半年日K · MA20</span>
+      </div>` + kdMiniChart(bars);
+    _kdPlace(pop, anchor);
+  }catch(e){
+    if(_kdPopup === pop) pop.innerHTML = '<div class="empty">加载失败</div>';
+  }
+}
+document.addEventListener('mouseover', e => {
+  const a = e.target && e.target.closest ? e.target.closest('a.cd-link') : null;
+  if(!a) return;
+  const m = (a.getAttribute('href')||'').match(/(\d{6})/);
+  if(!m) return;
+  clearTimeout(_kdTimer);
+  _kdTimer = setTimeout(() => showKlinePreview(m[1], a), 350);
+});
+document.addEventListener('mouseout', e => {
+  const a = e.target && e.target.closest ? e.target.closest('a.cd-link') : null;
+  if(!a) return;
+  const to = e.relatedTarget;
+  if(to && to.closest && to.closest('a.cd-link') === a) return;  // 在同一链接内部移动不隐藏
+  _kdHide();
+});
+
 connectEvents();  // SSE 订阅后端状态流: 进度实时推送 + 数据变更触发拉取, 轮询保留作断连兜底 (20260906)
 
 // ============================================================

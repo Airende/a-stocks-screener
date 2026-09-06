@@ -7575,6 +7575,34 @@ def api_positions_today():
     out.sort(key=lambda x: x.get("time", ""), reverse=True)
     return JSONResponse({"operations": out, "count": len(out)})
 
+@app.get("/api/kline")
+def api_kline(code: str = "", datalen: int = 122):
+    """轻量K线接口 (20260906): 供前端悬浮弹框预览个股近半年日K(约122个交易日)。
+    与 /api/stock/analyze 不同, 不做任何指标计算, 只回K线, 开销极小。"""
+    code = (code or "").strip()
+    if not code:
+        return JSONResponse({"error": "code is required"}, status_code=400)
+    datalen = max(10, min(600, datalen))
+    symbol = _to_symbol(code)
+    bars = fetch_kline(symbol, datalen=datalen)
+    if not bars:
+        return JSONResponse({"error": f"无K线数据 {code}"}, status_code=404)
+    # 缓存可能比请求的更长(如回测拉过1200根), 按请求裁剪尾部
+    bars = bars[-datalen:]
+    chgs = daily_changes(bars)
+    out = [{"day": b["day"], "open": b["open"], "high": b["high"], "low": b["low"],
+            "close": b["close"], "volume": b["volume"],
+            "chg": round(c, 2) if not math.isnan(c) else 0}
+           for b, c in zip(bars, chgs)]
+    # 名称仅在搜索索引已建立时附带, 不触发额外拉取
+    name = ""
+    for it in _stock_search_cache.get("items", []):
+        if it.get("code") == code or it.get("symbol") == symbol:
+            name = it.get("name", "")
+            break
+    return {"code": code, "symbol": symbol, "name": name, "bars": out}
+
+
 @app.get("/api/spot/{code}")
 def api_spot_single(code: str):
     """获取单只股票的实时价格 (用于交易菜单价格兜底)"""
