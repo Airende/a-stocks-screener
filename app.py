@@ -4725,11 +4725,20 @@ def api_stock_history_del(code: str):
 
 
 @app.get("/api/stock/analyze")
-def api_stock_analyze(code: str = ""):
-    """个股深度分析: 基本信息 + 技术指标 + 量价关系"""
+def api_stock_analyze(code: str = "", date: str = ""):
+    """个股深度分析: 基本信息 + 技术指标 + 量价关系
+    20260906 新增历史时点复盘: 传 date(YYYY-MM-DD) 时, K线截断到该交易日,
+    全部指标/买卖点/量价/KDJ体系按'以该日为最后一天'计算。"""
     code = code.strip()
     if not code:
         return JSONResponse({"error": "code is required"}, status_code=400)
+    # 历史时点参数校验
+    as_of_date = (date or "").strip()[:10]
+    if as_of_date:
+        try:
+            datetime.strptime(as_of_date, "%Y-%m-%d")
+        except ValueError:
+            return JSONResponse({"error": "date 格式应为 YYYY-MM-DD"}, status_code=400)
     symbol = _to_symbol(code)
     # 1. 实时行情
     spot = _get(SINA_HQ, {"page": 1, "num": 1, "node": "hs_a"})
@@ -4741,9 +4750,21 @@ def api_stock_analyze(code: str = ""):
             info = it
             break
     # 如果缓存里找不到, 尝试拉K线判断是否存在
-    bars = fetch_kline(symbol, datalen=120)
-    if not bars:
+    # 20260906 历史时点: 传date时拉更长K线(300根)以便截断后仍有足够历史
+    bars_all = fetch_kline(symbol, datalen=300 if as_of_date else 120)
+    if not bars_all:
         return JSONResponse({"error": f"找不到股票 {code} 或无K线数据"}, status_code=404)
+    as_of_date_actual = bars_all[-1].get("day", "")[:10]
+    if as_of_date:
+        # 截断到选定日期(含当天), 最多保留120根 —— 等价于"回到那天看当时的分析"
+        sliced = [b for b in bars_all if (b.get("day") or "")[:10] <= as_of_date]
+        if not sliced:
+            return JSONResponse({"error": f"{as_of_date} 早于该股票的数据起点({bars_all[0].get('day','')[:10]})"},
+                                status_code=404)
+        bars = sliced[-120:]
+        as_of_date_actual = bars[-1].get("day", "")[:10]
+    else:
+        bars = bars_all
 
     # 构建行业/概念映射
     _build_board_maps()
@@ -4994,6 +5015,9 @@ def api_stock_analyze(code: str = ""):
         "bs": bs,
         "vp_system": vp_system,   # 6步量化量价体系分析结果 (用于前端「量价关系」一栏)
         "kdj_system": kdj_system, # KDJ双模式分析结果 (用于前端「KDJ操作手册」一栏)
+        "as_of_date": as_of_date_actual,      # 分析基准日(实际K线最后一天)
+        "is_historical": bool(as_of_date),    # 是否历史时点复盘
+        "requested_date": as_of_date or None, # 用户请求的日期(可能与基准日不同, 如非交易日)
         "updated": bj_now(),
     }
 

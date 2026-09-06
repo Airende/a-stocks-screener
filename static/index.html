@@ -747,6 +747,13 @@
           </div>
           <div class="sa-dropdown" id="saDropdown"></div>
         </div>
+        <!-- 历史时点复盘: 以选定日期为最后一天计算全部指标 (20260906) -->
+        <div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap">
+          <span class="meta">⏱ 历史时点复盘:</span>
+          <input type="date" id="saDate" style="padding:6px 10px;font-size:13px;border:1px solid var(--border);border-radius:8px;background:var(--panel2);color:var(--txt);outline:none">
+          <button class="ghost" id="saDateBtn" style="padding:6px 14px;font-size:13px">按此日分析</button>
+          <span class="meta" id="saDateHint">以选定日期为最后一天, 回看当天的买卖点/量价/风格判定</span>
+        </div>
         <div class="sa-hist" id="saHist">
           <div class="sa-hist-h" id="saHistToggle">
             <span style="display:flex;align-items:center"><span class="sa-hist-arr">▼</span><span>历史记录</span></span>
@@ -1530,6 +1537,16 @@ function submitSearchNow(){
 }
 if($('#saSearchBtn')) $('#saSearchBtn').onclick = ()=>submitSearchNow();
 
+// ===== 历史时点复盘: 基准日期选择 (20260906) =====
+const saDateInput = $('#saDate');
+if(saDateInput) saDateInput.max = new Date().toISOString().slice(0,10);
+if($('#saDateBtn')) $('#saDateBtn').onclick = ()=>{
+  const v = (saDateInput && saDateInput.value || '').trim();
+  if(!v){ alert('请先选择基准日期'); return; }
+  if(!_curAnalysis || !_curAnalysis.code){ alert('请先搜索一只股票'); return; }
+  analyzeStock(_curAnalysis.code, v);
+};
+
 async function searchStock(q){
   try{
     // 中文放在POST body里, 避免代理/解析层拦截URL导致400 Invalid request
@@ -1553,17 +1570,21 @@ async function searchStock(q){
     });
   }catch(e){}
 }
-async function analyzeStock(code){
+async function analyzeStock(code, date){
+  // 20260906 支持历史时点复盘: date(YYYY-MM-DD)非空时按该日为最后一天分析
   saPanel.classList.add('show');
-  saPanel.innerHTML='<div style="text-align:center;padding:30px"><span class="spin"></span>正在拉取K线并分析技术指标…</div>';
+  saPanel.innerHTML='<div style="text-align:center;padding:30px"><span class="spin"></span>'+(date?('正在分析 '+esc(date)+' 时点数据…'):'正在拉取K线并分析技术指标…')+'</div>';
   try{
-    const r=await fetch('/api/stock/analyze?code='+encodeURIComponent(code));
+    let url='/api/stock/analyze?code='+encodeURIComponent(code);
+    if(date) url+='&date='+encodeURIComponent(date);
+    const r=await fetch(url);
     if(!r.ok){ const e=await r.json(); saPanel.innerHTML='<div class="empty">'+e.error+'</div>'; return; }
     const d=await r.json();
     _curAnalysis=d;
     renderAnalysis(d);
     // 并行绘制上试盘信号点 markers 到 K 线 SVG (不阻塞后续流程)
-    applySSPMarkersToAnalysisChart(code, d.bars||[]).catch(()=>{});
+    // 历史时点模式下只画基准日及之前的信号 (20260906)
+    applySSPMarkersToAnalysisChart(code, d.bars||[], d.is_historical ? d.as_of_date : null).catch(()=>{});
     loadHistory();
   }catch(e){
     saPanel.innerHTML='<div class="empty">加载失败: '+e.message+'</div>';
@@ -1572,12 +1593,14 @@ async function analyzeStock(code){
 
 // ===== 上试盘: 在个股分析 K 线 SVG 上叠加标记 =====
 // bars 必须和 buildMiniChart 用的是同一批
-async function applySSPMarkersToAnalysisChart(code, bars){
+async function applySSPMarkersToAnalysisChart(code, bars, asOfDate){
   if(!bars || !bars.length) return;
   // 拉信号（浏览器允许异步失败）
   const r = await fetch('/api/ssp-signals?code='+encodeURIComponent(code));
   const res = await r.json();
-  const signals = res && res.signals ? res.signals : [];
+  let signals = res && res.signals ? res.signals : [];
+  // 历史时点模式: 只画基准日及之前的信号 (20260906)
+  if(asOfDate) signals = signals.filter(s => !s.day || s.day.slice(0,10) <= asOfDate);
   if(!signals.length) return;
   // buildMiniChart 使用的常量
   const w=800, h=220, padL=8, padR=8, padT=12, padB=18;
@@ -2707,6 +2730,7 @@ function renderAnalysis(d){
       ${saPlusBtn}
       <a class="nm" href="https://stockpage.10jqka.com.cn/${d.code}/" target="_blank" rel="noopener" style="text-decoration:none;cursor:pointer" onclick="openStock('${d.code}','${d.name}',event)">${d.name}${saMarkBtn}</a>
       <span class="cd">${mkt(d.code)}</span>
+      ${d.is_historical ? `<span class="sig-badge wait" style="font-size:12px" title="历史时点复盘: 全部指标按 ${d.as_of_date} 收盘计算">⏱ 基准日 ${d.as_of_date}${d.requested_date && d.requested_date!==d.as_of_date ? ` (请求${d.requested_date}, 非交易日已取最近)` : ''} <b style="cursor:pointer;text-decoration:underline" onclick="analyzeStock('${d.code}')">回到最新</b></span>` : ''}
     </div>
     </div>
     ${boardHtml}${bizHtml}
