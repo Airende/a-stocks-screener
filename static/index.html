@@ -725,7 +725,7 @@
           <th>今日涨跌</th><th>现价</th>
           <th class="col-opt">流通市值(亿)</th><th class="col-opt">成交额(亿)</th>
           <th class="col-opt">乖离率</th>
-          <th>预估5日</th><th class="col-opt">预估10日</th><th class="col-opt">预估20日</th>
+          <th title="ATR14/收盘价, 波动率%">ATR%</th>
           <th class="l">买卖点</th>
           <th class="l col-opt">信号标签</th>
         </tr></thead>
@@ -750,7 +750,7 @@
           <th class="col-opt">流通市值(亿)</th><th class="col-opt">成交额(亿)</th>
           <th class="col-opt">乖离率</th>
           <th>达成</th>
-          <th>预估5日</th><th class="col-opt">预估10日</th><th class="col-opt">预估20日</th>
+          <th title="ATR14/收盘价, 波动率%">ATR%</th>
           <th class="l">买卖点</th>
           <th class="l col-opt">信号标签</th>
         </tr></thead>
@@ -1132,9 +1132,7 @@ function rowHTML(s,i,near){
     <td class="col-opt">${s.amount_yi}</td>
     <td class="col-opt"><span style="color:${bcol};font-weight:600">${s.bias}%</span></td>
     ${extra}
-    <td>${bar(s.est_5d)}${fmtPct(s.est_5d)}</td>
-    <td class="col-opt">${bar(s.est_10d)}${fmtPct(s.est_10d)}</td>
-    <td class="col-opt">${bar(s.est_20d)}${fmtPct(s.est_20d)}</td>
+    <td><span style="color:${s.atr_pct>=8?'var(--up)':(s.atr_pct<4?'var(--sub)':'var(--gold)')};font-weight:600">${s.atr_pct}%</span></td>
     <td class="l">${bsHtml}</td>
     <td class="l col-opt">${tags}</td>
   </tr>`;
@@ -1156,20 +1154,20 @@ function render(d, syncConds=true){
   const emptyCta = ` <button class="load-more" style="margin-left:10px" onclick="startScreen(null,true)">↻ 刷新行情重筛</button>`;
   $('#exactHead').innerHTML = `完全命中 (${na}/${na} 全部激活条件) <span class="cnt">${ex.length}</span>`;
   $('#tbodyExact').innerHTML = !ex.length
-    ? `<tr><td colspan="13" class="empty">当前勾选条件下暂无同时满足全部 ${na} 组的标的 (趋势/启动/买点常存在时序差异; 见下方"接近满足")${emptyCta}</td></tr>`
+    ? `<tr><td colspan="11" class="empty">当前勾选条件下暂无同时满足全部 ${na} 组的标的 (趋势/启动/买点常存在时序差异; 见下方"接近满足")${emptyCta}</td></tr>`
     : (()=>{ // 分页: 首屏 PAGE_SIZE 行, 加载更多 (20260906)
         const show = ex.slice(0, screenExactPage*PAGE_SIZE);
         let html = show.map((s,i)=>rowHTML(s,i,false)).join('');
-        if(ex.length > show.length) html += loadMoreRow(show.length, ex.length, 13, 'screenExactPage++;render(_lastScreenData,true)');
+        if(ex.length > show.length) html += loadMoreRow(show.length, ex.length, 11, 'screenExactPage++;render(_lastScreenData,true)');
         return html;
       })();
   $('#nearHead').innerHTML = `接近满足 (≥${Math.max(1,na-1)}/${na}) · 按达成度排序 <span style="font-weight:400;color:var(--sub);font-size:12px;margin-left:8px">达成: ${lgHtml}</span>`;
   $('#tbodyNear').innerHTML = !nr.length
-    ? '<tr><td colspan="14" class="empty">暂无接近满足的标的</td></tr>'
+    ? '<tr><td colspan="12" class="empty">暂无接近满足的标的</td></tr>'
     : (()=>{
         const show = nr.slice(0, screenNearPage*PAGE_SIZE);
         let html = show.map((s,i)=>rowHTML(s,i,true)).join('');
-        if(nr.length > show.length) html += loadMoreRow(show.length, nr.length, 14, 'screenNearPage++;render(_lastScreenData,true)');
+        if(nr.length > show.length) html += loadMoreRow(show.length, nr.length, 12, 'screenNearPage++;render(_lastScreenData,true)');
         return html;
       })();
   // 同步勾选状态为本次筛选使用的conds (刷新操作不打断用户未提交的勾选)
@@ -1220,7 +1218,7 @@ async function startScreen(conds, refreshFirst){
   btn.disabled=true; btn.innerHTML='<span class="spin"></span>筛选中…';
   screenExactPage=1; screenNearPage=1;  // 新一轮筛选重置分页 (20260906)
   updateProgLine('#screenProg','准备中…',true);
-  $('#tbodyExact').innerHTML='<tr><td colspan="13" class="empty"><span class="spin"></span>正在后台多维筛选, 首次约需2-3分钟拉取候选股300日K线…</td></tr>';
+  $('#tbodyExact').innerHTML='<tr><td colspan="11" class="empty"><span class="spin"></span>正在后台多维筛选, 首次约需2-3分钟拉取候选股300日K线…</td></tr>';
   $('#tbodyNear').innerHTML='';
   // 1) 提交本次勾选的conds启动后台筛选(或仅刷新)
   try{
@@ -1244,7 +1242,7 @@ async function startScreen(conds, refreshFirst){
       }
       if(d.error && !d.running){
         updateProgLine('#screenProg','',false);
-        $('#tbodyExact').innerHTML='<tr><td colspan="13" class="empty">筛选出错: '+d.error+'</td></tr>';
+        $('#tbodyExact').innerHTML='<tr><td colspan="11" class="empty">筛选出错: '+d.error+'</td></tr>';
         btn.disabled=false; btn.textContent='完成';
         return;
       }
@@ -1252,7 +1250,7 @@ async function startScreen(conds, refreshFirst){
       setTimeout(poll, 4000);
     }catch(e){
       updateProgLine('#screenProg','',false);
-      $('#tbodyExact').innerHTML='<tr><td colspan="13" class="empty">加载失败: '+e.message+'</td></tr>';
+      $('#tbodyExact').innerHTML='<tr><td colspan="11" class="empty">加载失败: '+e.message+'</td></tr>';
       btn.disabled=false; btn.textContent='完成';
     }
   };
@@ -1295,7 +1293,7 @@ $('#cacheRefreshBtn').onclick=async()=>{
   btn.disabled=true; btn.textContent='刷新中…';
   $('#cacheInfo').textContent='K线数据: 正在清空并重新拉取…';
   // 清空表格, 避免显示旧数据
-  $('#tbodyExact').innerHTML='<tr><td colspan="13" class="empty"><span class="spin"></span>正在重新拉取数据…</td></tr>';
+  $('#tbodyExact').innerHTML='<tr><td colspan="11" class="empty"><span class="spin"></span>正在重新拉取数据…</td></tr>';
   $('#tbodyNear').innerHTML='';
   try{
     await fetch('/api/cache_refresh',{method:'POST'});
@@ -4623,7 +4621,7 @@ function renderHistory(rec){
   if(sc){
     parts.push(`<div class="sec-h">选股筛选 <span class="cnt">${sc.matched||0}</span>
       <span class="meta">${esc(sc.updated||'')} · 样本 ${sc.universe||0} · 勾选${(sc.conds||[]).length}条件</span></div>`);
-    parts.push('<div class="tbl-wrap" style="max-height:420px;overflow-y:auto"><table><thead><tr><th class="l">#</th><th class="l">股票</th><th class="l col-opt">行业</th><th>今日涨跌</th><th>现价</th><th>预估5日</th><th class="l">买卖点</th></tr></thead><tbody id="histScreenBody"></tbody></table></div>');
+    parts.push('<div class="tbl-wrap" style="max-height:420px;overflow-y:auto"><table><thead><tr><th class="l">#</th><th class="l">股票</th><th class="l col-opt">行业</th><th>今日涨跌</th><th>现价</th><th>ATR%</th><th class="l">买卖点</th></tr></thead><tbody id="histScreenBody"></tbody></table></div>');
   }
   // ---- 均线 ----
   if(ma){
@@ -4654,7 +4652,7 @@ function renderHistory(rec){
   if(sb && sc){
     const rows = [...(sc.exact||[]), ...(sc.stocks||[])];
     sb.innerHTML = rows.length
-      ? rows.slice(0,120).map((s,i) => `<tr><td class="l">${i+1}</td><td class="l">${markNameHtml(s.code,s.name,s.price)}</td><td class="l col-opt">${esc(s.industry||'')}</td><td>${fmtPct(s.change_pct)}</td><td>${s.price}</td><td>${fmtPct(s.est_5d)}</td><td class="l">${sigBadgeHtml(s)}</td></tr>`).join('')
+      ? rows.slice(0,120).map((s,i) => `<tr><td class="l">${i+1}</td><td class="l">${markNameHtml(s.code,s.name,s.price)}</td><td class="l col-opt">${esc(s.industry||'')}</td><td>${fmtPct(s.change_pct)}</td><td>${s.price}</td><td>${s.atr_pct!=null? s.atr_pct+'%':'—'}</td><td class="l">${sigBadgeHtml(s)}</td></tr>`).join('')
       : '<tr><td colspan="7" class="empty">无</td></tr>';
   }
   // ---- 填充行: 均线(每形态前5) ----
