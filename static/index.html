@@ -818,7 +818,7 @@
             <tbody id="tbodyMk"></tbody>
           </table>
         </div>
-        <div class="meta" style="margin-top:8px;font-size:11px">提示：股票名称后的标记字符可点击设置 —— <span style="color:#ef4444;font-weight:800">!</span> 特别关注（红）· <span style="color:#f5c842;font-weight:800">*</span> 关注（黄）· <span style="color:#e5e7eb;font-weight:800">"</span> 留意（白），未标记时显示 <span style="color:var(--sub)">+</span>。「- 忽略此股」可给名称加删除线。单击股票名称跳转到个股分析。标记数据保存在服务端 <code>data/stock_marks.json</code>。</div>
+        <div class="meta" style="margin-top:8px;font-size:11px">提示：股票名称后的标记字符可点击设置 —— <span style="color:#ef4444;font-weight:800">!</span> 特别关注（红）· <span style="color:#f5c842;font-weight:800">*</span> 关注（黄）· <span style="color:#e5e7eb;font-weight:800">"</span> 留意（白），未标记时显示 <span style="color:var(--sub)">+</span>。「<span style="color:var(--down);font-weight:800">×</span> 忽略此股」后名称后显示绿色 ×。单击股票名称跳转到个股分析。标记数据保存在服务端 <code>data/stock_marks.json</code>。</div>
       </div>
     </div>
   </div>
@@ -3933,7 +3933,7 @@ function openMarkMenu(code, name, ev){
     ${mkItems}
     <div class="mark-menu-divider"></div>
     <div class="mark-menu-item ${removedActive}" onclick="toggleRemoved('${code}','${attr(rawName)}')">
-      <span class="mi-icon" style="${m.removed?'color:var(--down)':''}">${m.removed?'✕':'-'}</span>
+      <span class="mi-icon" style="color:var(--down)">${m.removed?'✕':'×'}</span>
       <span>${m.removed?'取消忽略此股':'忽略此股'}</span>
     </div>
     <div class="mark-menu-divider"></div>
