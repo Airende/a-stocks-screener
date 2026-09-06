@@ -5224,9 +5224,21 @@ def _run_ssp_scan_thread():
         watch_pool.sort(key=lambda x: (x.get("days_since",99), -abs(x.get("break_price",0) - x.get("price",0))))
         confirmed_today.sort(key=lambda x: x.get("change_pct") or 0, reverse=True)
 
-        today_dt = bars[-1]["day"] if 'bars' in dir() else _dt.date.today().strftime("%Y-%m-%d")
+        # 20260906 修复: 原写法 `'bars' in dir()` / `'today_date' in dir()` 恒为 False
+        # (这两个变量只存在于嵌套函数 proc 的局部作用域, 静态检查也因此报未定义名),
+        # 实际效果是 updated 一直取本机日期, 而非本次扫描 K 线的真实交易日。
+        # 现改为从扫描结果记录的 today 字段取真实交易日, 无任何命中时回退本机日期。
+        trade_date = ""
+        for m in all_matches:
+            for key in ("A", "B", "C"):
+                rec = m.get(key)
+                if rec and rec.get("today"):
+                    trade_date = rec["today"]
+                    break
+            if trade_date:
+                break
         with _SSP_STATE["lock"]:
-            _SSP_STATE["updated"] = today_date if 'today_date' in dir() else str(today_dt)
+            _SSP_STATE["updated"] = trade_date or _dt.date.today().strftime("%Y-%m-%d")
             _SSP_STATE["scan_ts"] = time.time()
             _SSP_STATE["new_signals"] = new_sigs
             _SSP_STATE["watch_pool"] = watch_pool
@@ -6267,6 +6279,16 @@ def _startup():
 # ---------- 上试盘·每日定时更新 ----------
 _SSP_DAILY_HOUR = 16
 _SSP_DAILY_MINUTE = 30  # A股收盘后 1.5h, 历史数据基本都齐
+
+
+def _ssp_log(msg: str) -> None:
+    """上试盘模块日志: 带北京时间戳打印到 stdout (uvicorn 接管日志输出)。
+
+    20260906 修复: 该函数此前只有调用、没有定义, 每日 16:30 定时触发后必抛
+    NameError; 且 except 分支里再次调用 _ssp_log, 异常直接击穿 while 循环,
+    导致常驻定时线程退出 —— 之后每个交易日的自动重扫都不会再触发。
+    统一在此定义, 消除未定义引用。"""
+    print(f"[{bj_now()}] {msg}", flush=True)
 
 def _is_workday(d):
     """周一=0 ~ 周五=4. 简化版(不剔除交易所休假日, 节假日少量/空量跑一次无害)"""
