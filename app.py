@@ -348,13 +348,16 @@ _TENCENT_KLINE_URL = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
 
 
 def _fetch_kline_tencent(symbol: str, datalen: int = 40) -> list[dict]:
-    """腾讯日K备源(前复权): 返回与新浪一致的 [{day,open,high,low,close,volume}]。
-    注意腾讯字段序为 [日期,开盘,收盘,最高,最低,成交量], 与新浪不同。"""
-    data = _get(_TENCENT_KLINE_URL, {"param": f"{symbol},day,,,{datalen},qfq"}, timeout=10)
+    """腾讯日K备源: 返回与新浪一致的 [{day,open,high,low,close,volume}]。
+    20260906 审计修复:
+    - 复权模式由 qfq 改为不复权(param 不带 qfq), 与新浪主源口径一致,
+      否则除权日附近两源价格体系不同, 切源时均线/止损位会跳变;
+    - 腾讯K线成交量为手, 新浪为股, 必须×100 (实测茅台 45416手 vs 4541564股)。"""
+    data = _get(_TENCENT_KLINE_URL, {"param": f"{symbol},day,,,{datalen}"}, timeout=10)
     node = {}
     if isinstance(data, dict):
         node = (data.get("data") or {}).get(symbol) or {}
-    rows = node.get("qfqday") or node.get("day") or []
+    rows = node.get("day") or node.get("qfqday") or []
     out: list[dict] = []
     for r in rows:
         try:
@@ -362,10 +365,46 @@ def _fetch_kline_tencent(symbol: str, datalen: int = 40) -> list[dict]:
                 "day": r[0],
                 "open": float(r[1]), "close": float(r[2]),
                 "high": float(r[3]), "low": float(r[4]),
-                "volume": float(r[5]),
+                "volume": float(r[5]) * 100,
             })
         except (IndexError, ValueError, TypeError):
             continue
+    return out
+
+
+# 东财备源 (20260906 审计新增): 腾讯也有WAF限频风险, 增加第三源提高容灾深度
+_EM_KLINE_URL = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
+_EM_SPOT_URL = "https://push2.eastmoney.com/api/qt/ulist.np/get"
+
+
+def _em_secid(symbol: str) -> str:
+    """新浪风格 symbol(sh600519) → 东财 secid(1.600519 沪 / 0.600519 深·北)"""
+    code = symbol[-6:]
+    return ("1." if symbol.startswith("sh") else "0.") + code
+
+
+def _fetch_kline_eastmoney(symbol: str, datalen: int = 40) -> list[dict]:
+    """东财日K第三备源(fqt=0 不复权, 与新浪一致)。
+    klines 字段序: 日期,开,收,高,低,量(手),额(元) → 量×100 对齐新浪的股。"""
+    data = _get(_EM_KLINE_URL, {
+        "secid": _em_secid(symbol),
+        "fields1": "f1,f2,f3,f4,f5,f6",
+        "fields2": "f51,f52,f53,f54,f55,f56,f57",
+        "klt": 101, "fqt": 0, "lmt": datalen, "end": "20500101",
+    }, timeout=10)
+    out: list[dict] = []
+    if isinstance(data, dict):
+        for line in ((data.get("data") or {}).get("klines") or []):
+            p = line.split(",")
+            try:
+                out.append({
+                    "day": p[0],
+                    "open": float(p[1]), "close": float(p[2]),
+                    "high": float(p[3]), "low": float(p[4]),
+                    "volume": float(p[5]) * 100,
+                })
+            except (IndexError, ValueError, TypeError):
+                continue
     return out
 
 
@@ -434,6 +473,52 @@ def _save_universe(rows: list[dict]) -> None:
                 _json.dump(slim, f, ensure_ascii=False)
     except OSError:
         pass
+
+
+def _fetch_spot_eastmoney(codes: list[str]) -> list[dict]:
+    """东财实时行情第三备源: ulist 批量查询, 输出与新浪 spot 行对齐。
+    字段: f2现价 f3涨跌% f5量(手) f6额(元) f12代码 f14名称 f15高 f16低 f17开 f21流通市值(元)"""
+    out: list[dict] = []
+    CHUNK = 60
+    for i in range(0, len(codes), CHUNK):
+        chunk = codes[i:i + CHUNK]
+        secids = ",".join(_em_secid(_to_symbol(c)) for c in chunk)
+        try:
+            data = _get(_EM_SPOT_URL, {
+                "secids": secids,
+                "fields": "f2,f3,f5,f6,f12,f14,f15,f16,f17,f21",
+                "fltt": "2", "pn": 1, "pz": 200, "np": 1,
+            }, timeout=10)
+        except Exception:  # noqa: BLE001
+            continue
+        diff = ((data or {}).get("data") or {}).get("diff") or []
+        for x in diff:
+            try:
+                code = str(x.get("f12", ""))
+                if not code:
+                    continue
+                def _f(key, default=0.0):
+                    v = x.get(key)
+                    try:
+                        return float(v)
+                    except (TypeError, ValueError):
+                        return default
+                out.append({
+                    "code": code,
+                    "symbol": _to_symbol(code),
+                    "name": x.get("f14", ""),
+                    "trade": _f("f2"),
+                    "open": _f("f17"),
+                    "high": _f("f15"),
+                    "low": _f("f16"),
+                    "volume": _f("f5") * 100,          # 手→股
+                    "changepercent": _f("f3"),
+                    "amount": _f("f6"),                 # 元, 与新浪一致
+                    "nmc": _f("f21") / 1e4,             # 元→万元(新浪口径)
+                })
+            except Exception:  # noqa: BLE001
+                continue
+    return out
 
 
 def _load_any_spot_universe() -> list[dict]:
@@ -525,14 +610,16 @@ def fetch_spot_all() -> list[dict]:
             _save_spot_cache(_cache_date_for_fetch(), rows)
         return rows
     except Exception as e:  # noqa: BLE001
-        # ---- 腾讯备源: 本地股票池 + 批量刷新价格 ----
+        # ---- 腾讯备源 → 东财第三源: 本地股票池 + 批量刷新价格 ----
         _record_sina_failure(str(e)[:80], immediate=True)
         universe = _load_any_spot_universe()
         if not universe:
             raise RuntimeError(f"新浪主源失败({str(e)[:60]})且本地无股票池缓存, 备源不可用") from e
         rows = _fetch_spot_tencent([u["symbol"] or u["code"] for u in universe])
         if not rows:
-            raise RuntimeError(f"新浪主源失败且腾讯备源亦无数据: {str(e)[:60]}") from e
+            rows = _fetch_spot_eastmoney([u["symbol"] or u["code"] for u in universe])
+        if not rows:
+            raise RuntimeError(f"新浪主源失败且腾讯/东财备源均无数据: {str(e)[:60]}") from e
         return rows
 
 
@@ -581,14 +668,19 @@ def fetch_kline(symbol: str, datalen: int = 40) -> list[dict]:
         except Exception as e:  # noqa: BLE001
             sina_err = str(e)[:80]
     if not out:
-        # ---- 腾讯备源 ----
+        # ---- 腾讯备源 → 东财第三源 ----
         if sina_err:
             _record_sina_failure(sina_err)  # 单只K线失败按频次累计, 不立即熔断 (20260906 修复)
         try:
             out = _fetch_kline_tencent(symbol, datalen)
         except Exception as e:  # noqa: BLE001
-            print(f"[source] [{bj_now()}] K线双源均失败 {symbol}: {sina_err} / {str(e)[:60]}", flush=True)
-            return []
+            print(f"[source] [{bj_now()}] 腾讯K线备源失败 {symbol}: {str(e)[:60]}, 改用东财", flush=True)
+        if not out:
+            try:
+                out = _fetch_kline_eastmoney(symbol, datalen)
+            except Exception as e:  # noqa: BLE001
+                print(f"[source] [{bj_now()}] K线三源均失败 {symbol}: 新浪:{sina_err[:40]} / 东财:{str(e)[:60]}", flush=True)
+                return []
     # 收盘后：若新浪K线未更新今天，用spot快照补全
     if _is_after_close() and out:
         today_str = _latest_trade_date_str()
@@ -4439,10 +4531,14 @@ _SEARCH_TTL = 600  # 10分钟(之前1小时太长, 非交易时段抓到空数�
 
 
 def _to_symbol(code: str) -> str:
-    """代码 -> 新浪symbol"""
+    """代码 -> 新浪symbol
+    20260906 审计修复: 补充北交所映射(43/83/87/88/92/4/8开头 -> bj前缀),
+    此前 920xxx 等北交所代码被错误映射为 sz 前缀, 导致搜索/分析拉不到K线。"""
     code = code.strip()
-    if code.startswith(("sh", "sz")):
+    if code.startswith(("sh", "sz", "bj")):
         return code
+    if code.startswith(("43", "83", "87", "88", "92")) or code.startswith(("4", "8")):
+        return "bj" + code
     if code.startswith(("6", "5", "9", "11", "13")):
         return "sh" + code
     return "sz" + code
@@ -5385,9 +5481,11 @@ def ssp_single_stock_signals(bars: list[dict], include_confirmed_history=True):
 
 
 def _ssp_hs300_above_ma20(scan_date=None):
-    """沪深300 000300 收盘是否在 MA20 上方。失败返回 True(宽松默认通过)。"""
+    """沪深300 000300 收盘是否在 MA20 上方。失败返回 True(宽松默认通过)。
+    20260906 审计修复: 原来传 '000300' 无市场前缀, 新浪/腾讯/东财K线接口都
+    无法识别, 大盘过滤形同虚设; 改为带前缀的 sh000300。"""
     try:
-        bars = fetch_kline("000300", datalen=80)
+        bars = fetch_kline("sh000300", datalen=80)
         if not bars or len(bars) < 25:
             return True
         closes = [b["close"] for b in bars]
@@ -5543,10 +5641,10 @@ def _run_ssp_scan_thread():
         watch_pool.sort(key=lambda x: (x.get("days_since",99), -abs(x.get("break_price",0) - x.get("price",0))))
         confirmed_today.sort(key=lambda x: x.get("change_pct") or 0, reverse=True)
 
-        # 每日信号归档 (20260906)
+        # 每日信号归档 (20260906; 用北京时间, 不用服务器本地时区 —— 部署到海外时 date.today() 会错天)
         try:
-            _archive_put(_dt.date.today().strftime("%Y-%m-%d"), "ssp", {
-                "updated": _dt.date.today().strftime("%Y-%m-%d"),
+            _archive_put(bj_now("%Y-%m-%d"), "ssp", {
+                "updated": bj_now("%Y-%m-%d"),
                 "mkt_filter": mkt_ok,
                 "counts": {"上试盘·新信号": len(new_sigs), "上试盘·观察池": len(watch_pool),
                            "上试盘·已确认": len(confirmed_today)},
