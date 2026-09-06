@@ -437,12 +437,11 @@
   .mk-tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
   .mk-tab .cnt{margin-left:5px;font-size:11px;opacity:.85}
   .mk-time{font-size:11px;color:var(--sub)}
-  /* 20260906: 忽略/已删除股票的标识由删除线改为名称后的绿色小叉叉 */
-  .removed-x{display:inline-flex;align-items:center;justify-content:center;
-             width:15px;height:15px;margin-left:4px;border-radius:4px;
-             color:var(--down);font-size:12px;font-weight:800;line-height:1;
-             vertical-align:middle;cursor:default;opacity:.85;transition:.12s;user-select:none}
-  .removed-x:hover{opacity:1;background:rgba(38,166,154,.14)}
+  /* 20260906: 忽略/已删除股票的标识由删除线改为名称后的绿色小叉叉
+     (紧贴名称、内联富文本形式, 与标记字符同风格) */
+  .removed-x{display:inline;color:var(--down);font-size:12px;font-weight:800;
+             line-height:1;vertical-align:baseline;margin:0;padding:0;
+             cursor:default;opacity:.9;user-select:none}
   /* 持仓 (买卖点) 相关 */
   .nm-cell{position:relative;display:inline-flex;flex-direction:column;gap:1px;vertical-align:middle}
   .nm-cell .nm{position:relative;display:inline-block;align-self:flex-start;width:fit-content}
