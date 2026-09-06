@@ -438,10 +438,11 @@
   .mk-tab .cnt{margin-left:5px;font-size:11px;opacity:.85}
   .mk-time{font-size:11px;color:var(--sub)}
   /* 20260906: 忽略/已删除股票的标识由删除线改为名称后的绿色小叉叉
-     (紧贴名称、内联富文本形式, 与标记字符同风格) */
+     (紧贴名称、内联富文本形式, 与标记字符同风格; 点击交互同 *) */
   .removed-x{display:inline;color:var(--down);font-size:12px;font-weight:800;
              line-height:1;vertical-align:baseline;margin:0;padding:0;
-             cursor:default;opacity:.9;user-select:none}
+             cursor:pointer;user-select:none;opacity:.9;transition:transform .12s}
+  .removed-x:hover{transform:scale(1.25)}
   /* 持仓 (买卖点) 相关 */
   .nm-cell{position:relative;display:inline-flex;flex-direction:column;gap:1px;vertical-align:middle}
   .nm-cell .nm{position:relative;display:inline-block;align-self:flex-start;width:fit-content}
@@ -3637,7 +3638,6 @@ function markNameHtml(code, name, price){
   let triggerColor = 'var(--sub)';
   let triggerTitle = '点击设置标记';
   if(m){
-    if(m.removed) removedX = '<span class="removed-x" title="已忽略此股">×</span>';
     if(m.mark){
       const mk = MARK_META[markKey(m.mark)];
       if(mk){
@@ -3649,6 +3649,8 @@ function markNameHtml(code, name, price){
     }
   }
   const nmSafe = (name||'').replace(/'/g,"\\'").replace(/"/g,'&quot;');
+  // 忽略/已删除: 绿色小叉叉, 点击交互与 * 等标记字符一致(弹出标记菜单) (20260906)
+  if(m && m.removed) removedX = `<span class="removed-x" title="已忽略此股 · 点击修改" onclick="event.stopPropagation();openMarkMenu('${code}','${nmSafe}',event)" oncontextmenu="event.stopPropagation();openMarkMenu('${code}','${nmSafe}',event);return false">×</span>`;
   const trigStyle = `color:${triggerColor};font-weight:800;cursor:pointer;margin:0;padding:0;display:inline`;
   // 持仓角标: bN (左上角, 无底色小字号) + 持仓金额[收益率] (左下角, 小字号)
   let posBadge = '';
