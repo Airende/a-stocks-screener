@@ -580,7 +580,8 @@ def fetch_spot_all() -> list[dict]:
         if cached is not None:
             return cached
     try:
-        if not _sina_available():
+        tried_sina = _sina_available()
+        if not tried_sina:
             raise RuntimeError("新浪主源熔断中")
         # 先取总数
         total = _get(SINA_NODE_COUNT, {"node": "hs_a"})
@@ -611,7 +612,10 @@ def fetch_spot_all() -> list[dict]:
         return rows
     except Exception as e:  # noqa: BLE001
         # ---- 腾讯备源 → 东财第三源: 本地股票池 + 批量刷新价格 ----
-        _record_sina_failure(str(e)[:80], immediate=True)
+        # 20260906 修复: 仅在真正尝试过新浪后才记录失败; 熔断打开期间的失败
+        # 不能再续期熔断, 否则熔断永不恢复(自续期死循环)
+        if tried_sina:
+            _record_sina_failure(str(e)[:80], immediate=True)
         universe = _load_any_spot_universe()
         if not universe:
             raise RuntimeError(f"新浪主源失败({str(e)[:60]})且本地无股票池缓存, 备源不可用") from e
