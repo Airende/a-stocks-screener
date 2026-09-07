@@ -1139,9 +1139,9 @@
       ]
     },
     "date": "2026-09-07",
-    "updated_at": "2026-09-07 22:29:49",
+    "updated_at": "2026-09-07 22:43:05",
     "ma": {
-      "updated": "2026-09-07 22:29:28",
+      "updated": "2026-09-07 22:43:05",
       "counts": {
         "多头排列": 223,
         "多头排列向上发散": 292,
@@ -1152,7 +1152,7 @@
         "MACD底背离": 100
       },
       "total_stocks": 2476,
-      "elapsed_sec": 6.4,
+      "elapsed_sec": 31.3,
       "patterns": {
         "多头排列": [
           {
@@ -20457,6 +20457,40 @@
             "bs_motto": "卖点与买点镜像对称; 严格执行止损, 保护本金"
           },
           {
+            "code": "605090",
+            "name": "九丰能源",
+            "price": 33.12,
+            "change_pct": -1.13,
+            "atr_pct": 3.6,
+            "atr_shrink": true,
+            "kdj_db": true,
+            "macd_db": true,
+            "ma5": 33.55,
+            "ma10": 34.32,
+            "ma20": 34.81,
+            "ma60": 35.03,
+            "amount_yi": 2.31,
+            "industry": "公用事业",
+            "concept": "燃气、公用事业",
+            "bs_signal": "sell",
+            "bs_side": "sell",
+            "bs_type": "卖点3: 空头排列",
+            "bs_entry": null,
+            "bs_stop": null,
+            "bs_target": null,
+            "bs_reason": "5/10/20日线空头排列确立; 每次反弹至均线压制位都是卖点",
+            "bs_actions": [
+              "不抄底, 反弹至均线压制位减仓"
+            ],
+            "bs_trend": "空头趋势",
+            "bs_alignment": "空头排列",
+            "bs_vol": "正常",
+            "bs_resonance": [],
+            "bs_resonance_count": 0,
+            "bs_warnings": [],
+            "bs_motto": "卖点与买点镜像对称; 严格执行止损, 保护本金"
+          },
+          {
             "code": "000778",
             "name": "新兴铸管",
             "price": 3.66,
@@ -20490,40 +20524,6 @@
             "bs_warnings": [
               "④ 均线粘合, 方向未明, 不宜重仓出击, 等待发散方向"
             ],
-            "bs_motto": "卖点与买点镜像对称; 严格执行止损, 保护本金"
-          },
-          {
-            "code": "605090",
-            "name": "九丰能源",
-            "price": 33.12,
-            "change_pct": -1.13,
-            "atr_pct": 3.6,
-            "atr_shrink": true,
-            "kdj_db": true,
-            "macd_db": true,
-            "ma5": 33.55,
-            "ma10": 34.32,
-            "ma20": 34.81,
-            "ma60": 35.03,
-            "amount_yi": 2.31,
-            "industry": "公用事业",
-            "concept": "燃气、公用事业",
-            "bs_signal": "sell",
-            "bs_side": "sell",
-            "bs_type": "卖点3: 空头排列",
-            "bs_entry": null,
-            "bs_stop": null,
-            "bs_target": null,
-            "bs_reason": "5/10/20日线空头排列确立; 每次反弹至均线压制位都是卖点",
-            "bs_actions": [
-              "不抄底, 反弹至均线压制位减仓"
-            ],
-            "bs_trend": "空头趋势",
-            "bs_alignment": "空头排列",
-            "bs_vol": "正常",
-            "bs_resonance": [],
-            "bs_resonance_count": 0,
-            "bs_warnings": [],
             "bs_motto": "卖点与买点镜像对称; 严格执行止损, 保护本金"
           },
           {
@@ -23326,6 +23326,40 @@
             "bs_motto": "卖点与买点镜像对称; 严格执行止损, 保护本金"
           },
           {
+            "code": "605090",
+            "name": "九丰能源",
+            "price": 33.12,
+            "change_pct": -1.13,
+            "atr_pct": 3.6,
+            "atr_shrink": true,
+            "kdj_db": true,
+            "macd_db": true,
+            "ma5": 33.55,
+            "ma10": 34.32,
+            "ma20": 34.81,
+            "ma60": 35.03,
+            "amount_yi": 2.31,
+            "industry": "公用事业",
+            "concept": "燃气、公用事业",
+            "bs_signal": "sell",
+            "bs_side": "sell",
+            "bs_type": "卖点3: 空头排列",
+            "bs_entry": null,
+            "bs_stop": null,
+            "bs_target": null,
+            "bs_reason": "5/10/20日线空头排列确立; 每次反弹至均线压制位都是卖点",
+            "bs_actions": [
+              "不抄底, 反弹至均线压制位减仓"
+            ],
+            "bs_trend": "空头趋势",
+            "bs_alignment": "空头排列",
+            "bs_vol": "正常",
+            "bs_resonance": [],
+            "bs_resonance_count": 0,
+            "bs_warnings": [],
+            "bs_motto": "卖点与买点镜像对称; 严格执行止损, 保护本金"
+          },
+          {
             "code": "000778",
             "name": "新兴铸管",
             "price": 3.66,
@@ -23359,40 +23393,6 @@
             "bs_warnings": [
               "④ 均线粘合, 方向未明, 不宜重仓出击, 等待发散方向"
             ],
-            "bs_motto": "卖点与买点镜像对称; 严格执行止损, 保护本金"
-          },
-          {
-            "code": "605090",
-            "name": "九丰能源",
-            "price": 33.12,
-            "change_pct": -1.13,
-            "atr_pct": 3.6,
-            "atr_shrink": true,
-            "kdj_db": true,
-            "macd_db": true,
-            "ma5": 33.55,
-            "ma10": 34.32,
-            "ma20": 34.81,
-            "ma60": 35.03,
-            "amount_yi": 2.31,
-            "industry": "公用事业",
-            "concept": "燃气、公用事业",
-            "bs_signal": "sell",
-            "bs_side": "sell",
-            "bs_type": "卖点3: 空头排列",
-            "bs_entry": null,
-            "bs_stop": null,
-            "bs_target": null,
-            "bs_reason": "5/10/20日线空头排列确立; 每次反弹至均线压制位都是卖点",
-            "bs_actions": [
-              "不抄底, 反弹至均线压制位减仓"
-            ],
-            "bs_trend": "空头趋势",
-            "bs_alignment": "空头排列",
-            "bs_vol": "正常",
-            "bs_resonance": [],
-            "bs_resonance_count": 0,
-            "bs_warnings": [],
             "bs_motto": "卖点与买点镜像对称; 严格执行止损, 保护本金"
           },
           {
@@ -24257,7 +24257,7 @@
       }
     },
     "screen": {
-      "updated": "2026-09-07 22:29:49",
+      "updated": "2026-09-07 22:42:58",
       "conds": [
         "b1",
         "b2",
