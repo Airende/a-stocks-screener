@@ -1,7 +1,7 @@
 {
   "2026-09-07": {
     "screen": {
-      "updated": "2026-09-07 17:13:05",
+      "updated": "2026-09-07 17:15:17",
       "conds": [
         "b1",
         "b2",
@@ -5313,72 +5313,6 @@
           "bs_motto": "卖点与买点镜像对称; 严格执行止损, 保护本金"
         },
         {
-          "code": "600467",
-          "name": "好当家",
-          "symbol": "sh600467",
-          "industry": "农林牧渔",
-          "concept": "水产养殖、农林牧渔",
-          "price": 2.53,
-          "change_pct": 3.27,
-          "amount_yi": 1.59,
-          "float_mv_yi": 36.96,
-          "ma5": 2.46,
-          "ma10": 2.43,
-          "ma20": 2.39,
-          "ma60": 2.22,
-          "ma250": 2.46,
-          "bias": 6.08,
-          "kdj_j": 88.16,
-          "atr_pct": 2.82,
-          "score": 4,
-          "n_active": 5,
-          "groups": {
-            "gA": true,
-            "gB": true,
-            "gC": true,
-            "gD": true,
-            "gE": false
-          },
-          "active": {
-            "gA": true,
-            "gB": true,
-            "gC": true,
-            "gD": true,
-            "gE": true
-          },
-          "est_5d": 1.5,
-          "est_10d": 2.5,
-          "est_20d": 4.0,
-          "tags": [
-            "多头排列",
-            "方向向上",
-            "站上MA20",
-            "年线保护",
-            "MA20拐头",
-            "放量突破",
-            "乖离安全",
-            "均线多头",
-            "超买谨慎"
-          ],
-          "bs_signal": "sell",
-          "bs_side": "sell",
-          "bs_type": "卖点7: 趋势停滞",
-          "bs_entry": 2.53,
-          "bs_stop": 2.51,
-          "bs_target": 2.4,
-          "bs_reason": "趋势票连续4天累计涨幅仅2.0%≤3%, 趋势停滞; 排除: 低量涨停/尾盘涨停不算滞涨, 当天不卖",
-          "bs_trend": "多头趋势",
-          "bs_alignment": "多头排列",
-          "bs_vol": "放量",
-          "bs_actions": [
-            "趋势停滞, 减仓或离场"
-          ],
-          "bs_resonance": [],
-          "bs_resonance_count": 0,
-          "bs_warnings": [],
-          "bs_motto": "卖点与买点镜像对称; 严格执行止损, 保护本金"
-        },
-        {
           "code": "300855",
           "name": "图南股份",
           "symbol": "sz300855",
@@ -5445,6 +5379,72 @@
           "bs_resonance_count": 1,
           "bs_warnings": [],
           "bs_motto": "买点要'缩量来、放量走'; 买前先写好入场价、止损价、目标价"
+        },
+        {
+          "code": "600467",
+          "name": "好当家",
+          "symbol": "sh600467",
+          "industry": "农林牧渔",
+          "concept": "水产养殖、农林牧渔",
+          "price": 2.53,
+          "change_pct": 3.27,
+          "amount_yi": 1.59,
+          "float_mv_yi": 36.96,
+          "ma5": 2.46,
+          "ma10": 2.43,
+          "ma20": 2.39,
+          "ma60": 2.22,
+          "ma250": 2.46,
+          "bias": 6.08,
+          "kdj_j": 88.16,
+          "atr_pct": 2.82,
+          "score": 4,
+          "n_active": 5,
+          "groups": {
+            "gA": true,
+            "gB": true,
+            "gC": true,
+            "gD": true,
+            "gE": false
+          },
+          "active": {
+            "gA": true,
+            "gB": true,
+            "gC": true,
+            "gD": true,
+            "gE": true
+          },
+          "est_5d": 1.5,
+          "est_10d": 2.5,
+          "est_20d": 4.0,
+          "tags": [
+            "多头排列",
+            "方向向上",
+            "站上MA20",
+            "年线保护",
+            "MA20拐头",
+            "放量突破",
+            "乖离安全",
+            "均线多头",
+            "超买谨慎"
+          ],
+          "bs_signal": "sell",
+          "bs_side": "sell",
+          "bs_type": "卖点7: 趋势停滞",
+          "bs_entry": 2.53,
+          "bs_stop": 2.51,
+          "bs_target": 2.4,
+          "bs_reason": "趋势票连续4天累计涨幅仅2.0%≤3%, 趋势停滞; 排除: 低量涨停/尾盘涨停不算滞涨, 当天不卖",
+          "bs_trend": "多头趋势",
+          "bs_alignment": "多头排列",
+          "bs_vol": "放量",
+          "bs_actions": [
+            "趋势停滞, 减仓或离场"
+          ],
+          "bs_resonance": [],
+          "bs_resonance_count": 0,
+          "bs_warnings": [],
+          "bs_motto": "卖点与买点镜像对称; 严格执行止损, 保护本金"
         },
         {
           "code": "600388",
@@ -5984,9 +5984,9 @@
       ]
     },
     "date": "2026-09-07",
-    "updated_at": "2026-09-07 17:13:05",
+    "updated_at": "2026-09-07 17:15:25",
     "ma": {
-      "updated": "2026-09-07 16:14:32",
+      "updated": "2026-09-07 17:14:52",
       "counts": {
         "多头排列": 219,
         "多头排列向上发散": 293,
@@ -5995,7 +5995,7 @@
         "粘合向下突破": 98
       },
       "total_stocks": 2476,
-      "elapsed_sec": 5.0,
+      "elapsed_sec": 4.7,
       "patterns": {
         "多头排列": [
           {
@@ -12430,38 +12430,6 @@
             "bs_motto": "趋势不变仓位不乱, 均线不破格局不散, 控制风险活得久"
           },
           {
-            "code": "002265",
-            "name": "建设工业",
-            "price": 20.8,
-            "change_pct": -3.03,
-            "atr_pct": 4.28,
-            "atr_shrink": false,
-            "ma5": 20.82,
-            "ma10": 19.7,
-            "ma20": 19.53,
-            "ma60": 18.55,
-            "amount_yi": 5.36,
-            "industry": "汽车",
-            "concept": "底盘与发动机系统、汽车",
-            "bs_signal": "wait",
-            "bs_side": "wait",
-            "bs_type": "观望",
-            "bs_entry": null,
-            "bs_stop": null,
-            "bs_target": null,
-            "bs_reason": "多头趋势但股价偏离MA20达6.5%, 等回踩",
-            "bs_actions": [
-              "等待回踩MA20±2%区域再考虑"
-            ],
-            "bs_trend": "多头趋势",
-            "bs_alignment": "多头排列",
-            "bs_vol": "正常",
-            "bs_resonance": [],
-            "bs_resonance_count": 0,
-            "bs_warnings": [],
-            "bs_motto": "趋势不变仓位不乱, 均线不破格局不散, 控制风险活得久"
-          },
-          {
             "code": "002443",
             "name": "金洲管道",
             "price": 11.55,
@@ -12493,6 +12461,38 @@
             "bs_warnings": [
               "乖离率11.5%, 距MA20过远, 追高风险增大"
             ],
+            "bs_motto": "趋势不变仓位不乱, 均线不破格局不散, 控制风险活得久"
+          },
+          {
+            "code": "002265",
+            "name": "建设工业",
+            "price": 20.8,
+            "change_pct": -3.03,
+            "atr_pct": 4.28,
+            "atr_shrink": false,
+            "ma5": 20.82,
+            "ma10": 19.7,
+            "ma20": 19.53,
+            "ma60": 18.55,
+            "amount_yi": 5.36,
+            "industry": "汽车",
+            "concept": "底盘与发动机系统、汽车",
+            "bs_signal": "wait",
+            "bs_side": "wait",
+            "bs_type": "观望",
+            "bs_entry": null,
+            "bs_stop": null,
+            "bs_target": null,
+            "bs_reason": "多头趋势但股价偏离MA20达6.5%, 等回踩",
+            "bs_actions": [
+              "等待回踩MA20±2%区域再考虑"
+            ],
+            "bs_trend": "多头趋势",
+            "bs_alignment": "多头排列",
+            "bs_vol": "正常",
+            "bs_resonance": [],
+            "bs_resonance_count": 0,
+            "bs_warnings": [],
             "bs_motto": "趋势不变仓位不乱, 均线不破格局不散, 控制风险活得久"
           },
           {
