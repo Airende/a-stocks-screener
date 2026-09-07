@@ -7092,12 +7092,13 @@ _storage_backend = None   # None=未初始化; 初始化后: 'postgres' | 'sqlit
 _STORAGE_LOG_TAG = "[storage]"
 
 # Supabase REST API (HTTPS, 走沙箱代理, 绕过 5432 端口封锁):
-# 从 DATABASE_URL 提取 project ref 构造 REST URL; 需要 SUPABASE_ANON_KEY 才启用。
+# 需要 SUPABASE_ANON_KEY; project ref 从 SUPABASE_PROJECT_REF 或 DATABASE_URL 提取。
 _SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "").strip()
-_SUPABASE_PROJECT_REF = ""
-_m = _DATABASE_URL and __import__("re").search(r"([a-z]{20})\.supabase\.co", _DATABASE_URL)
-if _m:
-    _SUPABASE_PROJECT_REF = _m.group(1)
+_SUPABASE_PROJECT_REF = os.environ.get("SUPABASE_PROJECT_REF", "").strip()
+if not _SUPABASE_PROJECT_REF and _DATABASE_URL:
+    _m = __import__("re").search(r"([a-z]{20})\.supabase\.co", _DATABASE_URL)
+    if _m:
+        _SUPABASE_PROJECT_REF = _m.group(1)
 _SUPABASE_REST_URL = (f"https://{_SUPABASE_PROJECT_REF}.supabase.co/rest/v1/kv_state"
                       if _SUPABASE_PROJECT_REF else "")
 
