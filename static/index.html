@@ -3557,18 +3557,46 @@ function renderMarketSnap(d){
     </div>`;
   }).join('');
 }
+let _lastSnap = null;
+let _idxTickMs = 60000;  // 非交易时段默认 60s, 后端返回 trading=true 时切到 1s
 async function loadMarketSnap(){
   try{
     const r=await fetch('/api/market-snapshot');
     const d=await r.json();
+    _lastSnap = d;
     renderMarketSnap(d);
   }catch(e){
     const box=$('#idxCards'); if(box) box.innerHTML='<div class="empty">指数数据加载失败</div>';
   }
 }
+// 20260907 三大指数实时价秒级刷新 (交易时段 1s, 非交易时段退化为 60s)
+async function loadIndicesRealtime(){
+  try{
+    const r=await fetch('/api/market-indices-realtime');
+    const d=await r.json();
+    _idxTickMs = d.trading ? 1000 : 60000;
+    if(_lastSnap && _lastSnap.indices){
+      const rtMap={};
+      (d.indices||[]).forEach(x=>rtMap[x.symbol]=x);
+      _lastSnap.indices=_lastSnap.indices.map(idx=>{
+        const rt=rtMap[idx.symbol];
+        if(rt && rt.price>0){
+          return Object.assign({}, idx, {price:rt.price, chg:rt.chg, chg_pct:rt.chg_pct});
+        }
+        return idx;
+      });
+      _lastSnap.updated_at=d.updated_at;
+      renderMarketSnap(_lastSnap);
+    }
+  }catch(e){}
+}
 loadMarketSnap();
-// 每 60 秒自动刷新一次顶栏指数 (和后端缓存 TTL 对齐)
 setInterval(loadMarketSnap, 60000);
+function _tickIndices(){
+  loadIndicesRealtime();
+  setTimeout(_tickIndices, _idxTickMs);
+}
+_tickIndices();
 
 // ===== 大盘云图: 今日行情分析 =====
 function renderHeatmapAnalysis(d){

@@ -223,6 +223,15 @@ def _is_after_close() -> bool:
     return now_bj.weekday() < 5 and now_bj.hour >= 15
 
 
+def _is_trading_time() -> bool:
+    """判断当前是否为 A 股交易时段 (工作日 9:30-11:30 / 13:00-15:00)"""
+    now_bj = datetime.now(_BJ_TZ)
+    if now_bj.weekday() >= 5:  # 周末
+        return False
+    t = now_bj.hour * 60 + now_bj.minute
+    return (9 * 60 + 30 <= t <= 11 * 60 + 30) or (13 * 60 <= t <= 15 * 60)
+
+
 def _latest_trade_date_str() -> str:
     """返回最近交易日日期字符串 (跳过周末)"""
     now_bj = datetime.now(_BJ_TZ)
@@ -445,6 +454,7 @@ def _fetch_spot_tencent(codes: list[str]) -> list[dict]:
                     "symbol": sym,
                     "name": f[1],
                     "trade": _f(3),
+                    "prev_close": _f(4),
                     "open": _f(5),
                     "high": _f(33),
                     "low": _f(34),
@@ -508,6 +518,7 @@ def _fetch_spot_eastmoney(codes: list[str]) -> list[dict]:
                     "symbol": _to_symbol(code),
                     "name": x.get("f14", ""),
                     "trade": _f("f2"),
+                    "prev_close": _f("f18"),
                     "open": _f("f17"),
                     "high": _f("f15"),
                     "low": _f("f16"),
@@ -5900,6 +5911,113 @@ _THREE_INDICES = [
     ("sz399006", "创业板指"),
 ]
 
+# 三大指数实时行情缓存 (轻量, 交易时段 1s TTL; 存储完整接口结构)
+_IDX_RT_CACHE: dict = {"ts": 0.0, "data": None}
+_IDX_RT_LOCK = threading.Lock()
+
+
+def _get_idx_rt_data() -> dict:
+    """获取三大指数实时行情数据 (带缓存). 返回 {updated_at, trading, indices:[...]}.
+    交易时段 1s TTL, 非交易时段 60s TTL; 供接口和 _build_index_card 共用。"""
+    global _IDX_RT_CACHE
+    now = time.time()
+    ttl = 1 if _is_trading_time() else 60
+    with _IDX_RT_LOCK:
+        cache = _IDX_RT_CACHE
+        if cache.get("data") and (now - cache.get("ts", 0)) < ttl:
+            return cache["data"]
+    rows = _fetch_three_indices_realtime()
+    indices = []
+    for sym, name in _THREE_INDICES:
+        rt = next((r for r in rows if r.get("symbol") == sym), None)
+        if rt and rt.get("trade", 0) > 0:
+            prev_close = float(rt.get("prev_close") or 0)
+            if not prev_close:
+                prev_close = float(rt["trade"]) / (1 + float(rt.get("changepercent") or 0) / 100)
+            chg = float(rt["trade"]) - prev_close
+            indices.append({
+                "symbol": sym,
+                "name": rt.get("name") or name,
+                "price": round(float(rt["trade"]), 2),
+                "chg": round(chg, 2),
+                "chg_pct": round(float(rt.get("changepercent") or 0), 2),
+                "open": round(float(rt.get("open") or 0), 2),
+                "high": round(float(rt.get("high") or 0), 2),
+                "low": round(float(rt.get("low") or 0), 2),
+                "volume": float(rt.get("volume") or 0),
+                "amount": float(rt.get("amount") or 0),
+            })
+        else:
+            indices.append({"symbol": sym, "name": name, "price": 0, "chg": 0, "chg_pct": 0,
+                            "open": 0, "high": 0, "low": 0, "volume": 0, "amount": 0})
+    data = {
+        "updated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "trading": _is_trading_time(),
+        "indices": indices,
+    }
+    with _IDX_RT_LOCK:
+        _IDX_RT_CACHE = {"ts": time.time(), "data": data}
+    return data
+
+
+def _fetch_indices_realtime_sina() -> list[dict]:
+    """新浪指数实时行情备源: hq.sinajs.cn 批量查询 (GBK)。
+    返回字段对齐 _fetch_spot_tencent: code/symbol/name/trade/open/high/low/volume/changepercent/amount。"""
+    import re as _re
+    out: list[dict] = []
+    codes = [s for s, _ in _THREE_INDICES]
+    try:
+        r = requests.get("https://hq.sinajs.cn/list=" + ",".join(codes),
+                         headers={**HEADERS, "Referer": "https://finance.sina.com.cn"}, timeout=8)
+        r.encoding = "gbk"
+        text = r.text
+    except Exception:  # noqa: BLE001
+        return out
+    for line in text.split("\n"):
+        m = _re.search(r'hq_str_(sh|sz)(\d{6})="([^"]*)"', line)
+        if not m:
+            continue
+        sym = m.group(1) + m.group(2)
+        f = m.group(3).split(",")
+        if len(f) < 10:
+            continue
+        try:
+            name = f[0]
+            open_p = float(f[1])
+            prev_close = float(f[2])
+            trade = float(f[3])
+            high = float(f[4])
+            low = float(f[5])
+            volume = float(f[8])          # 股
+            amount = float(f[9])          # 元
+            chg_pct = (trade - prev_close) / prev_close * 100 if prev_close else 0.0
+            out.append({
+                "code": m.group(2),
+                "symbol": sym,
+                "name": name,
+                "trade": trade,
+                "prev_close": prev_close,
+                "open": open_p,
+                "high": high,
+                "low": low,
+                "volume": volume,
+                "changepercent": round(chg_pct, 2),
+                "amount": amount,
+            })
+        except (ValueError, TypeError, IndexError):
+            continue
+    return out
+
+
+def _fetch_three_indices_realtime() -> list[dict]:
+    """获取三大指数实时行情: 腾讯主源 → 新浪备源。返回与 spot 行对齐的字典列表。"""
+    codes = [s for s, _ in _THREE_INDICES]
+    rows = _fetch_spot_tencent(codes)
+    if rows:
+        return rows
+    return _fetch_indices_realtime_sina()
+
+
 def _analyze_regime(bars: list[dict]) -> dict:
     """对指数最近 60 个交易日做行情研判.
     返回 {regime, confidence, ma5, ma20, ma60, max60, min60, vol_trend}
@@ -6039,6 +6157,18 @@ def _build_index_card(symbol: str, cn_name: str) -> dict | None:
     low_p = float(last["low"])
     chg = price - prev_close
     chg_pct = chg / prev_close * 100
+
+    # 20260907 实时价覆盖: 交易时段用实时行情(现价/开/高/低)替换 K 线当日数据,
+    # 消除 K 线接口的分钟级延迟; 非交易时段或实时源异常时保留 K 线值。
+    rt_data = _get_idx_rt_data()
+    rt = next((r for r in rt_data.get("indices", []) if r.get("symbol") == symbol), None)
+    if rt and rt.get("price", 0) > 0:
+        price = float(rt["price"])
+        open_p = float(rt.get("open") or open_p)
+        high_p = float(rt.get("high") or high_p)
+        low_p = float(rt.get("low") or low_p)
+        chg = price - prev_close
+        chg_pct = float(rt.get("chg_pct") or (chg / prev_close * 100 if prev_close else 0))
 
     # 模拟今日分时 (240 点/分钟, 用 正弦波近似: 9:30→11:30, 13:00→15:00)
     # 路径分段: 昨收->开(开盘jump) -> 高/低交错 -> 收盘
@@ -6190,7 +6320,12 @@ def api_market_snapshot():
     return JSONResponse(data)
 
 
-# ============================ 回测引擎 ============================
+@app.get("/api/market-indices-realtime")
+def api_market_indices_realtime():
+    """三大指数实时行情 (上证/深证/创业板): 交易时段 1s 缓存, 非交易时段 60s 缓存。
+    专供顶栏指数卡片秒级刷新, 不含行情研判/市场广度(走 /api/market-snapshot)。"""
+    return JSONResponse(_get_idx_rt_data())
+
 def _is_limit_up(bar: dict, prev_close: float) -> bool:
     """涨停判定: 主板≥9.8%, 创业板/科创板≥19.5%"""
     if prev_close <= 0:
