@@ -1,7 +1,7 @@
 {
   "2026-09-07": {
     "screen": {
-      "updated": "2026-09-07 17:24:43",
+      "updated": "2026-09-07 18:45:24",
       "conds": [
         "b1",
         "b2",
@@ -2169,7 +2169,7 @@
           "amount_yi": 7.42,
           "float_mv_yi": 127.3,
           "ma5": 9.52,
-          "ma10": 9.27,
+          "ma10": 9.28,
           "ma20": 8.89,
           "ma60": 8.31,
           "ma250": 9.32,
@@ -4843,6 +4843,72 @@
           "bs_motto": "买点要'缩量来、放量走'; 买前先写好入场价、止损价、目标价"
         },
         {
+          "code": "601996",
+          "name": "丰林集团",
+          "symbol": "sh601996",
+          "industry": "轻工制造",
+          "concept": "其他家居用品、轻工制造",
+          "price": 2.86,
+          "change_pct": 1.42,
+          "amount_yi": 0.72,
+          "float_mv_yi": 32.06,
+          "ma5": 2.8,
+          "ma10": 2.72,
+          "ma20": 2.61,
+          "ma60": 2.38,
+          "ma250": 2.47,
+          "bias": 9.56,
+          "kdj_j": 89.1,
+          "atr_pct": 3.95,
+          "score": 4,
+          "n_active": 5,
+          "groups": {
+            "gA": true,
+            "gB": false,
+            "gC": true,
+            "gD": true,
+            "gE": true
+          },
+          "active": {
+            "gA": true,
+            "gB": true,
+            "gC": true,
+            "gD": true,
+            "gE": true
+          },
+          "est_5d": 1.5,
+          "est_10d": 2.5,
+          "est_20d": 4.0,
+          "tags": [
+            "多头排列",
+            "方向向上",
+            "站上MA20",
+            "年线保护",
+            "低吸回踩",
+            "乖离安全",
+            "波段弹性",
+            "均线多头",
+            "超买谨慎"
+          ],
+          "bs_signal": "wait",
+          "bs_side": "wait",
+          "bs_type": "观望",
+          "bs_entry": null,
+          "bs_stop": null,
+          "bs_target": null,
+          "bs_reason": "多头趋势但股价偏离MA20达9.6%, 等回踩",
+          "bs_trend": "多头趋势",
+          "bs_alignment": "多头排列",
+          "bs_vol": "正常",
+          "bs_actions": [
+            "等待回踩MA20±2%区域再考虑"
+          ],
+          "bs_resonance": [],
+          "bs_resonance_count": 0,
+          "bs_warnings": [],
+          "bs_motto": "趋势不变仓位不乱, 均线不破格局不散, 控制风险活得久"
+        },
+        {
           "code": "601999",
           "name": "出版传媒",
           "symbol": "sh601999",
@@ -4908,72 +4974,6 @@
           "bs_resonance_count": 0,
           "bs_warnings": [],
           "bs_motto": "卖点与买点镜像对称; 严格执行止损, 保护本金"
-        },
-        {
-          "code": "601996",
-          "name": "丰林集团",
-          "symbol": "sh601996",
-          "industry": "轻工制造",
-          "concept": "其他家居用品、轻工制造",
-          "price": 2.86,
-          "change_pct": 1.42,
-          "amount_yi": 0.72,
-          "float_mv_yi": 32.06,
-          "ma5": 2.8,
-          "ma10": 2.72,
-          "ma20": 2.61,
-          "ma60": 2.38,
-          "ma250": 2.47,
-          "bias": 9.56,
-          "kdj_j": 89.1,
-          "atr_pct": 3.95,
-          "score": 4,
-          "n_active": 5,
-          "groups": {
-            "gA": true,
-            "gB": false,
-            "gC": true,
-            "gD": true,
-            "gE": true
-          },
-          "active": {
-            "gA": true,
-            "gB": true,
-            "gC": true,
-            "gD": true,
-            "gE": true
-          },
-          "est_5d": 1.5,
-          "est_10d": 2.5,
-          "est_20d": 4.0,
-          "tags": [
-            "多头排列",
-            "方向向上",
-            "站上MA20",
-            "年线保护",
-            "低吸回踩",
-            "乖离安全",
-            "波段弹性",
-            "均线多头",
-            "超买谨慎"
-          ],
-          "bs_signal": "wait",
-          "bs_side": "wait",
-          "bs_type": "观望",
-          "bs_entry": null,
-          "bs_stop": null,
-          "bs_target": null,
-          "bs_reason": "多头趋势但股价偏离MA20达9.6%, 等回踩",
-          "bs_trend": "多头趋势",
-          "bs_alignment": "多头排列",
-          "bs_vol": "正常",
-          "bs_actions": [
-            "等待回踩MA20±2%区域再考虑"
-          ],
-          "bs_resonance": [],
-          "bs_resonance_count": 0,
-          "bs_warnings": [],
-          "bs_motto": "趋势不变仓位不乱, 均线不破格局不散, 控制风险活得久"
         },
         {
           "code": "688078",
@@ -5984,9 +5984,9 @@
       ]
     },
     "date": "2026-09-07",
-    "updated_at": "2026-09-07 17:24:43",
+    "updated_at": "2026-09-07 18:45:24",
     "ma": {
-      "updated": "2026-09-07 17:24:21",
+      "updated": "2026-09-07 18:42:05",
       "counts": {
         "多头排列": 219,
         "多头排列向上发散": 293,
@@ -5995,7 +5995,7 @@
         "粘合向下突破": 98
       },
       "total_stocks": 2476,
-      "elapsed_sec": 4.9,
+      "elapsed_sec": 4.3,
       "patterns": {
         "多头排列": [
           {
@@ -6990,7 +6990,7 @@
             "atr_pct": 6.21,
             "atr_shrink": false,
             "ma5": 9.52,
-            "ma10": 9.27,
+            "ma10": 9.28,
             "ma20": 8.89,
             "ma60": 8.31,
             "amount_yi": 7.42,
@@ -20076,7 +20076,7 @@
             "ma5": 13.56,
             "ma10": 13.7,
             "ma20": 13.73,
-            "ma60": 13.99,
+            "ma60": 13.98,
             "amount_yi": 2.5,
             "industry": "基础化工",
             "concept": "改性塑料、基础化工",
