@@ -680,8 +680,6 @@
           <label style="display:inline-flex;align-items:center;gap:5px;margin-right:8px;font-size:13px;cursor:pointer"><input type="checkbox" data-atr="e1"> ATR%&lt;4%（趋势票）</label>
           <label style="display:inline-flex;align-items:center;gap:5px;margin-right:8px;font-size:13px;cursor:pointer"><input type="checkbox" data-atr="e2" checked> ATR%3~8%（波段弹性）</label>
           <label style="display:inline-flex;align-items:center;gap:5px;margin-right:8px;font-size:13px;cursor:pointer"><input type="checkbox" data-atr="e3"> ATR收缩（蓄势）</label>
-          <label style="display:inline-flex;align-items:center;gap:5px;margin-right:8px;font-size:13px;cursor:pointer"><input type="checkbox" data-atr="kdj_db"> KDJ底背离</label>
-          <label style="display:inline-flex;align-items:center;gap:5px;margin-right:8px;font-size:13px;cursor:pointer"><input type="checkbox" data-atr="macd_db"> MACD底背离</label>
           <span class="meta">可多选=满足其一即保留; 改动立即生效并用于下次扫描</span>
         </div>
         <div class="ma-tabs" id="maTabs"></div>
@@ -3108,12 +3106,14 @@ const MA_PATS=[
   ['粘合向上突破','近3日MA5/MA10/MA20间距<1.5%(粘合)，现转为多头排列，突破启动'],
   ['空头排列向下发散','MA5<MA10<MA20，三线同步下行，间距扩大，弱势下降趋势'],
   ['粘合向下突破','近3日MA5/MA10/MA20间距<1.5%(粘合)，现转为空头排列，破位下行'],
+  ['KDJ底背离','近20日价格创新低但KDJ的J值未创新低（动能未跟随下行），潜在反转信号'],
+  ['MACD底背离','近20日价格创新低但MACD的DIF未创新低（空头动能减弱），潜在反转信号'],
   // 上试盘策略 3 个池子（对应说明书 A/B/C 三栏）
   ['上试盘·新信号','A池：今日刚出现长上影试盘日，观察不买；待后续放量突破再入场'],
   ['上试盘·观察池','B池：10日确认窗口内，未破信号日最低价、未放量突破的股票，附待突破价'],
   ['上试盘·已确认','C池：今日刚放量×1.01突破试盘高点 + 量比≥2 + 沪深300在MA20上方，当日收盘买入'],
 ];
-const SSP_KIND_TAB_OFFSET = 5; // tabIndex 5/6/7 对应 A/B/C 池
+const SSP_KIND_TAB_OFFSET = 7; // tabIndex 7/8/9 对应 A/B/C 池
 let maCurrentTab=0;
 let maData=null;
 let sspData=null;   // 上试盘三池缓存 {new_signals,watch_pool,confirmed_pool,counts,mkt_filter,updated,running,progress,error}

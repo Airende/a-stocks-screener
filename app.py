@@ -5198,7 +5198,8 @@ def api_stock_analyze(code: str = "", date: str = ""):
 # ============================================================
 # 均线形态筛选模块
 # ============================================================
-MA_PATTERNS = ["多头排列", "多头排列向上发散", "粘合向上突破", "空头排列向下发散", "粘合向下突破"]
+MA_PATTERNS = ["多头排列", "多头排列向上发散", "粘合向上突破", "空头排列向下发散", "粘合向下突破",
+               "KDJ底背离", "MACD底背离"]
 
 _ma_state = {"data": None, "running": False, "error": None, "progress": "",
              "ts": 0.0, "lock": threading.Lock(),
@@ -5368,16 +5369,14 @@ def _run_ma_screen_thread():
             bars = fetch_kline(symbol, datalen=80)
             if not bars or len(bars) < 70:
                 return None
-            pat = classify_ma_pattern(bars)
-            if not pat:
-                return None
+            pat = classify_ma_pattern(bars)  # 均线形态; 可能为None(此时仅可能命中背离tab)
             closes = [b["close"] for b in bars]
             ma5 = sma(closes, 5)
             ma10 = sma(closes, 10)
             ma20 = sma(closes, 20)
             ma60 = sma(closes, 60)
             chg = (closes[-1] / closes[-2] - 1) * 100 if len(closes) >= 2 else 0
-            # ATR过滤 (20260906): atr_conds 非空时, 满足任一勾选项才保留
+            # ATR过滤 (20260906): 仅作用于均线形态 tab; 背离 tab 不受 ATR 限制
             highs_a = [b["high"] for b in bars]
             lows_a = [b["low"] for b in bars]
             trs = [max(highs_a[i] - lows_a[i], abs(highs_a[i] - closes[i-1]), abs(lows_a[i] - closes[i-1]))
@@ -5387,22 +5386,30 @@ def _run_ma_screen_thread():
             price = closes[-1]
             atr_pct = (atr14 / price * 100) if price > 0 else 0.0
             atr_shrink = (atr14 > 0 and atr60 > 0 and atr14 < atr60 * 0.8)
-            # 背离过滤 (KDJ底背离 / MACD底背离): 与ATR同组, 满足任一勾选项即保留
+            ma_pass = True
+            if atr_conds and pat:
+                ok = (("e1" in atr_conds and atr_pct < 4)
+                      or ("e2" in atr_conds and 3 <= atr_pct <= 8)
+                      or ("e3" in atr_conds and atr_shrink))
+                ma_pass = ok
+            # 背离判定: KDJ底背离 / MACD底背离 → 独立 tab
             k_arr, d_arr, j_arr = calc_kdj(highs_a, lows_a, closes)
             dif_arr, _dea_arr, _hist_arr = calc_macd(closes)
             kdj_bottom = _calc_kdj_bottom_diverge(closes, highs_a, lows_a, j_arr)
             macd_bottom = _calc_macd_bottom_diverge(closes, lows_a, dif_arr)
-            if atr_conds:
-                ok = (("e1" in atr_conds and atr_pct < 4)
-                      or ("e2" in atr_conds and 3 <= atr_pct <= 8)
-                      or ("e3" in atr_conds and atr_shrink)
-                      or ("kdj_db" in atr_conds and kdj_bottom)
-                      or ("macd_db" in atr_conds and macd_bottom))
-                if not ok:
-                    return None
+            # 收集该股票命中的所有 tab (均线形态 + 背离可同时命中)
+            pats = []
+            if pat and ma_pass:
+                pats.append(pat)
+            if kdj_bottom:
+                pats.append("KDJ底背离")
+            if macd_bottom:
+                pats.append("MACD底背离")
+            if not pats:
+                return None
             # 买卖点分析
             bs = analyze_buy_sell(bars)
-            return pat, {
+            return pats, {
                 "code": cand["code"], "name": cand["name"],
                 "price": round(closes[-1], 2),
                 "change_pct": round(chg, 2),
@@ -5438,8 +5445,9 @@ def _run_ma_screen_thread():
             try:
                 r = f.result()
                 if r:
-                    pat, item = r
-                    results[pat].append(item)
+                    pats, item = r
+                    for p in pats:
+                        results[p].append(item)
             except Exception:  # noqa: BLE001
                 pass
             done[0] += 1
@@ -5488,11 +5496,11 @@ def _ensure_ma_screen():
 
 @app.post("/api/ma-screen/run")
 def api_ma_screen_run(payload: dict = None):
-    """触发均线形态筛选; 可选body {atr:["e1","e2","e3","kdj_db","macd_db"]} 指定ATR/背离过滤勾选"""
+    """触发均线形态筛选; 可选body {atr:["e1","e2","e3"]} 指定ATR过滤勾选"""
     if isinstance(payload, dict):
         atr = payload.get("atr")
         if isinstance(atr, list):
-            atr = [a for a in atr if a in ("e1", "e2", "e3", "kdj_db", "macd_db")]
+            atr = [a for a in atr if a in ("e1", "e2", "e3")]
             with _ma_state["lock"]:
                 _ma_state["atr_conds"] = atr
     if not _ma_state["running"]:
