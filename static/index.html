@@ -4009,6 +4009,7 @@ async function setMark(code, name, mark){
       refreshMkTabCounts();
       if($('#pane-marks') && $('#pane-marks').classList.contains('active')) renderMkTable();
       if(_curAnalysis && _curAnalysis.code===code) renderAnalysis(_curAnalysis);
+      showToast('操作成功', {duration: 1200});
     } else { alert(d.msg||'设置失败'); }
   }catch(e){ alert('网络错误: '+e.message); }
   closeMarkMenu();
@@ -4585,6 +4586,7 @@ async function popupToggleIgnore(code, name){
       refreshMkTabCounts();
       if($('#pane-marks') && $('#pane-marks').classList.contains('active')) renderMkTable();
       if(_curAnalysis && _curAnalysis.code===code) renderAnalysis(_curAnalysis);
+      showToast(nextRemoved ? '已忽略' : '已取消忽略', {duration: 1200});
     }
   }catch(e){}
 }
@@ -4595,7 +4597,7 @@ function popupToggleMark(code, name, markChar){
     // 已激活 → 清除标记
     fetch('/api/marks',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({code, name, mark:null})}).then(r=>r.json()).then(d=>{
-        if(d.ok){ _MARKS[code]=d.mark; refreshMarkBadgesInTables(); refreshMkTabCounts(); if(_curAnalysis&&_curAnalysis.code===code) renderAnalysis(_curAnalysis); }
+        if(d.ok){ _MARKS[code]=d.mark; refreshMarkBadgesInTables(); refreshMkTabCounts(); if(_curAnalysis&&_curAnalysis.code===code) renderAnalysis(_curAnalysis); showToast('操作成功', {duration: 1200}); }
       });
   } else {
     setMark(code, name, markChar);
@@ -4636,7 +4638,7 @@ async function showKlinePreview(code, anchor){
       return `<span class="kd-mk-btn${active}" style="color:${v.color}" title="${v.label}" onclick="popupToggleMark('${code}','${mkName}','${mkAttr(v.char)}')">${v.char}</span>`;
     }).join('');
     const ignoreActive = curMk.removed ? ' active' : '';
-    const ignoreBtn = `<span class="kd-mk-btn kd-mk-ignore${ignoreActive}" style="color:#ff6b6b" title="忽略此股" onclick="popupToggleIgnore('${code}','${mkName}')">×</span>`;
+    const ignoreBtn = `<span class="kd-mk-btn kd-mk-ignore${ignoreActive}" style="color:#4ade80" title="忽略此股" onclick="popupToggleIgnore('${code}','${mkName}')">×</span>`;
     pop.innerHTML = `<div style="padding:6px 10px 2px;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:space-between">
         <div>${d.name ? esc(d.name)+' ' : ''}<span class="meta cp-code" title="点击复制代码" onclick="copyCode('${code}')">${code}</span> ${chgTxt}
         <span class="meta" style="margin-left:6px">近半年日K · 三均线 · 量 · KDJ</span></div>
