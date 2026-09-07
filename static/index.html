@@ -31,6 +31,11 @@
   .meta{font-size:12px;color:var(--sub)}
   .meta.cp-code{cursor:pointer;border-bottom:1px dashed var(--border);transition:color .15s}
   .meta.cp-code:hover{color:var(--accent);border-bottom-color:var(--accent)}
+  /* 浮窗右上角标记符号按钮 (20260907) */
+  .kd-mk-bar{display:flex;align-items:center;gap:2px}
+  .kd-mk-btn{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:4px;cursor:pointer;font-size:14px;font-weight:700;line-height:1;transition:background .12s,transform .12s;opacity:.5}
+  .kd-mk-btn:hover{opacity:1;transform:scale(1.15)}
+  .kd-mk-btn.active{opacity:1;background:rgba(255,255,255,.1)}
   .stats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
   .stat{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:10px 14px;min-width:110px}
   .stat .n{font-size:20px;font-weight:700}
@@ -4562,6 +4567,20 @@ function kdMultiChart(bars){
   const p3final=`<div class="sa-chart" id="${cid3}" style="height:${h3}px;margin-top:2px"><svg viewBox="0 0 ${w} ${h3}" width="${w}" height="${h3}">${ref80}${ref20}${line(K,'#e8eef6',1)}${line(D,'#f5c842',1)}${line(J,'#a06bff',1)}<text x="${padL}" y="9" fill="#e8eef6" font-size="9">K</text><text x="${padL+12}" y="9" fill="#f5c842" font-size="9">D</text><text x="${padL+24}" y="9" fill="#a06bff" font-size="9">J</text>${dates}</svg></div>`;
   return p1+p2+p3final;
 }
+// 浮窗标记按钮: 点击切换标记 (已激活则清除) (20260907)
+function popupToggleMark(code, name, markChar){
+  const m = _MARKS[code]||{};
+  if(m.mark === markChar && !m.removed){
+    // 已激活 → 清除标记
+    fetch('/api/marks',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({code, name, mark:null})}).then(r=>r.json()).then(d=>{
+        if(d.ok){ _MARKS[code]=d.mark; refreshMarkBadgesInTables(); refreshMkTabCounts(); if(_curAnalysis&&_curAnalysis.code===code) renderAnalysis(_curAnalysis); }
+      });
+  } else {
+    setMark(code, name, markChar);
+  }
+}
+
 async function showKlinePreview(code, anchor){
   _kdCancelHide();   // 若有延迟隐藏排队中, 先取消(如鼠标在代码和弹框间往返)
   _kdRemove();
@@ -4587,9 +4606,18 @@ async function showKlinePreview(code, anchor){
     const bars = d.bars;
     const last = bars[bars.length-1];
     const chgTxt = `<span style="color:${(last.chg||0)>=0?'var(--up)':'var(--down)'}">${(last.chg||0)>=0?'+':''}${last.chg}%</span>`;
-    pop.innerHTML = `<div style="padding:6px 10px 2px;font-size:12px;font-weight:700">
-        ${d.name ? esc(d.name)+' ' : ''}<span class="meta cp-code" title="点击复制代码" onclick="copyCode('${code}')">${code}</span> ${chgTxt}
-        <span class="meta" style="margin-left:6px">近半年日K · 三均线 · 量 · KDJ</span>
+    // 右上角标记符号按钮 (20260907): " 留意 / * 关注 / ! 特别关注, 点击切换
+    const mkAttr = s => String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');
+    const mkName = mkAttr(d.name||code);
+    const curMk = (_MARKS[code]||{});
+    const mkBtns = Object.entries(MARK_META).map(([k,v]) => {
+      const active = (curMk.mark === v.char && !curMk.removed) ? ' active' : '';
+      return `<span class="kd-mk-btn${active}" style="color:${v.color}" title="${v.label}" onclick="popupToggleMark('${code}','${mkName}','${v.char}')">${v.char}</span>`;
+    }).join('');
+    pop.innerHTML = `<div style="padding:6px 10px 2px;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:space-between">
+        <div>${d.name ? esc(d.name)+' ' : ''}<span class="meta cp-code" title="点击复制代码" onclick="copyCode('${code}')">${code}</span> ${chgTxt}
+        <span class="meta" style="margin-left:6px">近半年日K · 三均线 · 量 · KDJ</span></div>
+        <div class="kd-mk-bar">${mkBtns}</div>
       </div>` + kdMultiChart(bars);
     _kdPlace(pop, anchor);
     bindChartInteractivity(pop);  // 三个面板各自绑定十字光标+悬浮 (20260906)
