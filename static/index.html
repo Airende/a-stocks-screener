@@ -29,6 +29,8 @@
   button:disabled{opacity:.5;cursor:not-allowed}
   .ghost{background:var(--panel2);color:var(--txt)}
   .meta{font-size:12px;color:var(--sub)}
+  .meta.cp-code{cursor:pointer;border-bottom:1px dashed var(--border);transition:color .15s}
+  .meta.cp-code:hover{color:var(--accent);border-bottom-color:var(--accent)}
   .stats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
   .stat{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:10px 14px;min-width:110px}
   .stat .n{font-size:20px;font-weight:700}
@@ -4365,6 +4367,29 @@ function showToast(msg, opts={}){
   return { close };
 }
 
+// 复制股票代码到剪贴板, 成功后toast提示 (20260907)
+function copyCode(code){
+  code = String(code||'').trim();
+  if(!code) return;
+  const done = ()=>{ showToast('已复制: '+code, {duration:1500}); };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(code).then(done).catch(()=>{ fallbackCopy(code); done(); });
+  } else {
+    fallbackCopy(code); done();
+  }
+}
+function fallbackCopy(text){
+  try{
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+  }catch(e){ /* ignore */ }
+}
+
 async function deleteOperation(code, opId){
   try{
     const r=await fetch(`/api/position/${encodeURIComponent(code)}/operation/${opId}`,{method:'DELETE'});
@@ -4563,7 +4588,7 @@ async function showKlinePreview(code, anchor){
     const last = bars[bars.length-1];
     const chgTxt = `<span style="color:${(last.chg||0)>=0?'var(--up)':'var(--down)'}">${(last.chg||0)>=0?'+':''}${last.chg}%</span>`;
     pop.innerHTML = `<div style="padding:6px 10px 2px;font-size:12px;font-weight:700">
-        ${d.name ? esc(d.name)+' ' : ''}<span class="meta">${code}</span> ${chgTxt}
+        ${d.name ? esc(d.name)+' ' : ''}<span class="meta cp-code" title="点击复制代码" onclick="copyCode('${code}')">${code}</span> ${chgTxt}
         <span class="meta" style="margin-left:6px">近半年日K · 三均线 · 量 · KDJ</span>
       </div>` + kdMultiChart(bars);
     _kdPlace(pop, anchor);
