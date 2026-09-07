@@ -4567,6 +4567,27 @@ function kdMultiChart(bars){
   const p3final=`<div class="sa-chart" id="${cid3}" style="height:${h3}px;margin-top:2px"><svg viewBox="0 0 ${w} ${h3}" width="${w}" height="${h3}">${ref80}${ref20}${line(K,'#e8eef6',1)}${line(D,'#f5c842',1)}${line(J,'#a06bff',1)}<text x="${padL}" y="9" fill="#e8eef6" font-size="9">K</text><text x="${padL+12}" y="9" fill="#f5c842" font-size="9">D</text><text x="${padL+24}" y="9" fill="#a06bff" font-size="9">J</text>${dates}</svg></div>`;
   return p1+p2+p3final;
 }
+// 浮窗标记按钮: 点击切换忽略 (×) (20260907)
+async function popupToggleIgnore(code, name){
+  const m = _MARKS[code]||{};
+  const nextRemoved = !m.removed;
+  try{
+    const r = await fetch('/api/marks',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code,name,removed:nextRemoved})});
+    const d = await r.json();
+    if(d.ok){
+      _MARKS[code] = d.mark;
+      const btn = document.querySelector('.kd-mk-ignore');
+      if(btn){
+        if(nextRemoved) btn.classList.add('active');
+        else btn.classList.remove('active');
+      }
+      refreshMarkBadgesInTables();
+      refreshMkTabCounts();
+      if($('#pane-marks') && $('#pane-marks').classList.contains('active')) renderMkTable();
+      if(_curAnalysis && _curAnalysis.code===code) renderAnalysis(_curAnalysis);
+    }
+  }catch(e){}
+}
 // 浮窗标记按钮: 点击切换标记 (已激活则清除) (20260907)
 function popupToggleMark(code, name, markChar){
   const m = _MARKS[code]||{};
@@ -4614,10 +4635,12 @@ async function showKlinePreview(code, anchor){
       const active = (curMk.mark === v.char && !curMk.removed) ? ' active' : '';
       return `<span class="kd-mk-btn${active}" style="color:${v.color}" title="${v.label}" onclick="popupToggleMark('${code}','${mkName}','${mkAttr(v.char)}')">${v.char}</span>`;
     }).join('');
+    const ignoreActive = curMk.removed ? ' active' : '';
+    const ignoreBtn = `<span class="kd-mk-btn kd-mk-ignore${ignoreActive}" style="color:#ff6b6b" title="忽略此股" onclick="popupToggleIgnore('${code}','${mkName}')">×</span>`;
     pop.innerHTML = `<div style="padding:6px 10px 2px;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:space-between">
         <div>${d.name ? esc(d.name)+' ' : ''}<span class="meta cp-code" title="点击复制代码" onclick="copyCode('${code}')">${code}</span> ${chgTxt}
         <span class="meta" style="margin-left:6px">近半年日K · 三均线 · 量 · KDJ</span></div>
-        <div class="kd-mk-bar">${mkBtns}</div>
+        <div class="kd-mk-bar">${mkBtns}${ignoreBtn}</div>
       </div>` + kdMultiChart(bars);
     _kdPlace(pop, anchor);
     bindChartInteractivity(pop);  // 三个面板各自绑定十字光标+悬浮 (20260906)
