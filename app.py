@@ -1349,8 +1349,64 @@ def calc_macd(closes: list[float], fast: int = 12, slow: int = 26, signal: int =
            for f, s in zip(ema_fast, ema_slow)]
     dea = ema(dif, signal)
     hist = [(d - e) if not (math.isnan(d) or math.isnan(e)) else float("nan")
-            for d, e in zip(dif, dea)]
+           for d, e in zip(dif, dea)]
     return dif, dea, hist
+
+
+def _calc_kdj_bottom_diverge(closes: list, highs: list, lows: list, j: list) -> bool:
+    """KDJ底背离: 价格创近20日新低但J值未创新低 (动能未跟随下行)。
+    判定逻辑与 calc_kdj_system 中的 bottom_diverge 完全一致, 仅抽取背离部分以便扫描复用。"""
+    N = len(closes)
+    if N < 25:
+        return False
+    # 近20日最低价对应的J值 (当前价格低点)
+    idx_20_low = -1
+    trough_j = j[-1] if not math.isnan(j[-1]) else 50.0
+    for i in range(N - 20, N):
+        if lows[i] == min(lows[N - 20:]):
+            idx_20_low = i
+            if not math.isnan(j[i]):
+                trough_j = j[i]
+            break
+    # 再往前20日窗口中找价格次低点对应的最小J值 (前一个价格低点)
+    prev_trough_idx = -1
+    prev_trough_j = trough_j
+    lo = max(0, idx_20_low - 20)
+    for i in range(lo, idx_20_low):
+        if lows[i] <= min(lows[lo:idx_20_low]) * 1.01 and not math.isnan(j[i]):
+            if j[i] < prev_trough_j:
+                prev_trough_j = j[i]
+                prev_trough_idx = i
+    return (idx_20_low > 0 and prev_trough_idx >= 0
+            and closes[-1] <= min(closes[-20:]) * 1.01
+            and trough_j > prev_trough_j + 5)
+
+
+def _calc_macd_bottom_diverge(closes: list, lows: list, dif: list) -> bool:
+    """MACD底背离: 价格创近20日新低但DIF未创新低 (空头动能减弱, 反转信号)。
+    结构与 _calc_kdj_bottom_diverge 一致, 仅把J序列换成DIF序列。"""
+    N = len(closes)
+    if N < 25:
+        return False
+    idx_20_low = -1
+    trough_dif = dif[-1] if not math.isnan(dif[-1]) else 0.0
+    for i in range(N - 20, N):
+        if lows[i] == min(lows[N - 20:]):
+            idx_20_low = i
+            if not math.isnan(dif[i]):
+                trough_dif = dif[i]
+            break
+    prev_trough_idx = -1
+    prev_trough_dif = trough_dif
+    lo = max(0, idx_20_low - 20)
+    for i in range(lo, idx_20_low):
+        if lows[i] <= min(lows[lo:idx_20_low]) * 1.01 and not math.isnan(dif[i]):
+            if dif[i] < prev_trough_dif:
+                prev_trough_dif = dif[i]
+                prev_trough_idx = i
+    return (idx_20_low > 0 and prev_trough_idx >= 0
+            and closes[-1] <= min(closes[-20:]) * 1.01
+            and trough_dif > prev_trough_dif + 1e-6)
 
 
 # 条件元数据: 供前端渲染勾选框 (单一数据源)
@@ -5331,10 +5387,17 @@ def _run_ma_screen_thread():
             price = closes[-1]
             atr_pct = (atr14 / price * 100) if price > 0 else 0.0
             atr_shrink = (atr14 > 0 and atr60 > 0 and atr14 < atr60 * 0.8)
+            # 背离过滤 (KDJ底背离 / MACD底背离): 与ATR同组, 满足任一勾选项即保留
+            k_arr, d_arr, j_arr = calc_kdj(highs_a, lows_a, closes)
+            dif_arr, _dea_arr, _hist_arr = calc_macd(closes)
+            kdj_bottom = _calc_kdj_bottom_diverge(closes, highs_a, lows_a, j_arr)
+            macd_bottom = _calc_macd_bottom_diverge(closes, lows_a, dif_arr)
             if atr_conds:
                 ok = (("e1" in atr_conds and atr_pct < 4)
                       or ("e2" in atr_conds and 3 <= atr_pct <= 8)
-                      or ("e3" in atr_conds and atr_shrink))
+                      or ("e3" in atr_conds and atr_shrink)
+                      or ("kdj_db" in atr_conds and kdj_bottom)
+                      or ("macd_db" in atr_conds and macd_bottom))
                 if not ok:
                     return None
             # 买卖点分析
@@ -5345,6 +5408,8 @@ def _run_ma_screen_thread():
                 "change_pct": round(chg, 2),
                 "atr_pct": round(atr_pct, 2),
                 "atr_shrink": bool(atr_shrink),
+                "kdj_db": bool(kdj_bottom),
+                "macd_db": bool(macd_bottom),
                 "ma5": round(ma5[-1], 2) if not math.isnan(ma5[-1]) else 0,
                 "ma10": round(ma10[-1], 2) if not math.isnan(ma10[-1]) else 0,
                 "ma20": round(ma20[-1], 2) if not math.isnan(ma20[-1]) else 0,
@@ -5423,11 +5488,11 @@ def _ensure_ma_screen():
 
 @app.post("/api/ma-screen/run")
 def api_ma_screen_run(payload: dict = None):
-    """触发均线形态筛选; 可选body {atr:["e1","e2","e3"]} 指定ATR过滤勾选 (20260906)"""
+    """触发均线形态筛选; 可选body {atr:["e1","e2","e3","kdj_db","macd_db"]} 指定ATR/背离过滤勾选"""
     if isinstance(payload, dict):
         atr = payload.get("atr")
         if isinstance(atr, list):
-            atr = [a for a in atr if a in ("e1", "e2", "e3")]
+            atr = [a for a in atr if a in ("e1", "e2", "e3", "kdj_db", "macd_db")]
             with _ma_state["lock"]:
                 _ma_state["atr_conds"] = atr
     if not _ma_state["running"]:
