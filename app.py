@@ -250,12 +250,13 @@ def _spot_cache_path(date_str: str) -> str:
     return os.path.join(CACHE_DIR, f"spot_{date_str}.json")
 
 
-def _kline_cache_dir(date_str: str) -> str:
-    return os.path.join(CACHE_DIR, "klines", date_str)
+def _kline_cache_dir() -> str:
+    """K线缓存目录(稳定路径, 不按日期分目录, 避免每日换目录导致缓存全部失效)。"""
+    return os.path.join(CACHE_DIR, "klines")
 
 
-def _kline_cache_path(date_str: str, symbol: str) -> str:
-    return os.path.join(_kline_cache_dir(date_str), f"{symbol}.json")
+def _kline_cache_path(symbol: str) -> str:
+    return os.path.join(_kline_cache_dir(), f"{symbol}.json")
 
 
 def _load_spot_cache(date_str: str) -> list[dict] | None:
@@ -279,8 +280,8 @@ def _save_spot_cache(date_str: str, data: list[dict]) -> None:
         pass
 
 
-def _load_kline_cache(date_str: str, symbol: str) -> list[dict] | None:
-    path = _kline_cache_path(date_str, symbol)
+def _load_kline_cache(symbol: str) -> list[dict] | None:
+    path = _kline_cache_path(symbol)
     if os.path.exists(path):
         try:
             with open(path, "r", encoding="utf-8") as f:
@@ -290,10 +291,10 @@ def _load_kline_cache(date_str: str, symbol: str) -> list[dict] | None:
     return None
 
 
-def _save_kline_cache(date_str: str, symbol: str, data: list[dict]) -> None:
-    d = _kline_cache_dir(date_str)
+def _save_kline_cache(symbol: str, data: list[dict]) -> None:
+    d = _kline_cache_dir()
     os.makedirs(d, exist_ok=True)
-    path = _kline_cache_path(date_str, symbol)
+    path = _kline_cache_path(symbol)
     try:
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False)
@@ -775,55 +776,36 @@ def _kline_has_today(bars: list[dict] | None, today_str: str) -> bool:
     return (bars[-1].get("day") or "")[:10].replace("-", "") >= today_str
 
 
-def fetch_kline(symbol: str, datalen: int = 40, spot_data: list[dict] | None = None) -> list[dict]:
+def fetch_kline(symbol: str, datalen: int = 40, spot_data: list[dict] | None = None,
+                force: bool = False) -> list[dict]:
     """返回 [{day,open,high,low,close,volume}, ...] 含最近交易日。
-    20260906 缓存策略 (按用户要求):
-      交易日15:00后刷新时, 先检查数据源是否有'今日最新数据':
-      · 本地缓存已含最近交易日 → 直接用, 不再下载;
-      · 缓存缺最近交易日 → 检查远端, 有今日数据则更新本地(之后不再下载),
-        远端也没有则用spot快照补全当日bar并落盘;
-      · 都没有今日数据 → 用历史数据顶上, 且【不落盘】(不锁死缓存),
-        后续刷新会继续检查, 直到拿到今日最新数据。
-    容灾: 新浪主源失败(或熔断期内)自动切换腾讯/东财备源。
-    20260907 性能: 可选 spot_data 参数, 选股时传入已拉取的全市场快照, 避免每只股票重复拉取。"""
-    after_close = _is_after_close()
-    cache_date = _cache_date_for_fetch()
+    20260907 缓存策略(按用户要求: 有本地缓存就不再拉取, 仅手动刷新才更新):
+      · 本地缓存存在且长度>=datalen → 直接返回缓存(用spot快照补全当日bar,
+        使选股/均线有当日价格; 不写盘, 仅运行时使用)。
+      · force=True(手动刷新) 或 无缓存/缓存不足 → 远程拉取并写盘。
+      · 远程拉取失败时回退到已有缓存, 避免数据中断。
+    容灾: 新浪主源失败(或熔断期内)自动切换腾讯/东财备源。"""
     today_str = _latest_trade_date_str()
+    cached = _load_kline_cache(symbol)
 
-    cached = _load_kline_cache(cache_date, symbol)
-    if cached is not None and len(cached) >= datalen:
-        if not after_close:
-            # 盘中/盘前/周末: 缓存含最近交易日即为有效(维持原有行为)
-            return cached
-        if _kline_has_today(cached, today_str):
-            # 收盘后缓存已含今日最新数据 → 直接用, 不再下载
-            return cached
-        # 收盘后缓存缺今日 → 主动检查远端是否已更新出今日数据
-        fresh = _fetch_kline_remote(symbol, datalen)
-        if _kline_has_today(fresh, today_str):
-            _save_kline_cache(cache_date, symbol, fresh)
-            return fresh
-        # 远端暂无今日 → 用spot快照补全当日bar, 成功则落盘
-        patched = _patch_today_bar_from_spot(cached, symbol, today_str, spot_data)
-        if _kline_has_today(patched, today_str):
-            _save_kline_cache(cache_date, symbol, patched)
-            return patched
-        # 都没有今日数据 → 用历史数据(不落盘, 下次刷新继续检查)
+    # 有缓存且长度足够 → 直接用, 不再远程拉取
+    if not force and cached is not None and len(cached) >= datalen:
+        if not _kline_has_today(cached, today_str):
+            # 缓存缺今日 → 用spot快照补全当日bar(运行时, 不落盘)
+            patched = _patch_today_bar_from_spot(cached, symbol, today_str, spot_data)
+            if _kline_has_today(patched, today_str):
+                return patched
         return cached
 
-    # 无缓存或缓存不足 → 远程拉取
+    # 无缓存 / 强制刷新 / 缓存不足 → 远程拉取
     out = _fetch_kline_remote(symbol, datalen)
     if not out:
-        return []
+        # 拉取失败 → 回退到已有缓存
+        return cached if cached else []
     if not _kline_has_today(out, today_str):
-        # 源数据缺最近交易日 → 尝试用spot快照补全
         out = _patch_today_bar_from_spot(out, symbol, today_str, spot_data)
-    # 落盘策略:
-    #   收盘后: 只有含最近交易日的完整数据才写入缓存(避免数据滞后时把不完整
-    #   数据锁死一整天); 否则只用历史数据, 不落盘, 后续刷新继续检查。
-    #   盘中/盘前: 维持原有落盘行为。
-    if out and (_kline_has_today(out, today_str) or not after_close):
-        _save_kline_cache(cache_date, symbol, out)
+    if out:
+        _save_kline_cache(symbol, out)
     return out
 
 
@@ -4653,7 +4635,7 @@ def cache_info():
     import glob
     cache_date = _cache_date_for_fetch()
     spot_path = _spot_cache_path(cache_date)
-    kline_dir = _kline_cache_dir(cache_date)
+    kline_dir = _kline_cache_dir()
     # 行情快照
     spot_size = 0
     spot_mtime = None
@@ -8166,15 +8148,16 @@ def api_positions_today():
     return JSONResponse({"operations": out, "count": len(out)})
 
 @app.get("/api/kline")
-def api_kline(code: str = "", datalen: int = 122):
+def api_kline(code: str = "", datalen: int = 122, force: bool = False):
     """轻量K线接口 (20260906): 供前端悬浮弹框预览个股近半年日K(约122个交易日)。
-    与 /api/stock/analyze 不同, 不做任何指标计算, 只回K线, 开销极小。"""
+    与 /api/stock/analyze 不同, 不做任何指标计算, 只回K线, 开销极小。
+    force=True 时跳过本地缓存, 强制从远端刷新并写盘。"""
     code = (code or "").strip()
     if not code:
         return JSONResponse({"error": "code is required"}, status_code=400)
     datalen = max(10, min(600, datalen))
     symbol = _to_symbol(code)
-    bars = fetch_kline(symbol, datalen=datalen)
+    bars = fetch_kline(symbol, datalen=datalen, force=force)
     if not bars:
         return JSONResponse({"error": f"无K线数据 {code}"}, status_code=404)
     # 缓存可能比请求的更长(如回测拉过1200根), 按请求裁剪尾部
