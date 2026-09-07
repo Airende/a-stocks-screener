@@ -1426,6 +1426,8 @@ COND_DEFS = [
     {"group": "三、买点状态（满足其一）", "gid": "gC", "type": "or", "items": [
         {"id": "c1", "label": "低吸回踩：最低价触MA10/MA20±3%，收盘收回MA10上方，缩量", "hint": "回踩支撑不破"},
         {"id": "c2", "label": "放量突破：创20日新高，量>20日均量×1.5，涨幅≥3%阳线", "hint": "进攻型突破"},
+        {"id": "c3", "label": "KDJ底背离：近20日价格创新低但J值未创新低", "hint": "动能未随价格下行, 潜在反转"},
+        {"id": "c4", "label": "MACD底背离：近20日价格创新低但DIF未创新低", "hint": "空头动能减弱, 潜在反转"},
     ]},
     {"group": "四、风控排除", "gid": "gD", "type": "and", "items": [
         {"id": "d1", "label": "乖离率<15%（(收盘-MA20)/MA20）", "hint": "避开末期追高"},
@@ -1445,12 +1447,12 @@ COND_DEFS = [
 COND_ALL = [it["id"] for g in COND_DEFS for it in g["items"]]
 # 默认勾选集 (20260906): 全部条件中, ATR组默认只勾"ATR% 3~8%(波段弹性)"(e2);
 # e1/e3/d8(排除ATR%>8%) 默认不勾。首次启动筛选与前端初始渲染均以此为准。
-COND_DEFAULT = [c for c in COND_ALL if c not in ("e1", "e3")]
+COND_DEFAULT = [c for c in COND_ALL if c not in ("e1", "e3", "c3", "c4")]
 # 各组包含的"评分叶子" (d3-d8 是剔除门, 不计入gD评分)
 GROUP_LEAVES = {
     "gA": ["t1", "t2", "t3", "t4"],
     "gB": ["b1", "b2", "b3"],
-    "gC": ["c1", "c2"],
+    "gC": ["c1", "c2", "c3", "c4"],
     "gD": ["d1", "d2"],
     "gE": ["e1", "e2", "e3"],
 }
@@ -3987,6 +3989,8 @@ def check_stock(row: dict, bars: list[dict], conds=None) -> dict | None:
     # KDJ (保留作参考展示)
     _k, _d, _j = calc_kdj(highs, lows, closes)
     J_t = _j[-1] if not math.isnan(_j[-1]) else 0.0
+    # MACD (DIF用于底背离判定)
+    _dif, _dea_m, _hist_m = calc_macd(closes)
     try:
         nmc = float(row.get("nmc", 0))
     except (TypeError, ValueError):
@@ -4063,6 +4067,10 @@ def check_stock(row: dict, bars: list[dict], conds=None) -> dict | None:
         vol_avg20 = sum(vols[-21:-1]) / 20
         c2 = (c > high20_close) and (vol_avg20 > 0) and (vols[-1] > vol_avg20 * 1.5) and \
              (not math.isnan(chgs[-1]) and chgs[-1] >= 3) and (c > opens[-1])
+    # c3: KDJ底背离 (价格创新低但J值未创新低)
+    c3 = _calc_kdj_bottom_diverge(closes, highs, lows, _j)
+    # c4: MACD底背离 (价格创新低但DIF未创新低)
+    c4 = _calc_macd_bottom_diverge(closes, lows, _dif)
 
     # ---- D组: 风控 叶子 ----
     # d1: 乖离率<15%
@@ -4081,7 +4089,7 @@ def check_stock(row: dict, bars: list[dict], conds=None) -> dict | None:
     leaf = {
         "t1": t1, "t2": t2, "t3": t3, "t4": t4,
         "b1": b1, "b2": b2, "b3": b3,
-        "c1": c1, "c2": c2,
+        "c1": c1, "c2": c2, "c3": c3, "c4": c4,
         "d1": d1, "d2": d2,
         "e1": e1, "e2": e2, "e3": e3,
     }
@@ -4125,6 +4133,10 @@ def check_stock(row: dict, bars: list[dict], conds=None) -> dict | None:
             hits.append("低吸回踩")
         if "c2" in conds and leaf["c2"]:
             hits.append("放量突破")
+        if "c3" in conds and leaf["c3"]:
+            hits.append("KDJ底背离")
+        if "c4" in conds and leaf["c4"]:
+            hits.append("MACD底背离")
     if active["gD"]:
         if "d1" in conds and leaf["d1"]:
             hits.append("乖离安全")
