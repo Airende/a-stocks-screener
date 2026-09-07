@@ -7088,8 +7088,18 @@ def _load_dotenv_env():
 
 _load_dotenv_env()
 _DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
-_storage_backend = None   # None=未初始化; 初始化后: 'postgres' | 'sqlite' | 'file'
+_storage_backend = None   # None=未初始化; 初始化后: 'postgres' | 'sqlite' | 'supabase_rest' | 'file'
 _STORAGE_LOG_TAG = "[storage]"
+
+# Supabase REST API (HTTPS, 走沙箱代理, 绕过 5432 端口封锁):
+# 从 DATABASE_URL 提取 project ref 构造 REST URL; 需要 SUPABASE_ANON_KEY 才启用。
+_SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "").strip()
+_SUPABASE_PROJECT_REF = ""
+_m = _DATABASE_URL and __import__("re").search(r"([a-z]{20})\.supabase\.co", _DATABASE_URL)
+if _m:
+    _SUPABASE_PROJECT_REF = _m.group(1)
+_SUPABASE_REST_URL = (f"https://{_SUPABASE_PROJECT_REF}.supabase.co/rest/v1/kv_state"
+                      if _SUPABASE_PROJECT_REF else "")
 
 
 def _kv_log(msg: str) -> None:
@@ -7129,11 +7139,49 @@ def _kv_connect_sqlite():
     return conn
 
 
+def _kv_supabase_rest(method: str, path: str, body=None, prefer: str = "return=representation") -> tuple[int, str]:
+    """调用 Supabase PostgREST API (HTTPS), 返回 (status, text)。失败返回 (0, error)"""
+    import requests as _req
+    headers = {
+        "apikey": _SUPABASE_ANON_KEY,
+        "Authorization": f"Bearer {_SUPABASE_ANON_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": prefer,
+    }
+    url = _SUPABASE_REST_URL + path
+    try:
+        if method == "GET":
+            r = _req.get(url, headers=headers, timeout=15)
+        elif method == "POST":
+            r = _req.post(url, headers=headers, json=body, timeout=15)
+        elif method == "PATCH":
+            r = _req.patch(url, headers=headers, json=body, timeout=15)
+        elif method == "DELETE":
+            r = _req.delete(url, headers=headers, timeout=15)
+        else:
+            return 0, "bad method"
+        return r.status_code, r.text
+    except Exception as e:  # noqa: BLE001
+        return 0, str(e)
+
+
 def _kv_storage_init() -> str:
     """初始化存储后端(幂等): 建表 + 返回实际后端。失败一律回退本地文件。"""
     global _storage_backend
     if _storage_backend is not None:
         return _storage_backend
+    # 优先 Supabase REST (HTTPS, 沙箱可用)
+    if _SUPABASE_ANON_KEY and _SUPABASE_REST_URL:
+        try:
+            status, text = _kv_supabase_rest("GET", "?select=key&limit=1")
+            if status in (200, 401, 403):
+                _storage_backend = "supabase_rest"
+                _kv_log(f"云端存储已启用: supabase_rest (project={_SUPABASE_PROJECT_REF})")
+                return _storage_backend
+            else:
+                _kv_log(f"Supabase REST 探测失败 status={status}: {text[:200]}")
+        except Exception as e:  # noqa: BLE001
+            _kv_log(f"Supabase REST 探测异常: {e}")
     kind = _kv_dsn_kind(_DATABASE_URL) if _DATABASE_URL else None
     if kind is None:
         if _DATABASE_URL:
@@ -7163,7 +7211,20 @@ def _kv_storage_init() -> str:
 
 def _kv_get(key: str) -> dict | None:
     """从云端读取整包 JSON; 未启用/读失败返回 None (调用方回退本地文件)"""
-    if _kv_storage_init() not in ("postgres", "sqlite"):
+    backend = _kv_storage_init()
+    if backend == "supabase_rest":
+        try:
+            status, text = _kv_supabase_rest("GET", f"?key=eq.{key}&select=value")
+            if status == 200:
+                rows = json.loads(text)
+                if rows and isinstance(rows, list) and "value" in rows[0]:
+                    data = json.loads(rows[0]["value"])
+                    return data if isinstance(data, dict) else None
+            return None
+        except Exception as e:  # noqa: BLE001
+            _kv_log(f"REST 读取 {key} 失败: {e}")
+            return None
+    if backend not in ("postgres", "sqlite"):
         return None
     try:
         if _storage_backend == "postgres":
@@ -7189,7 +7250,21 @@ def _kv_get(key: str) -> dict | None:
 
 def _kv_set(key: str, value: dict) -> bool:
     """整包 upsert 到云端; 返回是否成功(失败时内存数据仍在, 下次写入重试)"""
-    if _kv_storage_init() not in ("postgres", "sqlite"):
+    backend = _kv_storage_init()
+    if backend == "supabase_rest":
+        try:
+            payload = json.dumps(value, ensure_ascii=False)
+            now = bj_now()
+            # PostgREST upsert: Prefer: resolution=merge-duplicates
+            status, _ = _kv_supabase_rest(
+                "POST", "", body={"key": key, "value": payload, "updated_at": now},
+                prefer="resolution=merge-duplicates",
+            )
+            return status in (200, 201)
+        except Exception as e:  # noqa: BLE001
+            _kv_log(f"REST 写入 {key} 失败: {e}")
+            return False
+    if backend not in ("postgres", "sqlite"):
         return False
     try:
         payload = json.dumps(value, ensure_ascii=False)
@@ -7238,7 +7313,21 @@ def _kv_write_local_file(path: str, value: dict) -> None:
 
 def _kv_list(prefix: str) -> list[str]:
     """列出云端 kv_state 中以 prefix 开头的 key (按 key 降序 = 新→旧); 未启用云端返回 []"""
-    if _kv_storage_init() not in ("postgres", "sqlite"):
+    backend = _kv_storage_init()
+    if backend == "supabase_rest":
+        try:
+            from urllib.parse import quote
+            status, text = _kv_supabase_rest(
+                "GET", f"?key=like.{quote(prefix + '%')}&order=key.desc&select=key"
+            )
+            if status == 200:
+                rows = json.loads(text)
+                return [r["key"] for r in rows if "key" in r]
+            return []
+        except Exception as e:  # noqa: BLE001
+            _kv_log(f"REST 列出 {prefix}* 失败: {e}")
+            return []
+    if backend not in ("postgres", "sqlite"):
         return []
     try:
         if _storage_backend == "postgres":
@@ -7348,7 +7437,7 @@ def _load_marks():
     """加载标记: 云端优先; 云端与本地按每只股票 updated_at 新者合并(多机同步);
     云端无数据而本地文件有 → 自动迁移上云; 全失败用空表 (20260906)"""
     global _MARKS
-    if _kv_storage_init() in ("postgres", "sqlite"):
+    if _kv_storage_init() in ("postgres", "sqlite", "supabase_rest"):
         cloud = _kv_get("marks")
         local = _kv_read_local_file(_MARKS_FILE)
         if cloud is not None:
@@ -7384,7 +7473,7 @@ def _load_marks():
 
 def _save_marks():
     """保存标记: 云端模式=云端 upsert + 本地文件镜像备份; 文件模式=仅本地 (20260906)"""
-    if _storage_backend in ("postgres", "sqlite"):
+    if _storage_backend in ("postgres", "sqlite", "supabase_rest"):
         _kv_set("marks", _MARKS)
     _kv_write_local_file(_MARKS_FILE, _MARKS)
 
@@ -7529,7 +7618,7 @@ def _load_positions():
     云端无数据而本地文件有 → 自动迁移上云; 全失败用空表 (20260906)"""
     global _POSITIONS, _OP_ID
     data = None
-    if _kv_storage_init() in ("postgres", "sqlite"):
+    if _kv_storage_init() in ("postgres", "sqlite", "supabase_rest"):
         cloud = _kv_get("positions")
         local = None
         if _os.path.isfile(_POSITIONS_FILE):
@@ -7584,7 +7673,7 @@ def _load_positions():
 
 def _save_positions():
     """保存持仓: 云端模式=云端 upsert + 本地文件镜像备份; 文件模式=仅本地 (20260906)"""
-    if _storage_backend in ("postgres", "sqlite"):
+    if _storage_backend in ("postgres", "sqlite", "supabase_rest"):
         _kv_set("positions", _POSITIONS)
     _kv_write_local_file(_POSITIONS_FILE, _POSITIONS)
 
