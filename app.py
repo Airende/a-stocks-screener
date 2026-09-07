@@ -357,14 +357,14 @@ _TENCENT_KLINE_URL = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
 
 
 def _fetch_kline_tencent(symbol: str, datalen: int = 40) -> list[dict]:
-    """腾讯日K备源: 不复权 [{day,open,high,low,close,volume}]。
-    保留除权缺口, 与新浪不复权口径一致。
+    """腾讯日K主源: 返回前复权(qfq) [{day,open,high,low,close,volume}]。
+    前复权使除权日前后价格可比, 均线/MACD/KDJ等指标在除权日不跳变。
     腾讯K线成交量为手, 新浪为股, 必须×100 (实测茅台 45416手 vs 4541564股)。"""
-    data = _get(_TENCENT_KLINE_URL, {"param": f"{symbol},day,,,{datalen}"}, timeout=10)
+    data = _get(_TENCENT_KLINE_URL, {"param": f"{symbol},day,,,{datalen},qfq"}, timeout=10)
     node = {}
     if isinstance(data, dict):
         node = (data.get("data") or {}).get(symbol) or {}
-    rows = node.get("day") or []
+    rows = node.get("qfqday") or node.get("day") or []
     out: list[dict] = []
     for r in rows:
         try:
@@ -391,13 +391,13 @@ def _em_secid(symbol: str) -> str:
 
 
 def _fetch_kline_eastmoney(symbol: str, datalen: int = 40) -> list[dict]:
-    """东财日K备源(fqt=0 不复权, 与新浪/腾讯口径一致)。
+    """东财日K备源(fqt=1 前复权, 与腾讯qfq口径一致)。
     klines 字段序: 日期,开,收,高,低,量(手),额(元) → 量×100 对齐新浪的股。"""
     data = _get(_EM_KLINE_URL, {
         "secid": _em_secid(symbol),
         "fields1": "f1,f2,f3,f4,f5,f6",
         "fields2": "f51,f52,f53,f54,f55,f56,f57",
-        "klt": 101, "fqt": 0, "lmt": datalen, "end": "20500101",
+        "klt": 101, "fqt": 1, "lmt": datalen, "end": "20500101",
     }, timeout=10)
     out: list[dict] = []
     if isinstance(data, dict):
@@ -655,10 +655,68 @@ def fetch_spot_all() -> list[dict]:
 
 
 # ============================================================
-# 数据层: 个股日K线 (含当日) · 不复权(保留除权缺口)
+# 数据层: 个股日K线 (含当日) · 前复权
 # ============================================================
+# 新浪 qfq.js 复权因子缓存 (因子不变, 按股票缓存避免重复请求)
+_QFQ_FACTOR_CACHE: dict[str, list[tuple[str, float]]] = {}
+
+
+def _fetch_qfq_factors(symbol: str) -> list[tuple[str, float]]:
+    """从新浪 qfq.js 获取前复权因子列表, 按日期升序返回 [(date, factor), ...]。
+    新浪 qfq.js 因子 = 不复权价 / 前复权价, 故 前复权价 = 不复权价 / factor。"""
+    cached = _QFQ_FACTOR_CACHE.get(symbol)
+    if cached is not None:
+        return cached
+    factors: list[tuple[str, float]] = []
+    try:
+        url = f"https://finance.sina.com.cn/realstock/company/{symbol}/qfq.js"
+        text = _get(url, timeout=10)
+        if isinstance(text, str):
+            import re as _re
+            m = _re.search(r"=(\{.*\})", text, _re.DOTALL)
+            if m:
+                import json as _json
+                data = _json.loads(m.group(1)).get("data") or []
+                factors = sorted(
+                    [(d["d"], float(d["f"])) for d in data if d.get("d") and d.get("f")],
+                    key=lambda x: x[0],
+                )
+    except Exception:  # noqa: BLE001
+        factors = []
+    _QFQ_FACTOR_CACHE[symbol] = factors
+    return factors
+
+
+def _apply_qfq(bars: list[dict], factors: list[tuple[str, float]]) -> list[dict]:
+    """对不复权K线应用前复权: 前复权价 = 不复权价 / 因子。
+    每根K线取 最近一个<=该日期 的因子。"""
+    if not factors:
+        return bars
+    out: list[dict] = []
+    fi = 0
+    cur_factor = 1.0
+    for b in bars:
+        day = (b.get("day") or "")[:10]
+        # 推进到 最后一个 factor.date <= day
+        while fi < len(factors) and factors[fi][0] <= day:
+            cur_factor = factors[fi][1]
+            fi += 1
+        if cur_factor != 1.0:
+            out.append({
+                "day": b["day"],
+                "open": round(b["open"] / cur_factor, 3),
+                "high": round(b["high"] / cur_factor, 3),
+                "low": round(b["low"] / cur_factor, 3),
+                "close": round(b["close"] / cur_factor, 3),
+                "volume": b["volume"],
+            })
+        else:
+            out.append(b)
+    return out
+
+
 def _fetch_kline_sina(symbol: str, datalen: int) -> list[dict]:
-    """新浪日K(不复权)。本环境主用路径, 保留除权缺口, 不做前复权处理。"""
+    """新浪日K(不复权) + qfq.js 因子 → 前复权。本环境主用路径。"""
     data = _get(SINA_KLINE, {"symbol": symbol, "scale": 240, "ma": "no", "datalen": datalen})
     if not isinstance(data, list):
         return []
@@ -673,14 +731,17 @@ def _fetch_kline_sina(symbol: str, datalen: int) -> list[dict]:
             })
         except (KeyError, ValueError, TypeError):
             continue
-    return bars
+    if not bars:
+        return []
+    factors = _fetch_qfq_factors(symbol)
+    return _apply_qfq(bars, factors)
 
 
 def _fetch_kline_remote(symbol: str, datalen: int) -> list[dict]:
-    """K线远程拉取(不复权, 保留除权缺口):
-      新浪(不复权) → 腾讯(不复权) → 东财(fqt=0)。
-    本环境腾讯/东财被WAF/代理拦截, 故新浪为主路径; 其余源作跨环境容灾。
-    不复权保留真实成交价与除权缺口, 自绘K线图与均线/MACD/KDJ均基于原始价格。"""
+    """K线远程拉取(前复权):
+      新浪(不复权+qfq因子本地算前复权) → 腾讯qfq → 东财fqt=1。
+    本环境腾讯/东财被WAF/代理拦截, 故新浪+因子为主路径; 其余源作跨环境容灾。
+    前复权使除权日前后价格可比, 自绘K线图与均线/MACD/KDJ口径一致。"""
     out: list[dict] = []
     sina_err = ""
     if _sina_available():
@@ -692,13 +753,13 @@ def _fetch_kline_remote(symbol: str, datalen: int) -> list[dict]:
             sina_err = str(e)[:80]
         if sina_err:
             _record_sina_failure(sina_err)
-    # ---- 备源: 腾讯(不复权) ----
+    # ---- 备源: 腾讯前复权(直接返回qfq) ----
     if not out:
         try:
             out = _fetch_kline_tencent(symbol, datalen)
         except Exception as e:  # noqa: BLE001
-            print(f"[source] [{bj_now()}] 腾讯K线(不复权)失败 {symbol}: {str(e)[:60]}, 改用东财", flush=True)
-    # ---- 备源: 东财不复权(fqt=0) ----
+            print(f"[source] [{bj_now()}] 腾讯K线(qfq)失败 {symbol}: {str(e)[:60]}, 改用东财", flush=True)
+    # ---- 备源: 东财前复权(fqt=1) ----
     if not out:
         try:
             out = _fetch_kline_eastmoney(symbol, datalen)
