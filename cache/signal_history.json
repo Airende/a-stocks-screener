@@ -1,7 +1,7 @@
 {
   "2026-09-07": {
     "screen": {
-      "updated": "2026-09-07 20:13:52",
+      "updated": "2026-09-07 20:16:35",
       "conds": [
         "c3",
         "c4"
@@ -9593,9 +9593,9 @@
       ]
     },
     "date": "2026-09-07",
-    "updated_at": "2026-09-07 20:13:58",
+    "updated_at": "2026-09-07 20:16:35",
     "ma": {
-      "updated": "2026-09-07 20:13:58",
+      "updated": "2026-09-07 20:16:11",
       "counts": {
         "多头排列": 219,
         "多头排列向上发散": 293,
@@ -9606,7 +9606,7 @@
         "MACD底背离": 102
       },
       "total_stocks": 2476,
-      "elapsed_sec": 35.2,
+      "elapsed_sec": 7.3,
       "patterns": {
         "多头排列": [
           {
@@ -19942,21 +19942,21 @@
             "bs_motto": "卖点与买点镜像对称; 严格执行止损, 保护本金"
           },
           {
-            "code": "600961",
-            "name": "株冶集团",
-            "price": 25.25,
-            "change_pct": -0.47,
-            "atr_pct": 6.08,
-            "atr_shrink": false,
+            "code": "600875",
+            "name": "东方电气",
+            "price": 24.99,
+            "change_pct": -0.32,
+            "atr_pct": 3.4,
+            "atr_shrink": true,
             "kdj_db": false,
             "macd_db": false,
-            "ma5": 26.09,
-            "ma10": 26.61,
-            "ma20": 27.54,
-            "ma60": 27.34,
-            "amount_yi": 6.59,
-            "industry": "有色金属",
-            "concept": "铅锌、有色金属",
+            "ma5": 24.89,
+            "ma10": 25.28,
+            "ma20": 25.99,
+            "ma60": 27.29,
+            "amount_yi": 6.51,
+            "industry": "电力设备",
+            "concept": "综合电力设备商、电力设备",
             "bs_signal": "sell",
             "bs_side": "sell",
             "bs_type": "卖点3: 空头排列",
@@ -19976,21 +19976,21 @@
             "bs_motto": "卖点与买点镜像对称; 严格执行止损, 保护本金"
           },
           {
-            "code": "600875",
-            "name": "东方电气",
-            "price": 24.99,
-            "change_pct": -0.32,
-            "atr_pct": 3.4,
-            "atr_shrink": true,
+            "code": "600961",
+            "name": "株冶集团",
+            "price": 25.25,
+            "change_pct": -0.47,
+            "atr_pct": 6.08,
+            "atr_shrink": false,
             "kdj_db": false,
             "macd_db": false,
-            "ma5": 24.89,
-            "ma10": 25.28,
-            "ma20": 25.99,
-            "ma60": 27.29,
-            "amount_yi": 6.51,
-            "industry": "电力设备",
-            "concept": "综合电力设备商、电力设备",
+            "ma5": 26.09,
+            "ma10": 26.61,
+            "ma20": 27.54,
+            "ma60": 27.34,
+            "amount_yi": 6.59,
+            "industry": "有色金属",
+            "concept": "铅锌、有色金属",
             "bs_signal": "sell",
             "bs_side": "sell",
             "bs_type": "卖点3: 空头排列",

@@ -357,16 +357,15 @@ _TENCENT_KLINE_URL = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
 
 
 def _fetch_kline_tencent(symbol: str, datalen: int = 40) -> list[dict]:
-    """腾讯日K备源: 返回与新浪一致的 [{day,open,high,low,close,volume}]。
-    20260906 审计修复:
-    - 复权模式由 qfq 改为不复权(param 不带 qfq), 与新浪主源口径一致,
-      否则除权日附近两源价格体系不同, 切源时均线/止损位会跳变;
-    - 腾讯K线成交量为手, 新浪为股, 必须×100 (实测茅台 45416手 vs 4541564股)。"""
-    data = _get(_TENCENT_KLINE_URL, {"param": f"{symbol},day,,,{datalen}"}, timeout=10)
+    """腾讯日K主源: 返回前复权(qfq) [{day,open,high,low,close,volume}]。
+    20260907 改为前复权: 用户要求所有自绘K线图使用前复权数据,
+      前复权使除权日前后价格可比, 均线/MACD/KDJ等指标在除权日不跳变。
+    腾讯K线成交量为手, 新浪为股, 必须×100 (实测茅台 45416手 vs 4541564股)。"""
+    data = _get(_TENCENT_KLINE_URL, {"param": f"{symbol},day,,,{datalen},qfq"}, timeout=10)
     node = {}
     if isinstance(data, dict):
         node = (data.get("data") or {}).get(symbol) or {}
-    rows = node.get("day") or node.get("qfqday") or []
+    rows = node.get("qfqday") or node.get("day") or []
     out: list[dict] = []
     for r in rows:
         try:
@@ -393,13 +392,13 @@ def _em_secid(symbol: str) -> str:
 
 
 def _fetch_kline_eastmoney(symbol: str, datalen: int = 40) -> list[dict]:
-    """东财日K第三备源(fqt=0 不复权, 与新浪一致)。
+    """东财日K备源(fqt=1 前复权, 与腾讯qfq口径一致)。
     klines 字段序: 日期,开,收,高,低,量(手),额(元) → 量×100 对齐新浪的股。"""
     data = _get(_EM_KLINE_URL, {
         "secid": _em_secid(symbol),
         "fields1": "f1,f2,f3,f4,f5,f6",
         "fields2": "f51,f52,f53,f54,f55,f56,f57",
-        "klt": 101, "fqt": 0, "lmt": datalen, "end": "20500101",
+        "klt": 101, "fqt": 1, "lmt": datalen, "end": "20500101",
     }, timeout=10)
     out: list[dict] = []
     if isinstance(data, dict):
@@ -660,44 +659,49 @@ def fetch_spot_all() -> list[dict]:
 # 数据层: 个股日K线 (含当日)
 # ============================================================
 def _fetch_kline_remote(symbol: str, datalen: int) -> list[dict]:
-    """K线远程拉取三级源: 新浪 → 腾讯 → 东财 (20260906 容灾)"""
+    """K线远程拉取(20260907 改为前复权优先):
+      腾讯qfq → 东财fqt=1 → 新浪(不复权, 仅前两源均失败时兜底)。
+    前复权使除权日前后价格可比, 自绘K线图与均线/MACD/KDJ口径一致。
+    新浪 getKLineData 不支持复权参数, 故降为最后兜底。"""
     out: list[dict] = []
-    sina_err = ""
-    tried_sina = _sina_available()
-    if tried_sina:
-        try:
-            data = _get(SINA_KLINE, {"symbol": symbol, "scale": 240, "ma": "no", "datalen": datalen})
-            if isinstance(data, list):
-                for d in data:
-                    try:
-                        out.append({
-                            "day": d.get("day"),
-                            "open": float(d["open"]),
-                            "high": float(d["high"]),
-                            "low": float(d["low"]),
-                            "close": float(d["close"]),
-                            "volume": float(d["volume"]),
-                        })
-                    except (KeyError, ValueError, TypeError):
-                        continue
-            if not out:
-                sina_err = "新浪K线返回为空"
-        except Exception as e:  # noqa: BLE001
-            sina_err = str(e)[:80]
+    # ---- 主源: 腾讯前复权 ----
+    try:
+        out = _fetch_kline_tencent(symbol, datalen)
+    except Exception as e:  # noqa: BLE001
+        print(f"[source] [{bj_now()}] 腾讯K线(qfq)失败 {symbol}: {str(e)[:60]}, 改用东财", flush=True)
+    # ---- 备源: 东财前复权 ----
     if not out:
-        # ---- 腾讯备源 → 东财第三源 ----
-        if sina_err:
-            _record_sina_failure(sina_err)  # 单只K线失败按频次累计, 不立即熔断 (20260906 修复)
         try:
-            out = _fetch_kline_tencent(symbol, datalen)
+            out = _fetch_kline_eastmoney(symbol, datalen)
         except Exception as e:  # noqa: BLE001
-            print(f"[source] [{bj_now()}] 腾讯K线备源失败 {symbol}: {str(e)[:60]}, 改用东财", flush=True)
-        if not out:
+            print(f"[source] [{bj_now()}] 东财K线(fqt=1)失败 {symbol}: {str(e)[:60]}, 改用新浪兜底", flush=True)
+    # ---- 最后兜底: 新浪(不复权, 仅前两源均失败) ----
+    if not out:
+        sina_err = ""
+        if _sina_available():
             try:
-                out = _fetch_kline_eastmoney(symbol, datalen)
+                data = _get(SINA_KLINE, {"symbol": symbol, "scale": 240, "ma": "no", "datalen": datalen})
+                if isinstance(data, list):
+                    for d in data:
+                        try:
+                            out.append({
+                                "day": d.get("day"),
+                                "open": float(d["open"]),
+                                "high": float(d["high"]),
+                                "low": float(d["low"]),
+                                "close": float(d["close"]),
+                                "volume": float(d["volume"]),
+                            })
+                        except (KeyError, ValueError, TypeError):
+                            continue
+                if not out:
+                    sina_err = "新浪K线返回为空"
             except Exception as e:  # noqa: BLE001
-                print(f"[source] [{bj_now()}] K线三源均失败 {symbol}: 新浪:{sina_err[:40]} / 东财:{str(e)[:60]}", flush=True)
-                return []
+                sina_err = str(e)[:80]
+            if sina_err:
+                _record_sina_failure(sina_err)
+        if not out:
+            print(f"[source] [{bj_now()}] K线三源均失败 {symbol}: {sina_err[:60]}", flush=True)
     return out
 
 
