@@ -580,15 +580,27 @@ def _get(url: str, params: dict | None = None, timeout: int = 15) -> Any:
 # ============================================================
 # 数据层: 全市场实时快照
 # ============================================================
+# fetch_spot_all 内存缓存: 避免选股时每只股票补全当日bar都重复拉全市场快照
+_SPOT_MEM_CACHE = {"data": None, "ts": 0.0}
+_SPOT_MEM_TTL = 30  # 30秒TTL, 盘中足够新, 收盘后几乎不变
+
+
 def fetch_spot_all() -> list[dict]:
     """拉取沪深A股 + 北交所 全部实时快照, 返回扁平化字典列表。
     收盘后优先使用本地缓存; 盘中实时拉取。
-    20260906 容灾: 新浪主源失败(或熔断期内)时, 用本地缓存的股票池 + 腾讯批量行情兜底。"""
+    20260906 容灾: 新浪主源失败(或熔断期内)时, 用本地缓存的股票池 + 腾讯批量行情兜底。
+    20260907 性能: 增加内存TTL缓存, 解决选股时N只股票各自触发全市场快照拉取导致的请求爆炸。"""
+    # 内存缓存命中
+    now = time.time()
+    if _SPOT_MEM_CACHE["data"] is not None and (now - _SPOT_MEM_CACHE["ts"]) < _SPOT_MEM_TTL:
+        return _SPOT_MEM_CACHE["data"]
     # 收盘后: 优先用本地缓存
     if _should_use_spot_cache():
         cache_date = _cache_date_for_fetch()
         cached = _load_spot_cache(cache_date)
         if cached is not None:
+            _SPOT_MEM_CACHE["data"] = cached
+            _SPOT_MEM_CACHE["ts"] = now
             return cached
     try:
         tried_sina = _sina_available()
@@ -620,6 +632,9 @@ def fetch_spot_all() -> list[dict]:
         # 收盘后保存缓存
         if _should_use_spot_cache() and rows:
             _save_spot_cache(_cache_date_for_fetch(), rows)
+        # 更新内存缓存
+        _SPOT_MEM_CACHE["data"] = rows
+        _SPOT_MEM_CACHE["ts"] = time.time()
         return rows
     except Exception as e:  # noqa: BLE001
         # ---- 腾讯备源 → 东财第三源: 本地股票池 + 批量刷新价格 ----
@@ -635,6 +650,9 @@ def fetch_spot_all() -> list[dict]:
             rows = _fetch_spot_eastmoney([u["symbol"] or u["code"] for u in universe])
         if not rows:
             raise RuntimeError(f"新浪主源失败且腾讯/东财备源均无数据: {str(e)[:60]}") from e
+        # 更新内存缓存 (备源数据也缓存)
+        _SPOT_MEM_CACHE["data"] = rows
+        _SPOT_MEM_CACHE["ts"] = time.time()
         return rows
 
 
@@ -690,7 +708,7 @@ def _kline_has_today(bars: list[dict] | None, today_str: str) -> bool:
     return (bars[-1].get("day") or "")[:10].replace("-", "") >= today_str
 
 
-def fetch_kline(symbol: str, datalen: int = 40) -> list[dict]:
+def fetch_kline(symbol: str, datalen: int = 40, spot_data: list[dict] | None = None) -> list[dict]:
     """返回 [{day,open,high,low,close,volume}, ...] 含最近交易日。
     20260906 缓存策略 (按用户要求):
       交易日15:00后刷新时, 先检查数据源是否有'今日最新数据':
@@ -699,7 +717,8 @@ def fetch_kline(symbol: str, datalen: int = 40) -> list[dict]:
         远端也没有则用spot快照补全当日bar并落盘;
       · 都没有今日数据 → 用历史数据顶上, 且【不落盘】(不锁死缓存),
         后续刷新会继续检查, 直到拿到今日最新数据。
-    容灾: 新浪主源失败(或熔断期内)自动切换腾讯/东财备源。"""
+    容灾: 新浪主源失败(或熔断期内)自动切换腾讯/东财备源。
+    20260907 性能: 可选 spot_data 参数, 选股时传入已拉取的全市场快照, 避免每只股票重复拉取。"""
     after_close = _is_after_close()
     cache_date = _cache_date_for_fetch()
     today_str = _latest_trade_date_str()
@@ -718,7 +737,7 @@ def fetch_kline(symbol: str, datalen: int = 40) -> list[dict]:
             _save_kline_cache(cache_date, symbol, fresh)
             return fresh
         # 远端暂无今日 → 用spot快照补全当日bar, 成功则落盘
-        patched = _patch_today_bar_from_spot(cached, symbol, today_str)
+        patched = _patch_today_bar_from_spot(cached, symbol, today_str, spot_data)
         if _kline_has_today(patched, today_str):
             _save_kline_cache(cache_date, symbol, patched)
             return patched
@@ -731,7 +750,7 @@ def fetch_kline(symbol: str, datalen: int = 40) -> list[dict]:
         return []
     if not _kline_has_today(out, today_str):
         # 源数据缺最近交易日 → 尝试用spot快照补全
-        out = _patch_today_bar_from_spot(out, symbol, today_str)
+        out = _patch_today_bar_from_spot(out, symbol, today_str, spot_data)
     # 落盘策略:
     #   收盘后: 只有含最近交易日的完整数据才写入缓存(避免数据滞后时把不完整
     #   数据锁死一整天); 否则只用历史数据, 不落盘, 后续刷新继续检查。
@@ -741,18 +760,24 @@ def fetch_kline(symbol: str, datalen: int = 40) -> list[dict]:
     return out
 
 
-def _patch_today_bar_from_spot(bars: list[dict], symbol: str, today_str: str) -> list[dict]:
+def _patch_today_bar_from_spot(bars: list[dict], symbol: str, today_str: str,
+                               spot_data: list[dict] | None = None) -> list[dict]:
     """用spot实时快照数据补全今天的K线条目。
     symbol: 如 sh601398; today_str: YYYYMMDD格式。
+    spot_data: 可选, 已拉取的全市场快照; 为None时调用 fetch_spot_all()。
     如果spot数据有今天的价格，追加一条K线; 否则原样返回。"""
-    try:
-        spot_all = fetch_spot_all()
-    except Exception:
-        return bars
+    if spot_data is None:
+        try:
+            spot_all = fetch_spot_all()
+        except Exception:
+            return bars
+    else:
+        spot_all = spot_data
     # 转成标准日期格式 YYYY-MM-DD
     today_iso = f"{today_str[:4]}-{today_str[4:6]}-{today_str[6:]}"
+    code6 = symbol[-6:] if symbol[:2] in ("sh", "sz", "bj") else symbol
     for r in spot_all:
-        if r.get("symbol") == symbol or r.get("code") == symbol.lstrip("shszbj"):
+        if r.get("symbol") == symbol or r.get("code") == code6:
             try:
                 trade = float(r.get("trade") or 0)
                 if trade <= 0:
@@ -4224,9 +4249,10 @@ def run_screen(conds=None) -> dict:
     hit_cnt = [0]
     _set_screen_progress(f"并发拉取K线 0/{total_cand} (命中 0)…")
 
+    # 用 run_screen 开头已拉取的 spot 数据补全当日bar, 避免每只股票重复拉全市场快照 (20260907)
     def work(r):
         try:
-            bars = fetch_kline(r.get("symbol"), datalen=300)
+            bars = fetch_kline(r.get("symbol"), datalen=300, spot_data=spot)
             if not bars:
                 return None
             return check_stock(r, bars, conds)
