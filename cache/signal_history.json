@@ -1,7 +1,7 @@
 {
   "2026-09-07": {
     "screen": {
-      "updated": "2026-09-07 17:15:17",
+      "updated": "2026-09-07 17:22:02",
       "conds": [
         "b1",
         "b2",
@@ -5984,9 +5984,9 @@
       ]
     },
     "date": "2026-09-07",
-    "updated_at": "2026-09-07 17:15:25",
+    "updated_at": "2026-09-07 17:22:02",
     "ma": {
-      "updated": "2026-09-07 17:14:52",
+      "updated": "2026-09-07 17:21:42",
       "counts": {
         "多头排列": 219,
         "多头排列向上发散": 293,
@@ -5995,7 +5995,7 @@
         "粘合向下突破": 98
       },
       "total_stocks": 2476,
-      "elapsed_sec": 4.7,
+      "elapsed_sec": 4.9,
       "patterns": {
         "多头排列": [
           {
@@ -12430,6 +12430,38 @@
             "bs_motto": "趋势不变仓位不乱, 均线不破格局不散, 控制风险活得久"
           },
           {
+            "code": "002265",
+            "name": "建设工业",
+            "price": 20.8,
+            "change_pct": -3.03,
+            "atr_pct": 4.28,
+            "atr_shrink": false,
+            "ma5": 20.82,
+            "ma10": 19.7,
+            "ma20": 19.53,
+            "ma60": 18.55,
+            "amount_yi": 5.36,
+            "industry": "汽车",
+            "concept": "底盘与发动机系统、汽车",
+            "bs_signal": "wait",
+            "bs_side": "wait",
+            "bs_type": "观望",
+            "bs_entry": null,
+            "bs_stop": null,
+            "bs_target": null,
+            "bs_reason": "多头趋势但股价偏离MA20达6.5%, 等回踩",
+            "bs_actions": [
+              "等待回踩MA20±2%区域再考虑"
+            ],
+            "bs_trend": "多头趋势",
+            "bs_alignment": "多头排列",
+            "bs_vol": "正常",
+            "bs_resonance": [],
+            "bs_resonance_count": 0,
+            "bs_warnings": [],
+            "bs_motto": "趋势不变仓位不乱, 均线不破格局不散, 控制风险活得久"
+          },
+          {
             "code": "002443",
             "name": "金洲管道",
             "price": 11.55,
@@ -12461,38 +12493,6 @@
             "bs_warnings": [
               "乖离率11.5%, 距MA20过远, 追高风险增大"
             ],
-            "bs_motto": "趋势不变仓位不乱, 均线不破格局不散, 控制风险活得久"
-          },
-          {
-            "code": "002265",
-            "name": "建设工业",
-            "price": 20.8,
-            "change_pct": -3.03,
-            "atr_pct": 4.28,
-            "atr_shrink": false,
-            "ma5": 20.82,
-            "ma10": 19.7,
-            "ma20": 19.53,
-            "ma60": 18.55,
-            "amount_yi": 5.36,
-            "industry": "汽车",
-            "concept": "底盘与发动机系统、汽车",
-            "bs_signal": "wait",
-            "bs_side": "wait",
-            "bs_type": "观望",
-            "bs_entry": null,
-            "bs_stop": null,
-            "bs_target": null,
-            "bs_reason": "多头趋势但股价偏离MA20达6.5%, 等回踩",
-            "bs_actions": [
-              "等待回踩MA20±2%区域再考虑"
-            ],
-            "bs_trend": "多头趋势",
-            "bs_alignment": "多头排列",
-            "bs_vol": "正常",
-            "bs_resonance": [],
-            "bs_resonance_count": 0,
-            "bs_warnings": [],
             "bs_motto": "趋势不变仓位不乱, 均线不破格局不散, 控制风险活得久"
           },
           {
@@ -15751,19 +15751,19 @@
             "bs_motto": "卖点与买点镜像对称; 严格执行止损, 保护本金"
           },
           {
-            "code": "600961",
-            "name": "株冶集团",
-            "price": 25.25,
-            "change_pct": -0.47,
-            "atr_pct": 6.08,
-            "atr_shrink": false,
-            "ma5": 26.09,
-            "ma10": 26.61,
-            "ma20": 27.54,
-            "ma60": 27.34,
-            "amount_yi": 6.59,
-            "industry": "有色金属",
-            "concept": "铅锌、有色金属",
+            "code": "600875",
+            "name": "东方电气",
+            "price": 24.99,
+            "change_pct": -0.32,
+            "atr_pct": 3.4,
+            "atr_shrink": true,
+            "ma5": 24.89,
+            "ma10": 25.28,
+            "ma20": 25.99,
+            "ma60": 27.29,
+            "amount_yi": 6.51,
+            "industry": "电力设备",
+            "concept": "综合电力设备商、电力设备",
             "bs_signal": "sell",
             "bs_side": "sell",
             "bs_type": "卖点3: 空头排列",
@@ -15783,19 +15783,19 @@
             "bs_motto": "卖点与买点镜像对称; 严格执行止损, 保护本金"
           },
           {
-            "code": "600875",
-            "name": "东方电气",
-            "price": 24.99,
-            "change_pct": -0.32,
-            "atr_pct": 3.4,
-            "atr_shrink": true,
-            "ma5": 24.89,
-            "ma10": 25.28,
-            "ma20": 25.99,
-            "ma60": 27.29,
-            "amount_yi": 6.51,
-            "industry": "电力设备",
-            "concept": "综合电力设备商、电力设备",
+            "code": "600961",
+            "name": "株冶集团",
+            "price": 25.25,
+            "change_pct": -0.47,
+            "atr_pct": 6.08,
+            "atr_shrink": false,
+            "ma5": 26.09,
+            "ma10": 26.61,
+            "ma20": 27.54,
+            "ma60": 27.34,
+            "amount_yi": 6.59,
+            "industry": "有色金属",
+            "concept": "铅锌、有色金属",
             "bs_signal": "sell",
             "bs_side": "sell",
             "bs_type": "卖点3: 空头排列",
