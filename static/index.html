@@ -4612,7 +4612,7 @@ async function showKlinePreview(code, anchor){
     const curMk = (_MARKS[code]||{});
     const mkBtns = Object.entries(MARK_META).map(([k,v]) => {
       const active = (curMk.mark === v.char && !curMk.removed) ? ' active' : '';
-      return `<span class="kd-mk-btn${active}" style="color:${v.color}" title="${v.label}" onclick="popupToggleMark('${code}','${mkName}','${v.char}')">${v.char}</span>`;
+      return `<span class="kd-mk-btn${active}" style="color:${v.color}" title="${v.label}" onclick="popupToggleMark('${code}','${mkName}','${mkAttr(v.char)}')">${v.char}</span>`;
     }).join('');
     pop.innerHTML = `<div style="padding:6px 10px 2px;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:space-between">
         <div>${d.name ? esc(d.name)+' ' : ''}<span class="meta cp-code" title="点击复制代码" onclick="copyCode('${code}')">${code}</span> ${chgTxt}
