@@ -5120,11 +5120,31 @@ def api_stock_analyze(code: str = "", date: str = ""):
     analysis = []
     # 均线分析
     if not math.isnan(ma5[-1]) and not math.isnan(ma10[-1]) and not math.isnan(ma20[-1]):
-        if ma5[-1] > ma10[-1] > ma20[-1]:
+        m5, m10, m20 = ma5[-1], ma10[-1], ma20[-1]
+        # 三线发散度 = (最高-最低)/最低, 越小越粘合
+        ma_spread = (max(m5, m10, m20) - min(m5, m10, m20)) / min(m5, m10, m20) * 100
+        # 短期均线粘合度 = |MA5-MA10|/MA10
+        short_spread = abs(m5 - m10) / m10 * 100
+        ma20_flat = abs(ma20_slope_pct) < 0.1  # MA20近3日走平
+        if ma_spread < 3.0:
+            # 三线高度粘合 → 横盘
+            analysis.append({"item": "均线趋势", "desc": f"5/10/20日均线粘合(发散度{ma_spread:.1f}%)，横盘震荡，等待方向选择", "status": "中性"})
+        elif short_spread < 1.5:
+            # 短期均线粘合, 看MA20方向
+            if ma20_flat:
+                analysis.append({"item": "均线趋势", "desc": f"短期均线粘合(MA5/MA10差{short_spread:.1f}%)，MA20走平，横盘震荡", "status": "中性"})
+            elif ma20_slope_pct < 0:
+                analysis.append({"item": "均线趋势", "desc": f"短期均线粘合，受MA20({m20:.1f})压制，MA20斜率{ma20_slope_pct:+.2f}%偏弱，震荡偏弱", "status": "偏空"})
+            else:
+                analysis.append({"item": "均线趋势", "desc": f"短期均线粘合，MA20({m20:.1f})上行斜率{ma20_slope_pct:+.2f}%，震荡偏强", "status": "偏多"})
+        elif m5 > m10 > m20:
             analysis.append({"item": "均线趋势", "desc": "5/10/20日均线多头排列，中期趋势向上", "status": "看多"})
-        elif ma5[-1] < ma10[-1] < ma20[-1]:
-            analysis.append({"item": "均线趋势", "desc": f"5/10/20日均线空头排列，MA20斜率={ma20_slope_pct:+.2f}%（{'仍在下行' if ma20_slope_pct<-0.05 else '开始走平/拐头'}）", "status": "看空"})
-        elif ma5[-1] > ma10[-1]:
+        elif m5 < m10 < m20:
+            if ma20_flat:
+                analysis.append({"item": "均线趋势", "desc": f"均线空头排列但MA20走平(斜率{ma20_slope_pct:+.2f}%)，下跌动能减弱，接近横盘", "status": "偏空"})
+            else:
+                analysis.append({"item": "均线趋势", "desc": f"5/10/20日均线空头排列，MA20斜率={ma20_slope_pct:+.2f}%（{'仍在下行' if ma20_slope_pct<-0.05 else '开始走平/拐头'}）", "status": "看空"})
+        elif m5 > m10:
             analysis.append({"item": "均线趋势", "desc": "短期均线(5日)在10日上方，短期偏强", "status": "偏多"})
         else:
             analysis.append({"item": "均线趋势", "desc": "短期均线(5日)在10日下方，短期偏弱", "status": "偏空"})
