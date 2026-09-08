@@ -1041,9 +1041,9 @@
       ]
     },
     "date": "2026-09-08",
-    "updated_at": "2026-09-08 19:24:02",
+    "updated_at": "2026-09-08 19:24:42",
     "screen": {
-      "updated": "2026-09-08 19:20:06",
+      "updated": "2026-09-08 19:24:42",
       "conds": [
         "b1",
         "b2",
@@ -7005,6 +7005,140 @@
           "bs_motto": "买点要'缩量来、放量走'; 买前先写好入场价、止损价、目标价"
         },
         {
+          "code": "600969",
+          "name": "郴电国际",
+          "symbol": "sh600969",
+          "industry": "公用事业",
+          "concept": "电能综合服务、公用事业",
+          "price": 10.72,
+          "change_pct": 4.38,
+          "amount_yi": 3.34,
+          "float_mv_yi": 39.67,
+          "ma5": 10.32,
+          "ma10": 10.17,
+          "ma20": 9.44,
+          "ma60": 8.51,
+          "ma250": 9.21,
+          "bias": 13.57,
+          "kdj_j": 80.05,
+          "atr_pct": 5.9,
+          "score": 4,
+          "n_active": 5,
+          "groups": {
+            "gA": true,
+            "gB": false,
+            "gC": true,
+            "gD": true,
+            "gE": true
+          },
+          "active": {
+            "gA": true,
+            "gB": true,
+            "gC": true,
+            "gD": true,
+            "gE": true
+          },
+          "est_5d": 1.5,
+          "est_10d": 2.5,
+          "est_20d": 4.0,
+          "tags": [
+            "多头排列",
+            "方向向上",
+            "站上MA20",
+            "年线保护",
+            "放量突破",
+            "乖离安全",
+            "波段弹性",
+            "均线多头",
+            "超买谨慎"
+          ],
+          "bs_signal": "wait",
+          "bs_side": "wait",
+          "bs_type": "观望",
+          "bs_entry": null,
+          "bs_stop": null,
+          "bs_target": null,
+          "bs_reason": "多头趋势但股价偏离MA20达13.6%, 等回踩",
+          "bs_trend": "多头趋势",
+          "bs_alignment": "多头排列",
+          "bs_vol": "正常",
+          "bs_actions": [
+            "等待回踩MA20±2%区域再考虑"
+          ],
+          "bs_resonance": [],
+          "bs_resonance_count": 0,
+          "bs_warnings": [],
+          "bs_motto": "趋势不变仓位不乱, 均线不破格局不散, 控制风险活得久"
+        },
+        {
+          "code": "600356",
+          "name": "恒丰纸业",
+          "symbol": "sh600356",
+          "industry": "轻工制造",
+          "concept": "特种纸、轻工制造",
+          "price": 9.41,
+          "change_pct": 3.07,
+          "amount_yi": 0.96,
+          "float_mv_yi": 28.11,
+          "ma5": 9.07,
+          "ma10": 8.96,
+          "ma20": 8.91,
+          "ma60": 8.26,
+          "ma250": 8.9,
+          "bias": 5.56,
+          "kdj_j": 91.32,
+          "atr_pct": 2.69,
+          "score": 4,
+          "n_active": 5,
+          "groups": {
+            "gA": true,
+            "gB": true,
+            "gC": true,
+            "gD": true,
+            "gE": false
+          },
+          "active": {
+            "gA": true,
+            "gB": true,
+            "gC": true,
+            "gD": true,
+            "gE": true
+          },
+          "est_5d": 1.5,
+          "est_10d": 2.5,
+          "est_20d": 4.0,
+          "tags": [
+            "多头排列",
+            "方向向上",
+            "站上MA20",
+            "年线保护",
+            "MA20拐头",
+            "放量突破",
+            "乖离安全",
+            "均线多头",
+            "超买谨慎"
+          ],
+          "bs_signal": "wait",
+          "bs_side": "wait",
+          "bs_type": "观望",
+          "bs_entry": null,
+          "bs_stop": null,
+          "bs_target": null,
+          "bs_reason": "MA20走平, 震荡市该策略停用",
+          "bs_trend": "多头趋势",
+          "bs_alignment": "多头排列",
+          "bs_vol": "放量",
+          "bs_actions": [
+            "空仓等待趋势明朗"
+          ],
+          "bs_resonance": [
+            "MACD: 零轴上方金叉, 趋势与动能共振"
+          ],
+          "bs_resonance_count": 1,
+          "bs_warnings": [],
+          "bs_motto": "趋势不变仓位不乱, 均线不破格局不散, 控制风险活得久"
+        },
+        {
           "code": "600256",
           "name": "广汇能源",
           "symbol": "sh600256",
@@ -7070,142 +7204,6 @@
           "bs_warnings": [
             "乖离率8.4%, 距MA20过远, 追高风险增大"
           ],
-          "bs_motto": "趋势不变仓位不乱, 均线不破格局不散, 控制风险活得久"
-        },
-        {
-          "code": "603228",
-          "name": "景旺电子",
-          "symbol": "sh603228",
-          "industry": "电子",
-          "concept": "印制电路板、电子",
-          "price": 106.97,
-          "change_pct": 0.94,
-          "amount_yi": 67.29,
-          "float_mv_yi": 1050.46,
-          "ma5": 97.3,
-          "ma10": 95.31,
-          "ma20": 94.81,
-          "ma60": 81.23,
-          "ma250": 70.14,
-          "bias": 12.83,
-          "kdj_j": 97.64,
-          "atr_pct": 6.02,
-          "score": 4,
-          "n_active": 5,
-          "groups": {
-            "gA": true,
-            "gB": true,
-            "gC": false,
-            "gD": true,
-            "gE": true
-          },
-          "active": {
-            "gA": true,
-            "gB": true,
-            "gC": true,
-            "gD": true,
-            "gE": true
-          },
-          "est_5d": 1.5,
-          "est_10d": 2.5,
-          "est_20d": 4.0,
-          "tags": [
-            "多头排列",
-            "方向向上",
-            "站上MA20",
-            "年线保护",
-            "金叉确认",
-            "乖离安全",
-            "波段弹性",
-            "均线多头",
-            "超买谨慎"
-          ],
-          "bs_signal": "wait",
-          "bs_side": "wait",
-          "bs_type": "观望",
-          "bs_entry": null,
-          "bs_stop": null,
-          "bs_target": null,
-          "bs_reason": "多头趋势但股价偏离MA20达12.8%, 等回踩",
-          "bs_trend": "多头趋势",
-          "bs_alignment": "多头排列",
-          "bs_vol": "正常",
-          "bs_actions": [
-            "等待回踩MA20±2%区域再考虑"
-          ],
-          "bs_resonance": [
-            "MACD: 零轴上方金叉, 趋势与动能共振"
-          ],
-          "bs_resonance_count": 1,
-          "bs_warnings": [
-            "乖离率12.2%, 距MA20过远, 追高风险增大"
-          ],
-          "bs_motto": "趋势不变仓位不乱, 均线不破格局不散, 控制风险活得久"
-        },
-        {
-          "code": "600969",
-          "name": "郴电国际",
-          "symbol": "sh600969",
-          "industry": "公用事业",
-          "concept": "电能综合服务、公用事业",
-          "price": 10.72,
-          "change_pct": 4.38,
-          "amount_yi": 3.34,
-          "float_mv_yi": 39.67,
-          "ma5": 10.32,
-          "ma10": 10.17,
-          "ma20": 9.44,
-          "ma60": 8.51,
-          "ma250": 9.21,
-          "bias": 13.57,
-          "kdj_j": 80.05,
-          "atr_pct": 5.9,
-          "score": 4,
-          "n_active": 5,
-          "groups": {
-            "gA": true,
-            "gB": false,
-            "gC": true,
-            "gD": true,
-            "gE": true
-          },
-          "active": {
-            "gA": true,
-            "gB": true,
-            "gC": true,
-            "gD": true,
-            "gE": true
-          },
-          "est_5d": 1.5,
-          "est_10d": 2.5,
-          "est_20d": 4.0,
-          "tags": [
-            "多头排列",
-            "方向向上",
-            "站上MA20",
-            "年线保护",
-            "放量突破",
-            "乖离安全",
-            "波段弹性",
-            "均线多头",
-            "超买谨慎"
-          ],
-          "bs_signal": "wait",
-          "bs_side": "wait",
-          "bs_type": "观望",
-          "bs_entry": null,
-          "bs_stop": null,
-          "bs_target": null,
-          "bs_reason": "多头趋势但股价偏离MA20达13.6%, 等回踩",
-          "bs_trend": "多头趋势",
-          "bs_alignment": "多头排列",
-          "bs_vol": "正常",
-          "bs_actions": [
-            "等待回踩MA20±2%区域再考虑"
-          ],
-          "bs_resonance": [],
-          "bs_resonance_count": 0,
-          "bs_warnings": [],
           "bs_motto": "趋势不变仓位不乱, 均线不破格局不散, 控制风险活得久"
         },
         {
@@ -7347,31 +7345,31 @@
           "bs_motto": "买点要'缩量来、放量走'; 买前先写好入场价、止损价、目标价"
         },
         {
-          "code": "600356",
-          "name": "恒丰纸业",
-          "symbol": "sh600356",
-          "industry": "轻工制造",
-          "concept": "特种纸、轻工制造",
-          "price": 9.41,
-          "change_pct": 3.07,
-          "amount_yi": 0.96,
-          "float_mv_yi": 28.11,
-          "ma5": 9.07,
-          "ma10": 8.96,
-          "ma20": 8.91,
-          "ma60": 8.26,
-          "ma250": 8.9,
-          "bias": 5.56,
-          "kdj_j": 91.32,
-          "atr_pct": 2.69,
+          "code": "603228",
+          "name": "景旺电子",
+          "symbol": "sh603228",
+          "industry": "电子",
+          "concept": "印制电路板、电子",
+          "price": 106.97,
+          "change_pct": 0.94,
+          "amount_yi": 67.29,
+          "float_mv_yi": 1050.46,
+          "ma5": 97.3,
+          "ma10": 95.31,
+          "ma20": 94.81,
+          "ma60": 81.23,
+          "ma250": 70.14,
+          "bias": 12.83,
+          "kdj_j": 97.64,
+          "atr_pct": 6.02,
           "score": 4,
           "n_active": 5,
           "groups": {
             "gA": true,
             "gB": true,
-            "gC": true,
+            "gC": false,
             "gD": true,
-            "gE": false
+            "gE": true
           },
           "active": {
             "gA": true,
@@ -7388,9 +7386,9 @@
             "方向向上",
             "站上MA20",
             "年线保护",
-            "MA20拐头",
-            "放量突破",
+            "金叉确认",
             "乖离安全",
+            "波段弹性",
             "均线多头",
             "超买谨慎"
           ],
@@ -7400,18 +7398,20 @@
           "bs_entry": null,
           "bs_stop": null,
           "bs_target": null,
-          "bs_reason": "MA20走平, 震荡市该策略停用",
+          "bs_reason": "多头趋势但股价偏离MA20达12.8%, 等回踩",
           "bs_trend": "多头趋势",
           "bs_alignment": "多头排列",
-          "bs_vol": "放量",
+          "bs_vol": "正常",
           "bs_actions": [
-            "空仓等待趋势明朗"
+            "等待回踩MA20±2%区域再考虑"
           ],
           "bs_resonance": [
             "MACD: 零轴上方金叉, 趋势与动能共振"
           ],
           "bs_resonance_count": 1,
-          "bs_warnings": [],
+          "bs_warnings": [
+            "乖离率12.2%, 距MA20过远, 追高风险增大"
+          ],
           "bs_motto": "趋势不变仓位不乱, 均线不破格局不散, 控制风险活得久"
         },
         {
@@ -7691,7 +7691,7 @@
       ]
     },
     "ma": {
-      "updated": "2026-09-08 19:20:09",
+      "updated": "2026-09-08 19:24:22",
       "counts": {
         "多头排列": 276,
         "多头排列向上发散": 286,
@@ -7702,7 +7702,7 @@
         "MACD底背离": 93
       },
       "total_stocks": 2568,
-      "elapsed_sec": 37.9,
+      "elapsed_sec": 32.6,
       "patterns": {
         "多头排列": [
           {
