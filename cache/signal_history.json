@@ -932,9 +932,9 @@
       ]
     },
     "date": "2026-09-08",
-    "updated_at": "2026-09-08 17:32:55",
+    "updated_at": "2026-09-08 18:22:32",
     "screen": {
-      "updated": "2026-09-08 17:32:55",
+      "updated": "2026-09-08 18:22:32",
       "conds": [
         "b1",
         "b2",
@@ -1234,77 +1234,6 @@
           "bs_motto": "买点要'缩量来、放量走'; 买前先写好入场价、止损价、目标价"
         },
         {
-          "code": "002246",
-          "name": "北化股份",
-          "symbol": "sz002246",
-          "industry": "基础化工",
-          "concept": "民爆制品、基础化工",
-          "price": 22.74,
-          "change_pct": 5.87,
-          "amount_yi": 5.98,
-          "float_mv_yi": 124.85,
-          "ma5": 21.66,
-          "ma10": 20.93,
-          "ma20": 20.8,
-          "ma60": 19.69,
-          "ma250": 20.5,
-          "bias": 9.33,
-          "kdj_j": 102.65,
-          "atr_pct": 3.38,
-          "score": 5,
-          "n_active": 5,
-          "groups": {
-            "gA": true,
-            "gB": true,
-            "gC": true,
-            "gD": true,
-            "gE": true
-          },
-          "active": {
-            "gA": true,
-            "gB": true,
-            "gC": true,
-            "gD": true,
-            "gE": true
-          },
-          "est_5d": 1.5,
-          "est_10d": 2.5,
-          "est_20d": 4.0,
-          "tags": [
-            "多头排列",
-            "方向向上",
-            "站上MA20",
-            "年线保护",
-            "金叉确认",
-            "低位金叉",
-            "MA20拐头",
-            "放量突破",
-            "乖离安全",
-            "波段弹性",
-            "均线多头",
-            "超买谨慎"
-          ],
-          "bs_signal": "wait",
-          "bs_side": "wait",
-          "bs_type": "观望",
-          "bs_entry": null,
-          "bs_stop": null,
-          "bs_target": null,
-          "bs_reason": "MA20走平, 震荡市该策略停用",
-          "bs_trend": "多头趋势",
-          "bs_alignment": "多头排列",
-          "bs_vol": "放量",
-          "bs_actions": [
-            "空仓等待趋势明朗"
-          ],
-          "bs_resonance": [],
-          "bs_resonance_count": 0,
-          "bs_warnings": [
-            "乖离率8.6%, 距MA20过远, 追高风险增大"
-          ],
-          "bs_motto": "趋势不变仓位不乱, 均线不破格局不散, 控制风险活得久"
-        },
-        {
           "code": "002258",
           "name": "利尔化学",
           "symbol": "sz002258",
@@ -1373,6 +1302,77 @@
           ],
           "bs_resonance_count": 1,
           "bs_warnings": [],
+          "bs_motto": "趋势不变仓位不乱, 均线不破格局不散, 控制风险活得久"
+        },
+        {
+          "code": "002246",
+          "name": "北化股份",
+          "symbol": "sz002246",
+          "industry": "基础化工",
+          "concept": "民爆制品、基础化工",
+          "price": 22.74,
+          "change_pct": 5.87,
+          "amount_yi": 5.98,
+          "float_mv_yi": 124.85,
+          "ma5": 21.66,
+          "ma10": 20.93,
+          "ma20": 20.8,
+          "ma60": 19.69,
+          "ma250": 20.5,
+          "bias": 9.33,
+          "kdj_j": 102.65,
+          "atr_pct": 3.38,
+          "score": 5,
+          "n_active": 5,
+          "groups": {
+            "gA": true,
+            "gB": true,
+            "gC": true,
+            "gD": true,
+            "gE": true
+          },
+          "active": {
+            "gA": true,
+            "gB": true,
+            "gC": true,
+            "gD": true,
+            "gE": true
+          },
+          "est_5d": 1.5,
+          "est_10d": 2.5,
+          "est_20d": 4.0,
+          "tags": [
+            "多头排列",
+            "方向向上",
+            "站上MA20",
+            "年线保护",
+            "金叉确认",
+            "低位金叉",
+            "MA20拐头",
+            "放量突破",
+            "乖离安全",
+            "波段弹性",
+            "均线多头",
+            "超买谨慎"
+          ],
+          "bs_signal": "wait",
+          "bs_side": "wait",
+          "bs_type": "观望",
+          "bs_entry": null,
+          "bs_stop": null,
+          "bs_target": null,
+          "bs_reason": "MA20走平, 震荡市该策略停用",
+          "bs_trend": "多头趋势",
+          "bs_alignment": "多头排列",
+          "bs_vol": "放量",
+          "bs_actions": [
+            "空仓等待趋势明朗"
+          ],
+          "bs_resonance": [],
+          "bs_resonance_count": 0,
+          "bs_warnings": [
+            "乖离率8.6%, 距MA20过远, 追高风险增大"
+          ],
           "bs_motto": "趋势不变仓位不乱, 均线不破格局不散, 控制风险活得久"
         },
         {
@@ -6964,74 +6964,6 @@
           "bs_motto": "趋势不变仓位不乱, 均线不破格局不散, 控制风险活得久"
         },
         {
-          "code": "600356",
-          "name": "恒丰纸业",
-          "symbol": "sh600356",
-          "industry": "轻工制造",
-          "concept": "特种纸、轻工制造",
-          "price": 9.41,
-          "change_pct": 3.07,
-          "amount_yi": 0.96,
-          "float_mv_yi": 28.11,
-          "ma5": 9.07,
-          "ma10": 8.96,
-          "ma20": 8.91,
-          "ma60": 8.26,
-          "ma250": 8.9,
-          "bias": 5.56,
-          "kdj_j": 91.32,
-          "atr_pct": 2.69,
-          "score": 4,
-          "n_active": 5,
-          "groups": {
-            "gA": true,
-            "gB": true,
-            "gC": true,
-            "gD": true,
-            "gE": false
-          },
-          "active": {
-            "gA": true,
-            "gB": true,
-            "gC": true,
-            "gD": true,
-            "gE": true
-          },
-          "est_5d": 1.5,
-          "est_10d": 2.5,
-          "est_20d": 4.0,
-          "tags": [
-            "多头排列",
-            "方向向上",
-            "站上MA20",
-            "年线保护",
-            "MA20拐头",
-            "放量突破",
-            "乖离安全",
-            "均线多头",
-            "超买谨慎"
-          ],
-          "bs_signal": "wait",
-          "bs_side": "wait",
-          "bs_type": "观望",
-          "bs_entry": null,
-          "bs_stop": null,
-          "bs_target": null,
-          "bs_reason": "MA20走平, 震荡市该策略停用",
-          "bs_trend": "多头趋势",
-          "bs_alignment": "多头排列",
-          "bs_vol": "放量",
-          "bs_actions": [
-            "空仓等待趋势明朗"
-          ],
-          "bs_resonance": [
-            "MACD: 零轴上方金叉, 趋势与动能共振"
-          ],
-          "bs_resonance_count": 1,
-          "bs_warnings": [],
-          "bs_motto": "趋势不变仓位不乱, 均线不破格局不散, 控制风险活得久"
-        },
-        {
           "code": "603323",
           "name": "苏农银行",
           "symbol": "sh603323",
@@ -7169,6 +7101,74 @@
           "bs_warnings": [
             "乖离率12.2%, 距MA20过远, 追高风险增大"
           ],
+          "bs_motto": "趋势不变仓位不乱, 均线不破格局不散, 控制风险活得久"
+        },
+        {
+          "code": "600356",
+          "name": "恒丰纸业",
+          "symbol": "sh600356",
+          "industry": "轻工制造",
+          "concept": "特种纸、轻工制造",
+          "price": 9.41,
+          "change_pct": 3.07,
+          "amount_yi": 0.96,
+          "float_mv_yi": 28.11,
+          "ma5": 9.07,
+          "ma10": 8.96,
+          "ma20": 8.91,
+          "ma60": 8.26,
+          "ma250": 8.9,
+          "bias": 5.56,
+          "kdj_j": 91.32,
+          "atr_pct": 2.69,
+          "score": 4,
+          "n_active": 5,
+          "groups": {
+            "gA": true,
+            "gB": true,
+            "gC": true,
+            "gD": true,
+            "gE": false
+          },
+          "active": {
+            "gA": true,
+            "gB": true,
+            "gC": true,
+            "gD": true,
+            "gE": true
+          },
+          "est_5d": 1.5,
+          "est_10d": 2.5,
+          "est_20d": 4.0,
+          "tags": [
+            "多头排列",
+            "方向向上",
+            "站上MA20",
+            "年线保护",
+            "MA20拐头",
+            "放量突破",
+            "乖离安全",
+            "均线多头",
+            "超买谨慎"
+          ],
+          "bs_signal": "wait",
+          "bs_side": "wait",
+          "bs_type": "观望",
+          "bs_entry": null,
+          "bs_stop": null,
+          "bs_target": null,
+          "bs_reason": "MA20走平, 震荡市该策略停用",
+          "bs_trend": "多头趋势",
+          "bs_alignment": "多头排列",
+          "bs_vol": "放量",
+          "bs_actions": [
+            "空仓等待趋势明朗"
+          ],
+          "bs_resonance": [
+            "MACD: 零轴上方金叉, 趋势与动能共振"
+          ],
+          "bs_resonance_count": 1,
+          "bs_warnings": [],
           "bs_motto": "趋势不变仓位不乱, 均线不破格局不散, 控制风险活得久"
         },
         {

@@ -3357,6 +3357,70 @@ def analyze_buy_sell(bars: list[dict]) -> dict:
     _style_extra["avg_up_run_days_60d"] = round(avg_run_pos, 1)
     _style_extra["avg_down_run_days_60d"] = round(avg_run_neg, 1)
 
+    # ====== ZigZag 波段周期统计 (阈值=1×ATR, 抓短线波段的真实波峰波谷) ======
+    # 原理: 反向波动≥1×ATR才确认转折点, 过滤日内噪音, 保留真实波段结构
+    _zz_threshold = atr_abs  # 1×ATR 作为转折阈值 (自适应波动率)
+    _zz_pivots = []  # [(index, price, 'H'/'L'), ...]
+    if len(closes) >= 30 and _zz_threshold > 0:
+        _zz_dir = 0  # 0=neutral, 1=up, -1=down
+        _zz_li = 0
+        _zz_lp = closes[0]
+        for _i in range(1, len(closes)):
+            if _zz_dir >= 0:
+                if closes[_i] > _zz_lp:
+                    _zz_lp = closes[_i]; _zz_li = _i
+                elif (_zz_lp - closes[_i]) >= _zz_threshold:
+                    _zz_pivots.append((_zz_li, _zz_lp, 'H'))
+                    _zz_dir = -1; _zz_lp = closes[_i]; _zz_li = _i
+            if _zz_dir <= 0:
+                if closes[_i] < _zz_lp:
+                    _zz_lp = closes[_i]; _zz_li = _i
+                elif (closes[_i] - _zz_lp) >= _zz_threshold:
+                    _zz_pivots.append((_zz_li, _zz_lp, 'L'))
+                    _zz_dir = 1; _zz_lp = closes[_i]; _zz_li = _i
+
+    _zz_up_days, _zz_up_pct = [], []
+    _zz_dn_days, _zz_dn_pct = [], []
+    for _j in range(1, len(_zz_pivots)):
+        _i1, _p1, _t1 = _zz_pivots[_j - 1]
+        _i2, _p2, _t2 = _zz_pivots[_j]
+        _d = _i2 - _i1
+        _pct = (_p2 / _p1 - 1) * 100
+        if _t1 == 'L' and _t2 == 'H':
+            _zz_up_days.append(_d); _zz_up_pct.append(_pct)
+        elif _t1 == 'H' and _t2 == 'L':
+            _zz_dn_days.append(_d); _zz_dn_pct.append(_pct)
+
+    def _zz_median(arr):
+        if not arr:
+            return 0.0
+        _s = sorted(arr)
+        _n = len(_s)
+        return _s[_n // 2] if _n % 2 else (_s[_n // 2 - 1] + _s[_n // 2]) / 2
+
+    _style_extra["zz_pivot_count"] = len(_zz_pivots)
+    if _zz_up_days:
+        _style_extra["zz_up_days_avg"] = round(sum(_zz_up_days) / len(_zz_up_days), 1)
+        _style_extra["zz_up_days_med"] = round(_zz_median(_zz_up_days), 1)
+        _style_extra["zz_up_pct_avg"] = round(sum(_zz_up_pct) / len(_zz_up_pct), 1)
+        _style_extra["zz_up_pct_med"] = round(_zz_median(_zz_up_pct), 1)
+    if _zz_dn_days:
+        _style_extra["zz_dn_days_avg"] = round(sum(_zz_dn_days) / len(_zz_dn_days), 1)
+        _style_extra["zz_dn_days_med"] = round(_zz_median(_zz_dn_days), 1)
+        _style_extra["zz_dn_pct_avg"] = round(sum(_zz_dn_pct) / len(_zz_dn_pct), 1)
+        _style_extra["zz_dn_pct_med"] = round(_zz_median(_zz_dn_pct), 1)
+
+    # 当前横盘区间 (近20日高低点) — 用于区间操作和突破目标测算
+    _h20 = max(highs[-20:]) if len(highs) >= 20 else max(highs)
+    _l20 = min(lows[-20:]) if len(lows) >= 20 else min(lows)
+    _style_extra["range_20d_high"] = round(_h20, 2)
+    _style_extra["range_20d_low"] = round(_l20, 2)
+    _style_extra["range_20d_amp_pct"] = round((_h20 / _l20 - 1) * 100, 1) if _l20 > 0 else 0
+    _style_extra["range_pos_pct"] = round((c - _l20) / (_h20 - _l20) * 100, 1) if _h20 > _l20 else 50
+    # 突破目标位 = 区间边沿 ± 2×ATR
+    _style_extra["breakout_target_up"] = round(_h20 + atr_abs * 2, 2)
+    _style_extra["breakout_target_dn"] = round(_l20 - atr_abs * 2, 2)
+
     # ====== 打分: 趋势得分 / 波段得分 (0~100, 越大越像) ======
     trend_score = 50.0
     swing_score = 50.0
@@ -3841,6 +3905,9 @@ def analyze_buy_sell(bars: list[dict]) -> dict:
                           f"趋势票容忍稍宽, 避免正常回踩被洗出")
     else:  # 波段票: 1 档止盈 + 紧止损 (到价位/到时间任一走)
         op_tip = f"🎯 波段票 · 吃到一段立即走, 不恋战; 波段性{swing_score}分, ATR={atr_pct:.1f}%"
+        # ZigZag 波段周期提示
+        if _zz_up_days:
+            op_tip += f"; 该股典型波段≈{_zz_median(_zz_up_days):.0f}天/{_zz_median(_zz_up_pct):.0f}%"
         # 20260904 同步 ATR 新档位: <4%=稳波动, ≥4%=高波动
         if atr_pct >= 4.0:
             op_tip += " 🔥 高波动波段(ATR≥4%), 波段止盈目标上抬一档, 目标肉=ATR×1.2"
@@ -3854,15 +3921,19 @@ def analyze_buy_sell(bars: list[dict]) -> dict:
             hold_range_cn = f"{days_min}～{days_max} 天"
         hold_days_text = (f"建议持有周期 {hold_range_cn} {swing_long_marker}"
                           f"（仅参考; 到了止盈位立即走, 没到止损位也破了就走, 天数只做参考）")
+        _range_note = f"近20日横盘区间下沿{_l20:.0f}也是强支撑参考；" if _h20 > _l20 else ""
         buy_plan = (f"🎯 波段票买点 = 前期低点附近{support_level:.2f} 或 踩均线 MA20({ma20_ref:.2f}) 附近挂单，"
                     f"对应已给档位中的买2(稳健≈{t2_price}) / 买3(保守≈{t3_price})，"
+                    f"{_range_note}"
                     f"**只一次性建仓不补仓**，仓位 ≤ 总仓 {'15%' if atr_pct >= 4 else '20%'}，"
                     f"{'高波动票严格控仓≤15%避免单日大波动爆损;' if atr_pct >= 4 else ''}"
                     f"**不追高**（若现价离买2/买3超过2%就放弃等回踩）")
         if tp_single:
             tgt1 = (tp_single / c - 1) * 100 if c > 0 else 0
+            _zz_up_med_pct = _zz_median(_zz_up_pct) if _zz_up_pct else 0
             take_profit_plan = (f"波段票 1 档止盈: 主兑现位 {tp_single} (现价上方≈+{tgt1:.1f}%, 对应近60日正收益中位数≈{q50_pos:.1f}%)。"
-                                f"到价**一次性清仓**，留小尾巴容易从赚到亏；如果第二天跳空高开越过止盈 3% 以上再留 1/3 看惯性，其余全走。")
+                                f"到价**一次性清仓**，留小尾巴容易从赚到亏；如果第二天跳空高开越过止盈 3% 以上再留 1/3 看惯性，其余全走。"
+                                + (f" 参考: 该股ZigZag上涨中位数≈{_zz_up_med_pct:.0f}%, 20日区间上沿{_h20:.0f}附近也应减仓。" if _zz_up_med_pct else ""))
         else:
             take_profit_plan = "波段票到止盈位一次性兑现，不拖。"
         stop_loss_plan = (f"严格止损 {sl_style} (现价下方≈{sl_style_pct:.1f}%)。"
@@ -3878,8 +3949,17 @@ def analyze_buy_sell(bars: list[dict]) -> dict:
     feat_parts.append(f"均线：{alignment} / {trend}")
     if run_lens_pos:
         feat_parts.append(f"平均单边上涨波段{avg_run_pos:.1f}天")
+    # ZigZag 波段统计 (1×ATR阈值, 真实波峰波谷)
+    if _zz_up_days:
+        feat_parts.append(f"ZigZag上涨: {_zz_median(_zz_up_days):.0f}天/{_zz_median(_zz_up_pct):.0f}%")
+    if _zz_dn_days:
+        feat_parts.append(f"ZigZag下跌: {_zz_median(_zz_dn_days):.0f}天/{_zz_median(_zz_dn_pct):.0f}%")
     if not avoid_flag and pos_rets_60:
         feat_parts.append(f"上涨中位数q50={q50_pos:.1f}% q75={q75_pos:.1f}%")
+    # 横盘区间
+    if _h20 > _l20:
+        _rp = (c - _l20) / (_h20 - _l20) * 100
+        feat_parts.append(f"20日区间{_l20:.0f}~{_h20:.0f}(现处{_rp:.0f}%)")
     judge_reason = f"{style_type}。判定依据：{'；'.join(feat_parts)}。"
     if avoid_flag:
         judge_reason += "⚠" + avoid_reason
