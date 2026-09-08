@@ -1041,9 +1041,9 @@
       ]
     },
     "date": "2026-09-08",
-    "updated_at": "2026-09-08 19:27:23",
+    "updated_at": "2026-09-08 19:33:30",
     "screen": {
-      "updated": "2026-09-08 19:27:22",
+      "updated": "2026-09-08 19:33:21",
       "conds": [
         "b1",
         "b2",
@@ -7073,74 +7073,6 @@
           "bs_motto": "趋势不变仓位不乱, 均线不破格局不散, 控制风险活得久"
         },
         {
-          "code": "600356",
-          "name": "恒丰纸业",
-          "symbol": "sh600356",
-          "industry": "轻工制造",
-          "concept": "特种纸、轻工制造",
-          "price": 9.41,
-          "change_pct": 3.07,
-          "amount_yi": 0.96,
-          "float_mv_yi": 28.11,
-          "ma5": 9.07,
-          "ma10": 8.96,
-          "ma20": 8.91,
-          "ma60": 8.26,
-          "ma250": 8.9,
-          "bias": 5.56,
-          "kdj_j": 91.32,
-          "atr_pct": 2.69,
-          "score": 4,
-          "n_active": 5,
-          "groups": {
-            "gA": true,
-            "gB": true,
-            "gC": true,
-            "gD": true,
-            "gE": false
-          },
-          "active": {
-            "gA": true,
-            "gB": true,
-            "gC": true,
-            "gD": true,
-            "gE": true
-          },
-          "est_5d": 1.5,
-          "est_10d": 2.5,
-          "est_20d": 4.0,
-          "tags": [
-            "多头排列",
-            "方向向上",
-            "站上MA20",
-            "年线保护",
-            "MA20拐头",
-            "放量突破",
-            "乖离安全",
-            "均线多头",
-            "超买谨慎"
-          ],
-          "bs_signal": "wait",
-          "bs_side": "wait",
-          "bs_type": "观望",
-          "bs_entry": null,
-          "bs_stop": null,
-          "bs_target": null,
-          "bs_reason": "MA20走平, 震荡市该策略停用",
-          "bs_trend": "多头趋势",
-          "bs_alignment": "多头排列",
-          "bs_vol": "放量",
-          "bs_actions": [
-            "空仓等待趋势明朗"
-          ],
-          "bs_resonance": [
-            "MACD: 零轴上方金叉, 趋势与动能共振"
-          ],
-          "bs_resonance_count": 1,
-          "bs_warnings": [],
-          "bs_motto": "趋势不变仓位不乱, 均线不破格局不散, 控制风险活得久"
-        },
-        {
           "code": "603323",
           "name": "苏农银行",
           "symbol": "sh603323",
@@ -7209,6 +7141,74 @@
           "bs_resonance_count": 1,
           "bs_warnings": [],
           "bs_motto": "买点要'缩量来、放量走'; 买前先写好入场价、止损价、目标价"
+        },
+        {
+          "code": "600356",
+          "name": "恒丰纸业",
+          "symbol": "sh600356",
+          "industry": "轻工制造",
+          "concept": "特种纸、轻工制造",
+          "price": 9.41,
+          "change_pct": 3.07,
+          "amount_yi": 0.96,
+          "float_mv_yi": 28.11,
+          "ma5": 9.07,
+          "ma10": 8.96,
+          "ma20": 8.91,
+          "ma60": 8.26,
+          "ma250": 8.9,
+          "bias": 5.56,
+          "kdj_j": 91.32,
+          "atr_pct": 2.69,
+          "score": 4,
+          "n_active": 5,
+          "groups": {
+            "gA": true,
+            "gB": true,
+            "gC": true,
+            "gD": true,
+            "gE": false
+          },
+          "active": {
+            "gA": true,
+            "gB": true,
+            "gC": true,
+            "gD": true,
+            "gE": true
+          },
+          "est_5d": 1.5,
+          "est_10d": 2.5,
+          "est_20d": 4.0,
+          "tags": [
+            "多头排列",
+            "方向向上",
+            "站上MA20",
+            "年线保护",
+            "MA20拐头",
+            "放量突破",
+            "乖离安全",
+            "均线多头",
+            "超买谨慎"
+          ],
+          "bs_signal": "wait",
+          "bs_side": "wait",
+          "bs_type": "观望",
+          "bs_entry": null,
+          "bs_stop": null,
+          "bs_target": null,
+          "bs_reason": "MA20走平, 震荡市该策略停用",
+          "bs_trend": "多头趋势",
+          "bs_alignment": "多头排列",
+          "bs_vol": "放量",
+          "bs_actions": [
+            "空仓等待趋势明朗"
+          ],
+          "bs_resonance": [
+            "MACD: 零轴上方金叉, 趋势与动能共振"
+          ],
+          "bs_resonance_count": 1,
+          "bs_warnings": [],
+          "bs_motto": "趋势不变仓位不乱, 均线不破格局不散, 控制风险活得久"
         },
         {
           "code": "603228",
@@ -7691,7 +7691,7 @@
       ]
     },
     "ma": {
-      "updated": "2026-09-08 19:27:03",
+      "updated": "2026-09-08 19:33:29",
       "counts": {
         "多头排列": 276,
         "多头排列向上发散": 286,
@@ -7702,7 +7702,7 @@
         "MACD底背离": 93
       },
       "total_stocks": 2568,
-      "elapsed_sec": 7.1,
+      "elapsed_sec": 30.7,
       "patterns": {
         "多头排列": [
           {
@@ -19949,6 +19949,40 @@
             "bs_motto": "卖点与买点镜像对称; 严格执行止损, 保护本金"
           },
           {
+            "code": "600732",
+            "name": "爱旭股份",
+            "price": 10.99,
+            "change_pct": -0.72,
+            "atr_pct": 3.3,
+            "atr_shrink": true,
+            "kdj_db": false,
+            "macd_db": false,
+            "ma5": 10.97,
+            "ma10": 11.25,
+            "ma20": 11.61,
+            "ma60": 12.13,
+            "amount_yi": 1.52,
+            "industry": "电力设备",
+            "concept": "光伏、电力设备",
+            "bs_signal": "sell",
+            "bs_side": "sell",
+            "bs_type": "卖点3: 空头排列",
+            "bs_entry": null,
+            "bs_stop": null,
+            "bs_target": null,
+            "bs_reason": "5/10/20日线空头排列确立; 每次反弹至均线压制位都是卖点",
+            "bs_actions": [
+              "不抄底, 反弹至均线压制位减仓"
+            ],
+            "bs_trend": "空头趋势",
+            "bs_alignment": "空头排列",
+            "bs_vol": "缩量",
+            "bs_resonance": [],
+            "bs_resonance_count": 0,
+            "bs_warnings": [],
+            "bs_motto": "卖点与买点镜像对称; 严格执行止损, 保护本金"
+          },
+          {
             "code": "605287",
             "name": "德才股份",
             "price": 37.42,
@@ -20013,40 +20047,6 @@
             "bs_trend": "多头趋势",
             "bs_alignment": "短空头",
             "bs_vol": "正常",
-            "bs_resonance": [],
-            "bs_resonance_count": 0,
-            "bs_warnings": [],
-            "bs_motto": "卖点与买点镜像对称; 严格执行止损, 保护本金"
-          },
-          {
-            "code": "600732",
-            "name": "爱旭股份",
-            "price": 10.99,
-            "change_pct": -0.72,
-            "atr_pct": 3.3,
-            "atr_shrink": true,
-            "kdj_db": false,
-            "macd_db": false,
-            "ma5": 10.97,
-            "ma10": 11.25,
-            "ma20": 11.61,
-            "ma60": 12.13,
-            "amount_yi": 1.52,
-            "industry": "电力设备",
-            "concept": "光伏、电力设备",
-            "bs_signal": "sell",
-            "bs_side": "sell",
-            "bs_type": "卖点3: 空头排列",
-            "bs_entry": null,
-            "bs_stop": null,
-            "bs_target": null,
-            "bs_reason": "5/10/20日线空头排列确立; 每次反弹至均线压制位都是卖点",
-            "bs_actions": [
-              "不抄底, 反弹至均线压制位减仓"
-            ],
-            "bs_trend": "空头趋势",
-            "bs_alignment": "空头排列",
-            "bs_vol": "缩量",
             "bs_resonance": [],
             "bs_resonance_count": 0,
             "bs_warnings": [],
@@ -27790,40 +27790,6 @@
             "bs_motto": "卖点与买点镜像对称; 严格执行止损, 保护本金"
           },
           {
-            "code": "301349",
-            "name": "信德新材",
-            "price": 42.52,
-            "change_pct": -0.44,
-            "atr_pct": 4.64,
-            "atr_shrink": true,
-            "kdj_db": false,
-            "macd_db": true,
-            "ma5": 42.94,
-            "ma10": 43.13,
-            "ma20": 43.71,
-            "ma60": 48.77,
-            "amount_yi": 1.04,
-            "industry": "电力设备",
-            "concept": "电池化学品、电力设备",
-            "bs_signal": "sell",
-            "bs_side": "sell",
-            "bs_type": "卖点3: 空头排列",
-            "bs_entry": 42.52,
-            "bs_stop": 43.99,
-            "bs_target": 38.27,
-            "bs_reason": "5/10/20日线空头排列确立; 每次反弹至均线压制位都是卖点",
-            "bs_actions": [
-              "不抄底, 反弹至均线压制位减仓"
-            ],
-            "bs_trend": "震荡",
-            "bs_alignment": "空头排列",
-            "bs_vol": "缩量",
-            "bs_resonance": [],
-            "bs_resonance_count": 0,
-            "bs_warnings": [],
-            "bs_motto": "卖点与买点镜像对称; 严格执行止损, 保护本金"
-          },
-          {
             "code": "002289",
             "name": "宇顺电子",
             "price": 35.95,
@@ -27845,6 +27811,40 @@
             "bs_entry": null,
             "bs_stop": null,
             "bs_target": null,
+            "bs_reason": "5/10/20日线空头排列确立; 每次反弹至均线压制位都是卖点",
+            "bs_actions": [
+              "不抄底, 反弹至均线压制位减仓"
+            ],
+            "bs_trend": "震荡",
+            "bs_alignment": "空头排列",
+            "bs_vol": "缩量",
+            "bs_resonance": [],
+            "bs_resonance_count": 0,
+            "bs_warnings": [],
+            "bs_motto": "卖点与买点镜像对称; 严格执行止损, 保护本金"
+          },
+          {
+            "code": "301349",
+            "name": "信德新材",
+            "price": 42.52,
+            "change_pct": -0.44,
+            "atr_pct": 4.64,
+            "atr_shrink": true,
+            "kdj_db": false,
+            "macd_db": true,
+            "ma5": 42.94,
+            "ma10": 43.13,
+            "ma20": 43.71,
+            "ma60": 48.77,
+            "amount_yi": 1.04,
+            "industry": "电力设备",
+            "concept": "电池化学品、电力设备",
+            "bs_signal": "sell",
+            "bs_side": "sell",
+            "bs_type": "卖点3: 空头排列",
+            "bs_entry": 42.52,
+            "bs_stop": 43.99,
+            "bs_target": 38.27,
             "bs_reason": "5/10/20日线空头排列确立; 每次反弹至均线压制位都是卖点",
             "bs_actions": [
               "不抄底, 反弹至均线压制位减仓"
