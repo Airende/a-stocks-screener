@@ -4386,6 +4386,14 @@ function copyCode(code){
     fallbackCopy(code); done();
   }
 }
+function openTHS(code){
+  code = String(code||'').trim();
+  if(!code) return;
+  // 通过 shortcuts URL scheme 唤起同花顺快捷指令, 股票代码作为 input 传入
+  const url = 'shortcuts://run-shortcut?name=THSOPEN&input=' + encodeURIComponent(code);
+  try{ window.location.href = url; }catch(e){ window.open(url, '_blank'); }
+  showToast('正在打开同花顺: '+code, {duration:1500});
+}
 function fallbackCopy(text){
   try{
     const ta = document.createElement('textarea');
@@ -4642,7 +4650,7 @@ async function showKlinePreview(code, anchor){
     const ignoreActive = curMk.removed ? ' active' : '';
     const ignoreBtn = `<span class="kd-mk-btn kd-mk-ignore${ignoreActive}" style="color:#4ade80" title="忽略此股" onclick="popupToggleIgnore('${code}','${mkName}')">×</span>`;
     pop.innerHTML = `<div style="padding:6px 10px 2px;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:space-between">
-        <div>${d.name ? esc(d.name)+' ' : ''}<span class="meta cp-code" title="点击复制代码" onclick="copyCode('${code}')">${code}</span> ${chgTxt}
+        <div>${d.name ? esc(d.name)+' ' : ''}<span class="meta cp-code" title="点击打开同花顺" onclick="openTHS('${code}')">${code}</span> ${chgTxt}
         <span class="meta" style="margin-left:6px">近半年日K · 三均线 · 量 · KDJ</span></div>
         <div class="kd-mk-bar">${mkBtns}${ignoreBtn}</div>
       </div>` + kdMultiChart(bars);
