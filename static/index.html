@@ -288,6 +288,7 @@
   .zz-pivot{display:flex;align-items:center;gap:6px;font-size:11px;padding:3px 5px;border-radius:4px}
   .zz-pivot.zz-h{background:rgba(255,77,79,.06)}
   .zz-pivot.zz-l{background:rgba(38,166,154,.06)}
+  .zz-pivot.zz-cur{background:rgba(255,193,7,.08);border:1px dashed rgba(255,193,7,.3)}
   .zz-arrow{font-size:12px;flex-shrink:0}
   .zz-p-date{color:var(--sub);font-size:10px;min-width:72px}
   .zz-p-type{font-weight:700;min-width:32px}
@@ -1920,14 +1921,10 @@ function renderAnalysis(d){
     // ---- 顶部风格判定徽章 ----
     const styleCode = vps.style_code || 'mix';
     const styleLabel = vps.style || '混合型';
-    // 占优模式的动态持仓周期 (优先用 ZigZag 上涨中位天数)
+    // 占优模式的动态持仓周期 (已由后端用 ZigZag 中位天数校准)
     const domMode = vps.dominant || 'band';
-    const _zzEx = (d.bs && d.bs.my_style && d.bs.my_style.extra) || {};
-    const zzUpDays = _zzEx.zz_up_days_med || 0;
-    const zzDnDays = _zzEx.zz_dn_days_med || 0;
     const domHold = ((vps[domMode]||{}).hold_cycle) || '';
-    // 持仓天数展示: 有 ZigZag 数据时标注中位天数
-    const holdLabel = zzUpDays ? `持仓${domHold} · ZigZag中位${zzUpDays}天` : (domHold ? `持仓${domHold}` : '');
+    const holdLabel = domHold ? `持仓${domHold}` : '';
     const styleBadgeMap = {
       trend: {icon:'🚀', cls:'vp-style-trend', sub:'趋势票 · 主升浪长持' + (holdLabel?` · ${holdLabel}`:'')},
       band:  {icon:'🎯', cls:'vp-style-band',  sub:'波段票 · 快进快出' + (holdLabel?` · ${holdLabel}`:'')},
@@ -1963,9 +1960,10 @@ function renderAnalysis(d){
       if(!pivots.length && !ex.zz_up_days_med) return '';
       const thresh = ex.zz_threshold || '1.5×ATR';
       const period = ex.zz_period || '近半年';
-      // 波峰波谷时间线 (可收起, 默认显示最近3个)
-      const shownPivots = pivots.slice(-3);
-      const hiddenPivots = pivots.slice(0, -3);
+      // 波峰波谷时间线 (倒序: 最新在上, 可收起)
+      const allPivots = [...pivots].reverse();  // 倒序
+      const shownPivots = allPivots.slice(0, 3);
+      const hiddenPivots = allPivots.slice(3);
       const renderPiv = (p)=>{
         const isH = p.type==='H';
         const arrow = isH ? '▼' : '▲';
@@ -1982,7 +1980,23 @@ function renderAnalysis(d){
           <span class="zz-p-swing">${swing}</span>
         </div>`;
       };
-      const tlShown = shownPivots.map(renderPiv).join('');
+      // 当前状态: 从最后一个转折点到现在
+      let curStatus = '';
+      if(pivots.length){
+        const last = pivots[pivots.length-1];
+        const curPrice = Number(d.price) || 0;
+        const daysFromLast = ex.zz_days_since_last_pivot || 0;
+        const pctFromLast = curPrice>0 ? ((curPrice/last.price-1)*100) : 0;
+        const isUp = pctFromLast >= 0;
+        curStatus = `<div class="zz-pivot zz-cur">
+          <span class="zz-arrow">●</span>
+          <span class="zz-p-date">至今</span>
+          <span class="zz-p-type" style="color:var(--sub)">当前</span>
+          <span class="zz-p-price">${curPrice}</span>
+          <span class="zz-p-swing" style="color:${isUp?'#dc3545':'#26a69a'}">${isUp?'↑':'↓'} ${daysFromLast}天 / ${pctFromLast>=0?'+':''}${pctFromLast.toFixed(1)}%</span>
+        </div>`;
+      }
+      const tlShown = curStatus + shownPivots.map(renderPiv).join('');
       const tlHidden = hiddenPivots.map(renderPiv).join('');
       const hasHidden = hiddenPivots.length > 0;
       const tlHtml = `

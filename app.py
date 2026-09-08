@@ -2183,21 +2183,28 @@ def calc_vp_system(bars: list, closes: list = None,
         s_score = float(my_style.get("swing_score", 50))
         sc = my_style.get("style_type", "") or ""
         if "波段" in sc and "趋势" not in sc:
-            style_code, style_label = "band", "波段票 · 不放量不拿"
+            style_code, style_label = "band", "波段票"
         elif "趋势" in sc and "波段" not in sc:
-            style_code, style_label = "trend", "趋势票 · 不破位不走"
+            style_code, style_label = "trend", "趋势票"
         elif "偏波段" in sc:
-            style_code, style_label = "band", "波段票 · 不放量不拿"
+            style_code, style_label = "band", "波段票"
         elif "偏趋势" in sc:
-            style_code, style_label = "trend", "趋势票 · 不破位不走"
+            style_code, style_label = "trend", "趋势票"
         elif t_score >= s_score:
-            style_code, style_label = "trend", "趋势票 · 不破位不走"
+            style_code, style_label = "trend", "趋势票"
         else:
-            style_code, style_label = "band", "波段票 · 不放量不拿"
+            style_code, style_label = "band", "波段票"
     else:
         style_label, style_code, t_score, s_score = _classify_style_light(closes, ma5, ma10, ma20, highs, lows)
     trend_r = _vp_single(bars, closes, highs, lows, vols, chgs, ma5, ma10, ma20, mode="trend")
     band_r  = _vp_single(bars, closes, highs, lows, vols, chgs, ma5, ma10, ma20, mode="band")
+    # 用 ZigZag 上涨中位天数校准波段票持仓周期
+    if my_style and isinstance(my_style, dict):
+        _ex = my_style.get("extra", {}) or {}
+        _zz_up = _ex.get("zz_up_days_med", 0)
+        if _zz_up and isinstance(band_r, dict):
+            band_r["hold_cycle"] = f"1~{int(_zz_up)} 天"
+            band_r["hold_cycle_base"] = f"ZigZag中位{_zz_up}天"
     dominant = style_code if style_code in ("trend","band") else ("trend" if t_score >= s_score else "band")
 
     glossary = {
@@ -3404,6 +3411,12 @@ def analyze_buy_sell(bars: list[dict]) -> dict:
     _style_extra["zz_pivot_count"] = len(_zz_pivots)
     _style_extra["zz_threshold"] = f"1.5×ATR({atr_abs*1.5:.1f})"
     _style_extra["zz_period"] = "近半年(120交易日)"
+    # 距最后一个转折点的天数
+    if _zz_pivots:
+        _last_pivot_idx = _zz_pivots[-1][0]
+        _style_extra["zz_days_since_last_pivot"] = len(_zz_closes) - 1 - _last_pivot_idx
+    else:
+        _style_extra["zz_days_since_last_pivot"] = 0
     if _zz_up_days:
         _style_extra["zz_up_days_avg"] = round(sum(_zz_up_days) / len(_zz_up_days), 1)
         _style_extra["zz_up_days_med"] = round(_zz_median(_zz_up_days), 1)
