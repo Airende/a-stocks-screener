@@ -53,6 +53,9 @@ POOL = ThreadPoolExecutor(max_workers=40)
 # 缓存
 _CACHE = {}
 _CACHE_LOCK = threading.Lock()
+# K线内存缓存: symbol -> bars, 选股时避免5353次文件IO
+_KLINE_MEM_CACHE: dict[str, list[dict]] = {}
+_KLINE_MEM_LOCK = threading.Lock()
 # 行业/概念映射缓存 (构建一次, 当日内复用)
 _BOARD_MAP_TTL = 6 * 3600  # 6 小时
 _board_cache = {"built_at": 0.0, "industry": {}, "industry2": {}, "industry3": {}, "concept": {}}
@@ -281,17 +284,27 @@ def _save_spot_cache(date_str: str, data: list[dict]) -> None:
 
 
 def _load_kline_cache(symbol: str) -> list[dict] | None:
+    # 先查内存缓存
+    with _KLINE_MEM_LOCK:
+        cached = _KLINE_MEM_CACHE.get(symbol)
+        if cached is not None:
+            return cached
     path = _kline_cache_path(symbol)
     if os.path.exists(path):
         try:
             with open(path, "r", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+            with _KLINE_MEM_LOCK:
+                _KLINE_MEM_CACHE[symbol] = data
+            return data
         except (json.JSONDecodeError, OSError):
             return None
     return None
 
 
 def _save_kline_cache(symbol: str, data: list[dict]) -> None:
+    with _KLINE_MEM_LOCK:
+        _KLINE_MEM_CACHE[symbol] = data
     d = _kline_cache_dir()
     os.makedirs(d, exist_ok=True)
     path = _kline_cache_path(symbol)
@@ -300,6 +313,30 @@ def _save_kline_cache(symbol: str, data: list[dict]) -> None:
             json.dump(data, f, ensure_ascii=False)
     except OSError:
         pass
+
+
+def _preload_kline_cache() -> int:
+    """选股前预加载所有K线缓存到内存, 避免5353次文件IO。返回加载数量。"""
+    d = _kline_cache_dir()
+    if not os.path.isdir(d):
+        return 0
+    loaded = 0
+    for fn in os.listdir(d):
+        if not fn.endswith(".json"):
+            continue
+        symbol = fn[:-5]
+        with _KLINE_MEM_LOCK:
+            if symbol in _KLINE_MEM_CACHE:
+                continue
+        try:
+            with open(os.path.join(d, fn), "r", encoding="utf-8") as f:
+                data = json.load(f)
+            with _KLINE_MEM_LOCK:
+                _KLINE_MEM_CACHE[symbol] = data
+            loaded += 1
+        except (json.JSONDecodeError, OSError):
+            continue
+    return loaded
 
 
 def _cache_date_for_fetch() -> str:
@@ -809,12 +846,16 @@ def fetch_kline(symbol: str, datalen: int = 40, spot_data: list[dict] | None = N
     return out
 
 
+_SPOT_DICT_CACHE: dict[int, dict[str, dict]] = {}
+
+
 def _patch_today_bar_from_spot(bars: list[dict], symbol: str, today_str: str,
                                spot_data: list[dict] | None = None) -> list[dict]:
     """用spot实时快照数据补全今天的K线条目。
     symbol: 如 sh601398; today_str: YYYYMMDD格式。
     spot_data: 可选, 已拉取的全市场快照; 为None时调用 fetch_spot_all()。
     如果spot数据有今天的价格，追加一条K线; 否则原样返回。"""
+    global _SPOT_DICT_CACHE
     if spot_data is None:
         try:
             spot_all = fetch_spot_all()
@@ -822,15 +863,24 @@ def _patch_today_bar_from_spot(bars: list[dict], symbol: str, today_str: str,
             return bars
     else:
         spot_all = spot_data
+    # 将spot列表转成 symbol->row 字典缓存, 避免每只股票都遍历全市场(O(n²))
+    spot_key = id(spot_all)
+    spot_dict = _SPOT_DICT_CACHE.get(spot_key)
+    if spot_dict is None:
+        spot_dict = {}
+        for r in spot_all:
+            sym = r.get("symbol") or r.get("code")
+            if sym:
+                spot_dict[sym] = r
+        _SPOT_DICT_CACHE[spot_key] = spot_dict
     # 转成标准日期格式 YYYY-MM-DD
     today_iso = f"{today_str[:4]}-{today_str[4:6]}-{today_str[6:]}"
     code6 = symbol[-6:] if symbol[:2] in ("sh", "sz", "bj") else symbol
-    for r in spot_all:
-        if r.get("symbol") == symbol or r.get("code") == code6:
-            try:
-                trade = float(r.get("trade") or 0)
-                if trade <= 0:
-                    continue
+    r = spot_dict.get(symbol) or spot_dict.get(code6)
+    if r:
+        try:
+            trade = float(r.get("trade") or 0)
+            if trade > 0:
                 bar = {
                     "day": today_iso,
                     "open": float(r.get("open") or trade),
@@ -839,14 +889,13 @@ def _patch_today_bar_from_spot(bars: list[dict], symbol: str, today_str: str,
                     "close": trade,
                     "volume": float(r.get("volume") or 0),
                 }
-                # 如果最后一条已经是今天，替换；否则追加
                 if bars and (bars[-1].get("day") or "")[:10] == today_iso:
                     bars[-1] = bar
                 else:
                     bars.append(bar)
                 return bars
-            except (KeyError, ValueError, TypeError):
-                return bars
+        except (KeyError, ValueError, TypeError):
+            pass
     return bars
 
 
@@ -4359,6 +4408,10 @@ def run_screen(conds=None) -> dict:
     # 3. 构建行业/概念映射
     _set_screen_progress(f"构建板块映射 (候选 {len(candidates)} 只)…")
     _build_board_maps()
+
+    # 3.5 预加载K线缓存到内存 (避免5353次文件IO)
+    _set_screen_progress("加载K线缓存到内存…")
+    preloaded = _preload_kline_cache()
 
     # 4. 并发拉取K线并筛选 (MA250需300根)
     total_cand = len(candidates)
