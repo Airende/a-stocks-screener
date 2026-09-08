@@ -3496,17 +3496,36 @@ def analyze_buy_sell(bars: list[dict]) -> dict:
     # ===== 风格分类 =====
     # 用户风格 → 趋势票=持仓1~2周(5~10交易日) 波段票=持仓2~5天
     # 再设一挡"避坑/不建议持有" (空头排列 or 高波动且无趋势方向)
+    # --- 均线粘合度豁免: 空头排列时若短期均线已粘合, 实际是横盘筑底而非单边下跌, 不应一刀切避坑 ---
+    ma_converged = False
+    ma_converge_note = ""
+    if not math.isnan(ma5[-1]) and not math.isnan(ma10[-1]) and not math.isnan(ma20[-1]):
+        _m5, _m10, _m20 = ma5[-1], ma10[-1], ma20[-1]
+        _short_spread = abs(_m5 - _m10) / _m10 * 100                              # MA5/MA10 短期粘合度
+        _ma_spread = (max(_m5, _m10, _m20) - min(_m5, _m10, _m20)) / min(_m5, _m10, _m20) * 100  # 三线发散度
+        # 短期粘合(<1.5%) 或 三线高度粘合(<3.0%) → 视为横盘, 豁免空头排列避坑
+        if _short_spread < 1.5 or _ma_spread < 3.0:
+            ma_converged = True
+            ma_converge_note = f"均线粘合(短期发散{_short_spread:.1f}%/三线发散{_ma_spread:.1f}%), 虽排列上空头但实为横盘筑底"
+
+    # MA衍生卖出信号(卖点3空头排列/卖点4死叉)在均线粘合时为噪音, 同步豁免
+    _ma_derived_sell = signal_type.startswith("卖点3") or signal_type.startswith("卖点4")
+
     avoid_flag = False
     avoid_reason = ""
-    if alignment == "空头排列":
+    if alignment == "空头排列" and not ma_converged:
         avoid_flag = True
         avoid_reason = "当前空头排列,任何持仓都属于逆势抄底,A股无做空工具,风险极大"
-    elif trend == "空头趋势" and signal == "sell":
+    elif trend == "空头趋势" and signal == "sell" and not (ma_converged and _ma_derived_sell):
         avoid_flag = True
         avoid_reason = f"当前处于{trend},且已触发{signal_type},每一次反弹都是离场窗口,不宜新入"
     elif atr_pct >= 7 and alignment == "交叉纠缠":
         avoid_flag = True
         avoid_reason = f"ATR={atr_pct:.1f}%极高波动+均线缠绕,短线情绪博弈强烈,非职业选手勿参与"
+
+    if ma_converged and not avoid_flag:
+        # 粘合豁免时记录原因(供前端展示)
+        avoid_reason = ma_converge_note
 
     if avoid_flag:
         style_type = "避坑票 · 不建议持有"
