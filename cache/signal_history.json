@@ -1041,9 +1041,9 @@
       ]
     },
     "date": "2026-09-08",
-    "updated_at": "2026-09-08 19:06:26",
+    "updated_at": "2026-09-08 19:18:40",
     "screen": {
-      "updated": "2026-09-08 19:06:10",
+      "updated": "2026-09-08 19:18:39",
       "conds": [
         "b1",
         "b2",
@@ -3541,7 +3541,7 @@
           "bs_type": "买点: 波段票踩线(前低/MA20回踩)",
           "bs_entry": 6.71,
           "bs_stop": 5.74,
-          "bs_target": 8.16,
+          "bs_target": 7.29,
           "bs_reason": "股价站上MA20但趋势不明; 波段票：均线即将金叉(MA5 vs MA20差+1.18%，MA5≈6.64/MA20≈6.57)，价格在前期低点/MA20买点锚附近（支撑=4.37）",
           "bs_trend": "震荡",
           "bs_alignment": "多头排列",
@@ -7073,6 +7073,76 @@
           "bs_motto": "趋势不变仓位不乱, 均线不破格局不散, 控制风险活得久"
         },
         {
+          "code": "603228",
+          "name": "景旺电子",
+          "symbol": "sh603228",
+          "industry": "电子",
+          "concept": "印制电路板、电子",
+          "price": 106.97,
+          "change_pct": 0.94,
+          "amount_yi": 67.29,
+          "float_mv_yi": 1050.46,
+          "ma5": 97.3,
+          "ma10": 95.31,
+          "ma20": 94.81,
+          "ma60": 81.23,
+          "ma250": 70.14,
+          "bias": 12.83,
+          "kdj_j": 97.64,
+          "atr_pct": 6.02,
+          "score": 4,
+          "n_active": 5,
+          "groups": {
+            "gA": true,
+            "gB": true,
+            "gC": false,
+            "gD": true,
+            "gE": true
+          },
+          "active": {
+            "gA": true,
+            "gB": true,
+            "gC": true,
+            "gD": true,
+            "gE": true
+          },
+          "est_5d": 1.5,
+          "est_10d": 2.5,
+          "est_20d": 4.0,
+          "tags": [
+            "多头排列",
+            "方向向上",
+            "站上MA20",
+            "年线保护",
+            "金叉确认",
+            "乖离安全",
+            "波段弹性",
+            "均线多头",
+            "超买谨慎"
+          ],
+          "bs_signal": "wait",
+          "bs_side": "wait",
+          "bs_type": "观望",
+          "bs_entry": null,
+          "bs_stop": null,
+          "bs_target": null,
+          "bs_reason": "多头趋势但股价偏离MA20达12.8%, 等回踩",
+          "bs_trend": "多头趋势",
+          "bs_alignment": "多头排列",
+          "bs_vol": "正常",
+          "bs_actions": [
+            "等待回踩MA20±2%区域再考虑"
+          ],
+          "bs_resonance": [
+            "MACD: 零轴上方金叉, 趋势与动能共振"
+          ],
+          "bs_resonance_count": 1,
+          "bs_warnings": [
+            "乖离率12.2%, 距MA20过远, 追高风险增大"
+          ],
+          "bs_motto": "趋势不变仓位不乱, 均线不破格局不散, 控制风险活得久"
+        },
+        {
           "code": "603323",
           "name": "苏农银行",
           "symbol": "sh603323",
@@ -7211,29 +7281,29 @@
           "bs_motto": "趋势不变仓位不乱, 均线不破格局不散, 控制风险活得久"
         },
         {
-          "code": "603228",
-          "name": "景旺电子",
-          "symbol": "sh603228",
-          "industry": "电子",
-          "concept": "印制电路板、电子",
-          "price": 106.97,
-          "change_pct": 0.94,
-          "amount_yi": 67.29,
-          "float_mv_yi": 1050.46,
-          "ma5": 97.3,
-          "ma10": 95.31,
-          "ma20": 94.81,
-          "ma60": 81.23,
-          "ma250": 70.14,
-          "bias": 12.83,
-          "kdj_j": 97.64,
-          "atr_pct": 6.02,
+          "code": "600256",
+          "name": "广汇能源",
+          "symbol": "sh600256",
+          "industry": "石油石化",
+          "concept": "油品石化贸易、石油石化",
+          "price": 7.21,
+          "change_pct": 7.61,
+          "amount_yi": 16.27,
+          "float_mv_yi": 460.86,
+          "ma5": 6.77,
+          "ma10": 6.65,
+          "ma20": 6.35,
+          "ma60": 5.65,
+          "ma250": 5.65,
+          "bias": 13.6,
+          "kdj_j": 90.16,
+          "atr_pct": 3.69,
           "score": 4,
           "n_active": 5,
           "groups": {
             "gA": true,
-            "gB": true,
-            "gC": false,
+            "gB": false,
+            "gC": true,
             "gD": true,
             "gE": true
           },
@@ -7252,7 +7322,7 @@
             "方向向上",
             "站上MA20",
             "年线保护",
-            "金叉确认",
+            "放量突破",
             "乖离安全",
             "波段弹性",
             "均线多头",
@@ -7264,19 +7334,17 @@
           "bs_entry": null,
           "bs_stop": null,
           "bs_target": null,
-          "bs_reason": "多头趋势但股价偏离MA20达12.8%, 等回踩",
+          "bs_reason": "多头趋势但股价偏离MA20达13.6%, 等回踩",
           "bs_trend": "多头趋势",
           "bs_alignment": "多头排列",
           "bs_vol": "正常",
           "bs_actions": [
             "等待回踩MA20±2%区域再考虑"
           ],
-          "bs_resonance": [
-            "MACD: 零轴上方金叉, 趋势与动能共振"
-          ],
-          "bs_resonance_count": 1,
+          "bs_resonance": [],
+          "bs_resonance_count": 0,
           "bs_warnings": [
-            "乖离率12.2%, 距MA20过远, 追高风险增大"
+            "乖离率8.4%, 距MA20过远, 追高风险增大"
           ],
           "bs_motto": "趋势不变仓位不乱, 均线不破格局不散, 控制风险活得久"
         },
@@ -7344,74 +7412,6 @@
           "bs_resonance": [],
           "bs_resonance_count": 0,
           "bs_warnings": [],
-          "bs_motto": "趋势不变仓位不乱, 均线不破格局不散, 控制风险活得久"
-        },
-        {
-          "code": "600256",
-          "name": "广汇能源",
-          "symbol": "sh600256",
-          "industry": "石油石化",
-          "concept": "油品石化贸易、石油石化",
-          "price": 7.21,
-          "change_pct": 7.61,
-          "amount_yi": 16.27,
-          "float_mv_yi": 460.86,
-          "ma5": 6.77,
-          "ma10": 6.65,
-          "ma20": 6.35,
-          "ma60": 5.65,
-          "ma250": 5.65,
-          "bias": 13.6,
-          "kdj_j": 90.16,
-          "atr_pct": 3.69,
-          "score": 4,
-          "n_active": 5,
-          "groups": {
-            "gA": true,
-            "gB": false,
-            "gC": true,
-            "gD": true,
-            "gE": true
-          },
-          "active": {
-            "gA": true,
-            "gB": true,
-            "gC": true,
-            "gD": true,
-            "gE": true
-          },
-          "est_5d": 1.5,
-          "est_10d": 2.5,
-          "est_20d": 4.0,
-          "tags": [
-            "多头排列",
-            "方向向上",
-            "站上MA20",
-            "年线保护",
-            "放量突破",
-            "乖离安全",
-            "波段弹性",
-            "均线多头",
-            "超买谨慎"
-          ],
-          "bs_signal": "wait",
-          "bs_side": "wait",
-          "bs_type": "观望",
-          "bs_entry": null,
-          "bs_stop": null,
-          "bs_target": null,
-          "bs_reason": "多头趋势但股价偏离MA20达13.6%, 等回踩",
-          "bs_trend": "多头趋势",
-          "bs_alignment": "多头排列",
-          "bs_vol": "正常",
-          "bs_actions": [
-            "等待回踩MA20±2%区域再考虑"
-          ],
-          "bs_resonance": [],
-          "bs_resonance_count": 0,
-          "bs_warnings": [
-            "乖离率8.4%, 距MA20过远, 追高风险增大"
-          ],
           "bs_motto": "趋势不变仓位不乱, 均线不破格局不散, 控制风险活得久"
         },
         {
@@ -7691,7 +7691,7 @@
       ]
     },
     "ma": {
-      "updated": "2026-09-08 19:06:20",
+      "updated": "2026-09-08 19:06:56",
       "counts": {
         "多头排列": 276,
         "多头排列向上发散": 286,
@@ -7702,7 +7702,7 @@
         "MACD底背离": 93
       },
       "total_stocks": 2568,
-      "elapsed_sec": 29.8,
+      "elapsed_sec": 8.1,
       "patterns": {
         "多头排列": [
           {

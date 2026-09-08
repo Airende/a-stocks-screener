@@ -3357,27 +3357,30 @@ def analyze_buy_sell(bars: list[dict]) -> dict:
     _style_extra["avg_up_run_days_60d"] = round(avg_run_pos, 1)
     _style_extra["avg_down_run_days_60d"] = round(avg_run_neg, 1)
 
-    # ====== ZigZag 波段周期统计 (阈值=1×ATR, 抓短线波段的真实波峰波谷) ======
-    # 原理: 反向波动≥1×ATR才确认转折点, 过滤日内噪音, 保留真实波段结构
-    _zz_threshold = atr_abs  # 1×ATR 作为转折阈值 (自适应波动率)
-    _zz_pivots = []  # [(index, price, 'H'/'L'), ...]
-    if len(closes) >= 30 and _zz_threshold > 0:
+    # ====== ZigZag 波段周期统计 (阈值=1.5×ATR, 近半年数据) ======
+    # 原理: 反向波动≥1.5×ATR才确认转折点, 过滤噪音, 保留真实波段结构
+    # 数据范围: 近120个交易日(约半年)
+    _zz_n = min(120, len(closes))
+    _zz_closes = closes[-_zz_n:]
+    _zz_threshold = atr_abs * 1.5  # 1.5×ATR 作为转折阈值 (自适应波动率)
+    _zz_pivots = []  # [(index_in_zz, price, 'H'/'L'), ...]
+    if len(_zz_closes) >= 30 and _zz_threshold > 0:
         _zz_dir = 0  # 0=neutral, 1=up, -1=down
         _zz_li = 0
-        _zz_lp = closes[0]
-        for _i in range(1, len(closes)):
+        _zz_lp = _zz_closes[0]
+        for _i in range(1, len(_zz_closes)):
             if _zz_dir >= 0:
-                if closes[_i] > _zz_lp:
-                    _zz_lp = closes[_i]; _zz_li = _i
-                elif (_zz_lp - closes[_i]) >= _zz_threshold:
+                if _zz_closes[_i] > _zz_lp:
+                    _zz_lp = _zz_closes[_i]; _zz_li = _i
+                elif (_zz_lp - _zz_closes[_i]) >= _zz_threshold:
                     _zz_pivots.append((_zz_li, _zz_lp, 'H'))
-                    _zz_dir = -1; _zz_lp = closes[_i]; _zz_li = _i
+                    _zz_dir = -1; _zz_lp = _zz_closes[_i]; _zz_li = _i
             if _zz_dir <= 0:
-                if closes[_i] < _zz_lp:
-                    _zz_lp = closes[_i]; _zz_li = _i
-                elif (closes[_i] - _zz_lp) >= _zz_threshold:
+                if _zz_closes[_i] < _zz_lp:
+                    _zz_lp = _zz_closes[_i]; _zz_li = _i
+                elif (_zz_closes[_i] - _zz_lp) >= _zz_threshold:
                     _zz_pivots.append((_zz_li, _zz_lp, 'L'))
-                    _zz_dir = 1; _zz_lp = closes[_i]; _zz_li = _i
+                    _zz_dir = 1; _zz_lp = _zz_closes[_i]; _zz_li = _i
 
     _zz_up_days, _zz_up_pct = [], []
     _zz_dn_days, _zz_dn_pct = [], []
@@ -3399,6 +3402,8 @@ def analyze_buy_sell(bars: list[dict]) -> dict:
         return _s[_n // 2] if _n % 2 else (_s[_n // 2 - 1] + _s[_n // 2]) / 2
 
     _style_extra["zz_pivot_count"] = len(_zz_pivots)
+    _style_extra["zz_threshold"] = f"1.5×ATR({atr_abs*1.5:.1f})"
+    _style_extra["zz_period"] = "近半年(120交易日)"
     if _zz_up_days:
         _style_extra["zz_up_days_avg"] = round(sum(_zz_up_days) / len(_zz_up_days), 1)
         _style_extra["zz_up_days_med"] = round(_zz_median(_zz_up_days), 1)
@@ -3409,11 +3414,13 @@ def analyze_buy_sell(bars: list[dict]) -> dict:
         _style_extra["zz_dn_days_med"] = round(_zz_median(_zz_dn_days), 1)
         _style_extra["zz_dn_pct_avg"] = round(sum(_zz_dn_pct) / len(_zz_dn_pct), 1)
         _style_extra["zz_dn_pct_med"] = round(_zz_median(_zz_dn_pct), 1)
-    # 最近6个转折点 (供前端画波段时间线)
+    # 最近转折点 (供前端画波段时间线, 用全量但标注近半年)
     _zz_recent = []
-    for _j in range(max(0, len(_zz_pivots) - 6), len(_zz_pivots)):
+    for _j in range(max(0, len(_zz_pivots) - 8), len(_zz_pivots)):
         _idx, _pp, _tt = _zz_pivots[_j]
-        _day_str = str(bars[_idx].get("day", "")) if _idx < len(bars) else ""
+        # _idx 是 _zz_closes 内的索引, 转换为全局 bars 索引
+        _global_idx = len(closes) - _zz_n + _idx
+        _day_str = str(bars[_global_idx].get("day", "")) if _global_idx < len(bars) else ""
         _swing_days = 0
         _swing_pct = 0.0
         if _j > 0:
@@ -3826,10 +3833,11 @@ def analyze_buy_sell(bars: list[dict]) -> dict:
         else:
             # 波段票: 1 档止盈, 到了就走 (高波动偏好: ATR×0.9→1.2, 不贪0.9, 吃到1段1.2ATR)
             atr_mul_swing = 1.2 if pref_bonus_highvol else 0.9
-            # 止盈幅度 = max(单日正收益q50, ATR倍数, ZigZag上涨中位涨幅×0.8)
-            # ZigZag中位代表该股历史典型波段涨幅, ×0.8 留安全边际(不奢求吃满整段)
+            # 止盈幅度 = max(单日正收益q50, ATR倍数, ZigZag上涨中位涨幅×系数)
+            # 1.5×ATR 捕捉的是中大波段(中位涨幅较大), 波段操作只需吃其中一段, 系数取0.3, 上限25%
             _zz_up_med_pct = _zz_median(_zz_up_pct) if _zz_up_pct else 0
-            move_one = max(q50_pos, atr_pct * atr_mul_swing, _zz_up_med_pct * 0.8, 2.0 if pref_bonus_highvol else 1.5)
+            _zz_tp_ref = min(_zz_up_med_pct * 0.3, 25.0) if _zz_up_med_pct else 0
+            move_one = max(q50_pos, atr_pct * atr_mul_swing, _zz_tp_ref, 2.0 if pref_bonus_highvol else 1.5)
             tp_main_raw = round(c * (1 + move_one / 100), 2)
             # 高波动偏好: 止盈不以前高硬性限制(高波动容易冲过前高), 只在当前价离前高很近时夹一下
             if pref_bonus_highvol:
@@ -3958,7 +3966,7 @@ def analyze_buy_sell(bars: list[dict]) -> dict:
             _zz_up_med_pct = _zz_median(_zz_up_pct) if _zz_up_pct else 0
             take_profit_plan = (f"波段票 1 档止盈: 主兑现位 {tp_single} (现价上方≈+{tgt1:.1f}%, 对应近60日正收益中位数≈{q50_pos:.1f}%)。"
                                 f"到价**一次性清仓**，留小尾巴容易从赚到亏；如果第二天跳空高开越过止盈 3% 以上再留 1/3 看惯性，其余全走。"
-                                + (f" 参考: 该股ZigZag上涨中位数≈{_zz_up_med_pct:.0f}%, 20日区间上沿{_h20:.0f}附近也应减仓。" if _zz_up_med_pct else ""))
+                                + (f" 参考: 该股ZigZag上涨中位数≈{_zz_up_med_pct:.0f}%(1.5×ATR), 吃其中约1/3, 20日区间上沿{_h20:.0f}附近也应减仓。" if _zz_up_med_pct else ""))
         else:
             take_profit_plan = "波段票到止盈位一次性兑现，不拖。"
         stop_loss_plan = (f"严格止损 {sl_style} (现价下方≈{sl_style_pct:.1f}%)。"

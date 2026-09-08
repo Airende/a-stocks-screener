@@ -306,6 +306,9 @@
   .zz-range b{font-weight:700}
   .zz-range .up{color:#dc3545}
   .zz-range .dn{color:#26a69a}
+  .zz-toggle{text-align:center;font-size:11px;color:var(--sub);cursor:pointer;padding:6px;margin-top:2px;border-radius:5px;user-select:none;transition:background .15s}
+  .zz-toggle:hover{background:var(--panel2);color:var(--txt)}
+  .zz-st-period{font-weight:500;color:var(--sub);font-size:10px}
   /* Tabs 切换 */
   .vp-tabs{display:flex;gap:6px;margin:4px 0 10px;flex-wrap:wrap}
   .vp-tab{padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;border-radius:8px;
@@ -1959,8 +1962,12 @@ function renderAnalysis(d){
       const ex = (d.bs && d.bs.my_style && d.bs.my_style.extra) || {};
       const pivots = ex.zz_recent_pivots || [];
       if(!pivots.length && !ex.zz_up_days_med) return '';
-      // 波峰波谷时间线
-      const tl = pivots.map((p,i)=>{
+      const thresh = ex.zz_threshold || '1.5×ATR';
+      const period = ex.zz_period || '近半年';
+      // 波峰波谷时间线 (可收起, 默认显示最近3个)
+      const shownPivots = pivots.slice(-3);
+      const hiddenPivots = pivots.slice(0, -3);
+      const renderPiv = (p)=>{
         const isH = p.type==='H';
         const arrow = isH ? '▼' : '▲';
         const typCls = isH ? 'hh' : 'll';
@@ -1975,8 +1982,18 @@ function renderAnalysis(d){
           <span class="zz-p-price">${p.price}</span>
           <span class="zz-p-swing">${swing}</span>
         </div>`;
-      }).join('');
-      // 统计卡片
+      };
+      const tlShown = shownPivots.map(renderPiv).join('');
+      const tlHidden = hiddenPivots.map(renderPiv).join('');
+      const hasHidden = hiddenPivots.length > 0;
+      const tlHtml = `
+        <div class="zz-timeline">${tlShown}</div>
+        ${hasHidden ? `
+          <div class="zz-timeline zz-timeline-hidden" style="display:none">${tlHidden}</div>
+          <div class="zz-toggle" onclick="this.previousElementSibling.style.display=this.previousElementSibling.style.display==='none'?'block':'none';this.innerHTML=this.innerHTML.includes('展开')?'▲ 收起':'▼ 展开 ${hiddenPivots.length} 个更早转折点'">
+            ▼ 展开 ${hiddenPivots.length} 个更早转折点
+          </div>` : ''}`;
+      // 统计卡片 (标注近半年)
       const upDays = ex.zz_up_days_med || 0;
       const upPct = ex.zz_up_pct_med || 0;
       const dnDays = ex.zz_dn_days_med || 0;
@@ -1984,12 +2001,12 @@ function renderAnalysis(d){
       const statsHtml = `
         <div class="zz-stats">
           <div class="zz-stat zz-up">
-            <div class="zz-st-label">📈 上涨波段(中位)</div>
+            <div class="zz-st-label">📈 上涨波段(中位) <span class="zz-st-period">${period}</span></div>
             <div class="zz-st-val">${upDays}天 / +${upPct}%</div>
             <div class="zz-st-sub">持仓周期参考 / 止盈目标参考</div>
           </div>
           <div class="zz-stat zz-dn">
-            <div class="zz-st-label">📉 下跌波段(中位)</div>
+            <div class="zz-st-label">📉 下跌波段(中位) <span class="zz-st-period">${period}</span></div>
             <div class="zz-st-val">${dnDays}天 / ${dnPct}%</div>
             <div class="zz-st-sub">止损 / 抄底参考</div>
           </div>
@@ -2007,8 +2024,8 @@ function renderAnalysis(d){
         </div>`;
       }
       return `<div class="zz-section">
-        <div class="zz-title">🌊 ZigZag 波段分析 <span class="zz-sub">（阈值=1×ATR，过滤噪音后的真实波峰波谷）</span></div>
-        <div class="zz-timeline">${tl}</div>
+        <div class="zz-title">🌊 ZigZag 波段分析 <span class="zz-sub">（阈值=${thresh}，${period}）</span></div>
+        ${tlHtml}
         ${statsHtml}
         ${rangeHtml}
       </div>`;
