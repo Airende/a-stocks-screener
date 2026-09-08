@@ -1041,9 +1041,9 @@
       ]
     },
     "date": "2026-09-08",
-    "updated_at": "2026-09-08 19:18:40",
+    "updated_at": "2026-09-08 19:24:02",
     "screen": {
-      "updated": "2026-09-08 19:18:39",
+      "updated": "2026-09-08 19:20:06",
       "conds": [
         "b1",
         "b2",
@@ -7005,29 +7005,29 @@
           "bs_motto": "买点要'缩量来、放量走'; 买前先写好入场价、止损价、目标价"
         },
         {
-          "code": "003030",
-          "name": "祖名股份",
-          "symbol": "sz003030",
-          "industry": "农林牧渔",
-          "concept": "其他农产品加工、农林牧渔",
-          "price": 26.51,
-          "change_pct": 0.38,
-          "amount_yi": 1.03,
-          "float_mv_yi": 21.63,
-          "ma5": 25.17,
-          "ma10": 24.19,
-          "ma20": 23.19,
-          "ma60": 22.54,
-          "ma250": 21.32,
-          "bias": 14.32,
-          "kdj_j": 106.0,
-          "atr_pct": 3.83,
+          "code": "600256",
+          "name": "广汇能源",
+          "symbol": "sh600256",
+          "industry": "石油石化",
+          "concept": "油品石化贸易、石油石化",
+          "price": 7.21,
+          "change_pct": 7.61,
+          "amount_yi": 16.27,
+          "float_mv_yi": 460.86,
+          "ma5": 6.77,
+          "ma10": 6.65,
+          "ma20": 6.35,
+          "ma60": 5.65,
+          "ma250": 5.65,
+          "bias": 13.6,
+          "kdj_j": 90.16,
+          "atr_pct": 3.69,
           "score": 4,
           "n_active": 5,
           "groups": {
             "gA": true,
-            "gB": true,
-            "gC": false,
+            "gB": false,
+            "gC": true,
             "gD": true,
             "gE": true
           },
@@ -7046,7 +7046,7 @@
             "方向向上",
             "站上MA20",
             "年线保护",
-            "金叉确认",
+            "放量突破",
             "乖离安全",
             "波段弹性",
             "均线多头",
@@ -7058,7 +7058,7 @@
           "bs_entry": null,
           "bs_stop": null,
           "bs_target": null,
-          "bs_reason": "多头趋势但股价偏离MA20达14.3%, 等回踩",
+          "bs_reason": "多头趋势但股价偏离MA20达13.6%, 等回踩",
           "bs_trend": "多头趋势",
           "bs_alignment": "多头排列",
           "bs_vol": "正常",
@@ -7068,7 +7068,7 @@
           "bs_resonance": [],
           "bs_resonance_count": 0,
           "bs_warnings": [
-            "乖离率9.6%, 距MA20过远, 追高风险增大"
+            "乖离率8.4%, 距MA20过远, 追高风险增大"
           ],
           "bs_motto": "趋势不变仓位不乱, 均线不破格局不散, 控制风险活得久"
         },
@@ -7139,6 +7139,140 @@
           "bs_resonance_count": 1,
           "bs_warnings": [
             "乖离率12.2%, 距MA20过远, 追高风险增大"
+          ],
+          "bs_motto": "趋势不变仓位不乱, 均线不破格局不散, 控制风险活得久"
+        },
+        {
+          "code": "600969",
+          "name": "郴电国际",
+          "symbol": "sh600969",
+          "industry": "公用事业",
+          "concept": "电能综合服务、公用事业",
+          "price": 10.72,
+          "change_pct": 4.38,
+          "amount_yi": 3.34,
+          "float_mv_yi": 39.67,
+          "ma5": 10.32,
+          "ma10": 10.17,
+          "ma20": 9.44,
+          "ma60": 8.51,
+          "ma250": 9.21,
+          "bias": 13.57,
+          "kdj_j": 80.05,
+          "atr_pct": 5.9,
+          "score": 4,
+          "n_active": 5,
+          "groups": {
+            "gA": true,
+            "gB": false,
+            "gC": true,
+            "gD": true,
+            "gE": true
+          },
+          "active": {
+            "gA": true,
+            "gB": true,
+            "gC": true,
+            "gD": true,
+            "gE": true
+          },
+          "est_5d": 1.5,
+          "est_10d": 2.5,
+          "est_20d": 4.0,
+          "tags": [
+            "多头排列",
+            "方向向上",
+            "站上MA20",
+            "年线保护",
+            "放量突破",
+            "乖离安全",
+            "波段弹性",
+            "均线多头",
+            "超买谨慎"
+          ],
+          "bs_signal": "wait",
+          "bs_side": "wait",
+          "bs_type": "观望",
+          "bs_entry": null,
+          "bs_stop": null,
+          "bs_target": null,
+          "bs_reason": "多头趋势但股价偏离MA20达13.6%, 等回踩",
+          "bs_trend": "多头趋势",
+          "bs_alignment": "多头排列",
+          "bs_vol": "正常",
+          "bs_actions": [
+            "等待回踩MA20±2%区域再考虑"
+          ],
+          "bs_resonance": [],
+          "bs_resonance_count": 0,
+          "bs_warnings": [],
+          "bs_motto": "趋势不变仓位不乱, 均线不破格局不散, 控制风险活得久"
+        },
+        {
+          "code": "003030",
+          "name": "祖名股份",
+          "symbol": "sz003030",
+          "industry": "农林牧渔",
+          "concept": "其他农产品加工、农林牧渔",
+          "price": 26.51,
+          "change_pct": 0.38,
+          "amount_yi": 1.03,
+          "float_mv_yi": 21.63,
+          "ma5": 25.17,
+          "ma10": 24.19,
+          "ma20": 23.19,
+          "ma60": 22.54,
+          "ma250": 21.32,
+          "bias": 14.32,
+          "kdj_j": 106.0,
+          "atr_pct": 3.83,
+          "score": 4,
+          "n_active": 5,
+          "groups": {
+            "gA": true,
+            "gB": true,
+            "gC": false,
+            "gD": true,
+            "gE": true
+          },
+          "active": {
+            "gA": true,
+            "gB": true,
+            "gC": true,
+            "gD": true,
+            "gE": true
+          },
+          "est_5d": 1.5,
+          "est_10d": 2.5,
+          "est_20d": 4.0,
+          "tags": [
+            "多头排列",
+            "方向向上",
+            "站上MA20",
+            "年线保护",
+            "金叉确认",
+            "乖离安全",
+            "波段弹性",
+            "均线多头",
+            "超买谨慎"
+          ],
+          "bs_signal": "wait",
+          "bs_side": "wait",
+          "bs_type": "观望",
+          "bs_entry": null,
+          "bs_stop": null,
+          "bs_target": null,
+          "bs_reason": "多头趋势但股价偏离MA20达14.3%, 等回踩",
+          "bs_trend": "多头趋势",
+          "bs_alignment": "多头排列",
+          "bs_vol": "正常",
+          "bs_actions": [
+            "等待回踩MA20±2%区域再考虑"
+          ],
+          "bs_resonance": [],
+          "bs_resonance_count": 0,
+          "bs_warnings": [
+            "乖离率9.6%, 距MA20过远, 追高风险增大"
           ],
           "bs_motto": "趋势不变仓位不乱, 均线不破格局不散, 控制风险活得久"
         },
@@ -7277,140 +7411,6 @@
             "MACD: 零轴上方金叉, 趋势与动能共振"
           ],
           "bs_resonance_count": 1,
-          "bs_warnings": [],
-          "bs_motto": "趋势不变仓位不乱, 均线不破格局不散, 控制风险活得久"
-        },
-        {
-          "code": "600256",
-          "name": "广汇能源",
-          "symbol": "sh600256",
-          "industry": "石油石化",
-          "concept": "油品石化贸易、石油石化",
-          "price": 7.21,
-          "change_pct": 7.61,
-          "amount_yi": 16.27,
-          "float_mv_yi": 460.86,
-          "ma5": 6.77,
-          "ma10": 6.65,
-          "ma20": 6.35,
-          "ma60": 5.65,
-          "ma250": 5.65,
-          "bias": 13.6,
-          "kdj_j": 90.16,
-          "atr_pct": 3.69,
-          "score": 4,
-          "n_active": 5,
-          "groups": {
-            "gA": true,
-            "gB": false,
-            "gC": true,
-            "gD": true,
-            "gE": true
-          },
-          "active": {
-            "gA": true,
-            "gB": true,
-            "gC": true,
-            "gD": true,
-            "gE": true
-          },
-          "est_5d": 1.5,
-          "est_10d": 2.5,
-          "est_20d": 4.0,
-          "tags": [
-            "多头排列",
-            "方向向上",
-            "站上MA20",
-            "年线保护",
-            "放量突破",
-            "乖离安全",
-            "波段弹性",
-            "均线多头",
-            "超买谨慎"
-          ],
-          "bs_signal": "wait",
-          "bs_side": "wait",
-          "bs_type": "观望",
-          "bs_entry": null,
-          "bs_stop": null,
-          "bs_target": null,
-          "bs_reason": "多头趋势但股价偏离MA20达13.6%, 等回踩",
-          "bs_trend": "多头趋势",
-          "bs_alignment": "多头排列",
-          "bs_vol": "正常",
-          "bs_actions": [
-            "等待回踩MA20±2%区域再考虑"
-          ],
-          "bs_resonance": [],
-          "bs_resonance_count": 0,
-          "bs_warnings": [
-            "乖离率8.4%, 距MA20过远, 追高风险增大"
-          ],
-          "bs_motto": "趋势不变仓位不乱, 均线不破格局不散, 控制风险活得久"
-        },
-        {
-          "code": "600969",
-          "name": "郴电国际",
-          "symbol": "sh600969",
-          "industry": "公用事业",
-          "concept": "电能综合服务、公用事业",
-          "price": 10.72,
-          "change_pct": 4.38,
-          "amount_yi": 3.34,
-          "float_mv_yi": 39.67,
-          "ma5": 10.32,
-          "ma10": 10.17,
-          "ma20": 9.44,
-          "ma60": 8.51,
-          "ma250": 9.21,
-          "bias": 13.57,
-          "kdj_j": 80.05,
-          "atr_pct": 5.9,
-          "score": 4,
-          "n_active": 5,
-          "groups": {
-            "gA": true,
-            "gB": false,
-            "gC": true,
-            "gD": true,
-            "gE": true
-          },
-          "active": {
-            "gA": true,
-            "gB": true,
-            "gC": true,
-            "gD": true,
-            "gE": true
-          },
-          "est_5d": 1.5,
-          "est_10d": 2.5,
-          "est_20d": 4.0,
-          "tags": [
-            "多头排列",
-            "方向向上",
-            "站上MA20",
-            "年线保护",
-            "放量突破",
-            "乖离安全",
-            "波段弹性",
-            "均线多头",
-            "超买谨慎"
-          ],
-          "bs_signal": "wait",
-          "bs_side": "wait",
-          "bs_type": "观望",
-          "bs_entry": null,
-          "bs_stop": null,
-          "bs_target": null,
-          "bs_reason": "多头趋势但股价偏离MA20达13.6%, 等回踩",
-          "bs_trend": "多头趋势",
-          "bs_alignment": "多头排列",
-          "bs_vol": "正常",
-          "bs_actions": [
-            "等待回踩MA20±2%区域再考虑"
-          ],
-          "bs_resonance": [],
-          "bs_resonance_count": 0,
           "bs_warnings": [],
           "bs_motto": "趋势不变仓位不乱, 均线不破格局不散, 控制风险活得久"
         },
@@ -7691,7 +7691,7 @@
       ]
     },
     "ma": {
-      "updated": "2026-09-08 19:06:56",
+      "updated": "2026-09-08 19:20:09",
       "counts": {
         "多头排列": 276,
         "多头排列向上发散": 286,
@@ -7702,7 +7702,7 @@
         "MACD底背离": 93
       },
       "total_stocks": 2568,
-      "elapsed_sec": 8.1,
+      "elapsed_sec": 37.9,
       "patterns": {
         "多头排列": [
           {
@@ -12334,7 +12334,7 @@
             "bs_type": "买点: 波段票踩线(前低/MA20回踩)",
             "bs_entry": 13.28,
             "bs_stop": 11.35,
-            "bs_target": 14.07,
+            "bs_target": 13.83,
             "bs_reason": "MA20走平, 震荡市该策略停用; 波段票：均线即将金叉(MA5 vs MA20差+0.47%，MA5≈13.02/MA20≈12.96)，价格在前期低点/MA20买点锚附近（支撑=12.06）",
             "bs_actions": [
               "空仓等待趋势明朗"
@@ -12480,7 +12480,7 @@
             "bs_type": "买点: 波段票踩线(前低/MA20回踩)",
             "bs_entry": 12.68,
             "bs_stop": 10.83,
-            "bs_target": 14.37,
+            "bs_target": 13.76,
             "bs_reason": "股价站上MA20但趋势不明; 波段票：均线即将金叉(MA5 vs MA20差+0.98%，MA5≈12.54/MA20≈12.42)，价格在前期低点/MA20买点锚附近（支撑=10.45）",
             "bs_actions": [
               "等待趋势确认或信号出现"
@@ -12516,7 +12516,7 @@
             "bs_type": "买点: 波段票踩线(前低/MA20回踩)",
             "bs_entry": 62.07,
             "bs_stop": 53.07,
-            "bs_target": 74.12,
+            "bs_target": 66.92,
             "bs_reason": "股价站上MA20但趋势不明; 波段票：均线即将金叉(MA5 vs MA20差+1.23%，MA5≈61.26/MA20≈60.51)，价格在前期低点/MA20买点锚附近（支撑=48.80）",
             "bs_actions": [
               "等待趋势确认或信号出现"
@@ -12552,7 +12552,7 @@
             "bs_type": "买点: 波段票踩线(前低/MA20回踩)",
             "bs_entry": 11.91,
             "bs_stop": 10.18,
-            "bs_target": 13.36,
+            "bs_target": 12.71,
             "bs_reason": "MA20走平, 震荡市该策略停用; 波段票：均线即将金叉(MA5 vs MA20差+1.04%，MA5≈11.57/MA20≈11.46)，价格在前期低点/MA20买点锚附近（支撑=10.62）",
             "bs_actions": [
               "空仓等待趋势明朗"
@@ -12588,7 +12588,7 @@
             "bs_type": "买点: 波段票踩线(前低/MA20回踩)",
             "bs_entry": 22.27,
             "bs_stop": 19.04,
-            "bs_target": 23.83,
+            "bs_target": 23.14,
             "bs_reason": "MA20走平, 震荡市该策略停用; 波段票：均线即将金叉(MA5 vs MA20差+1.31%，MA5≈21.84/MA20≈21.55)，价格在前期低点/MA20买点锚附近（支撑=20.39）",
             "bs_actions": [
               "空仓等待趋势明朗"
@@ -12624,7 +12624,7 @@
             "bs_type": "买点: 波段票踩线(前低/MA20回踩)",
             "bs_entry": 14.38,
             "bs_stop": 12.29,
-            "bs_target": 15.69,
+            "bs_target": 15.03,
             "bs_reason": "MA20走平, 震荡市该策略停用; 波段票：均线即将金叉(MA5 vs MA20差+1.11%，MA5≈14.16/MA20≈14.01)，价格在前期低点/MA20买点锚附近（支撑=12.72）",
             "bs_actions": [
               "空仓等待趋势明朗"
@@ -15076,7 +15076,7 @@
             "bs_type": "买点: 波段票踩线(前低/MA20回踩)",
             "bs_entry": 3.27,
             "bs_stop": 2.79,
-            "bs_target": 3.45,
+            "bs_target": 3.4,
             "bs_reason": "MA20走平, 震荡市该策略停用; 波段票：均线即将金叉(MA5 vs MA20差+1.16%，MA5≈3.18/MA20≈3.15)，价格在前期低点/MA20买点锚附近（支撑=3.03）",
             "bs_actions": [
               "空仓等待趋势明朗"
@@ -15327,7 +15327,7 @@
             "bs_type": "买点: 波段票踩线(前低/MA20回踩)",
             "bs_entry": 6.38,
             "bs_stop": 5.45,
-            "bs_target": 6.81,
+            "bs_target": 6.63,
             "bs_reason": "MA20走平, 震荡市该策略停用; 波段票：均线即将金叉(MA5 vs MA20差+1.07%，MA5≈6.34/MA20≈6.28)，价格在前期低点/MA20买点锚附近（支撑=5.93）",
             "bs_actions": [
               "空仓等待趋势明朗"

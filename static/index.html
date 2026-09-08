@@ -279,7 +279,7 @@
     .vp-style-banner .sbg-discip{grid-template-columns:1fr}
   }
   /* ZigZag 波段分析栏目 */
-  .zz-section{border-radius:10px;padding:12px;margin-bottom:10px;
+  .zz-section{border-radius:10px;padding:12px;margin-top:10px;margin-bottom:0;
     background:linear-gradient(135deg,rgba(38,166,154,.07),rgba(65,105,225,.05));
     border:1px solid rgba(38,166,154,.25)}
   .zz-title{font-size:13px;font-weight:800;color:var(--txt);margin-bottom:8px;display:flex;align-items:center;gap:6px}
@@ -1920,12 +1920,17 @@ function renderAnalysis(d){
     // ---- 顶部风格判定徽章 ----
     const styleCode = vps.style_code || 'mix';
     const styleLabel = vps.style || '混合型';
-    // 占优模式的动态持仓周期
+    // 占优模式的动态持仓周期 (优先用 ZigZag 上涨中位天数)
     const domMode = vps.dominant || 'band';
+    const _zzEx = (d.bs && d.bs.my_style && d.bs.my_style.extra) || {};
+    const zzUpDays = _zzEx.zz_up_days_med || 0;
+    const zzDnDays = _zzEx.zz_dn_days_med || 0;
     const domHold = ((vps[domMode]||{}).hold_cycle) || '';
+    // 持仓天数展示: 有 ZigZag 数据时标注中位天数
+    const holdLabel = zzUpDays ? `持仓${domHold} · ZigZag中位${zzUpDays}天` : (domHold ? `持仓${domHold}` : '');
     const styleBadgeMap = {
-      trend: {icon:'🚀', cls:'vp-style-trend', sub:'趋势票 · 主升浪长持' + (domHold?` · 持仓${domHold}`:'')},
-      band:  {icon:'🎯', cls:'vp-style-band',  sub:'波段票 · 快进快出' + (domHold?` · 持仓${domHold}`:'')},
+      trend: {icon:'🚀', cls:'vp-style-trend', sub:'趋势票 · 主升浪长持' + (holdLabel?` · ${holdLabel}`:'')},
+      band:  {icon:'🎯', cls:'vp-style-band',  sub:'波段票 · 快进快出' + (holdLabel?` · ${holdLabel}`:'')},
       mix:   {icon:'⚖', cls:'vp-style-mix',   sub:'混合型 · 双模式都参考'},
       avoid: {icon:'⚠', cls:'vp-style-avoid', sub:'避坑票 · 不参与'},
     };
@@ -1940,12 +1945,7 @@ function renderAnalysis(d){
             <div class="sbg-sub">${sBadge.sub} · ${esc(scores)}</div>
           </div>
         </div>
-        <div class="sbg-row2">
-          <div class="sbg-discip">
-            <div class="sd sd-trend">🚀 <b>趋势票：</b>${esc(disci.trend||'')}</div>
-            <div class="sd sd-band">🎯 <b>波段票：</b>${esc(disci.band||'')}</div>
-          </div>
-        </div>
+        ${buildZzSection(d)}
       </div>
       <!-- 模式切换标签: dominant在前 -->
       <div class="vp-tabs" id="vpTabs">
@@ -1954,8 +1954,7 @@ function renderAnalysis(d){
              <button class="vp-tab" data-tab="trend">🚀 趋势票视角</button>`
           : `<button class="vp-tab on" data-tab="trend">🚀 趋势票视角</button>
              <button class="vp-tab" data-tab="band">🎯 波段票视角</button>`}
-      </div>
-      ${buildZzSection(d)}`;
+      </div>`;
 
     // ---- ZigZag 波段分析栏目 ----
     function buildZzSection(d){
