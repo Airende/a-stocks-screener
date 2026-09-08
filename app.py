@@ -5457,7 +5457,13 @@ def _run_ma_screen_thread():
     try:
         spot = fetch_spot_all()
         _build_board_maps()
+        # 预加载K线缓存到内存 (预筛阶段要读昨日成交额)
+        _preload_kline_cache()
         # 预过滤: 排除ST/科创板/北交所, 成交额>1亿
+        # 盘中(未收盘)时 spot.amount 是当日累计, 偏小不可靠, 改用昨日K线成交额
+        after_close = _is_after_close()
+        today_str = _latest_trade_date_str()
+        today_iso = f"{today_str[:4]}-{today_str[4:6]}-{today_str[6:]}"
         cands = []
         for r in spot:
             code = r.get("code", "")
@@ -5466,10 +5472,28 @@ def _run_ma_screen_thread():
                 continue
             if "ST" in name or code.startswith(("688", "8", "4")):
                 continue
-            try:
-                amt = float(r.get("amount", 0))
-            except (TypeError, ValueError):
-                amt = 0
+            if after_close:
+                try:
+                    amt = float(r.get("amount", 0))
+                except (TypeError, ValueError):
+                    amt = 0
+            else:
+                # 盘中: 从K线缓存取昨日成交额 (volume * close)
+                amt = 0.0
+                sym = _to_symbol(code)
+                bars = _load_kline_cache(sym)
+                if bars:
+                    # 取最后一根非今日的bar作为昨日成交
+                    prev_bar = None
+                    for b in reversed(bars):
+                        if (b.get("day") or "")[:10] != today_iso:
+                            prev_bar = b
+                            break
+                    if prev_bar:
+                        try:
+                            amt = float(prev_bar.get("volume", 0)) * float(prev_bar.get("close", 0))
+                        except (TypeError, ValueError):
+                            amt = 0.0
             if amt < 1e8:
                 continue
             cands.append({"code": code, "name": name, "row": r})
