@@ -278,6 +278,34 @@
   @media (max-width:640px){
     .vp-style-banner .sbg-discip{grid-template-columns:1fr}
   }
+  /* ZigZag 波段分析栏目 */
+  .zz-section{border-radius:10px;padding:12px;margin-bottom:10px;
+    background:linear-gradient(135deg,rgba(38,166,154,.07),rgba(65,105,225,.05));
+    border:1px solid rgba(38,166,154,.25)}
+  .zz-title{font-size:13px;font-weight:800;color:var(--txt);margin-bottom:8px;display:flex;align-items:center;gap:6px}
+  .zz-title .zz-sub{font-size:11px;font-weight:500;color:var(--sub)}
+  .zz-timeline{display:flex;flex-direction:column;gap:2px;margin:6px 0 10px}
+  .zz-pivot{display:flex;align-items:center;gap:8px;font-size:12px;padding:4px 6px;border-radius:5px}
+  .zz-pivot.zz-h{background:rgba(255,77,79,.07)}
+  .zz-pivot.zz-l{background:rgba(38,166,154,.07)}
+  .zz-arrow{font-size:14px;flex-shrink:0}
+  .zz-p-date{color:var(--sub);font-size:11px;min-width:80px}
+  .zz-p-type{font-weight:700;min-width:36px}
+  .zz-p-type.hh{color:#dc3545}
+  .zz-p-type.ll{color:#26a69a}
+  .zz-p-price{font-weight:700;color:var(--txt);min-width:60px;text-align:right}
+  .zz-p-swing{font-size:11px;color:var(--sub);margin-left:auto}
+  .zz-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+  .zz-stat{background:var(--panel2);border-radius:7px;padding:8px 10px;border:1px solid var(--border)}
+  .zz-stat .zz-st-label{font-size:10px;color:var(--sub);font-weight:600}
+  .zz-stat .zz-st-val{font-size:16px;font-weight:800;margin-top:2px}
+  .zz-stat.zz-up .zz-st-val{color:#dc3545}
+  .zz-stat.zz-dn .zz-st-val{color:#26a69a}
+  .zz-stat .zz-st-sub{font-size:10px;color:var(--sub)}
+  .zz-range{background:var(--panel2);border-radius:7px;padding:8px 10px;border:1px solid var(--border);font-size:11.5px;line-height:1.7}
+  .zz-range b{font-weight:700}
+  .zz-range .up{color:#dc3545}
+  .zz-range .dn{color:#26a69a}
   /* Tabs 切换 */
   .vp-tabs{display:flex;gap:6px;margin:4px 0 10px;flex-wrap:wrap}
   .vp-tab{padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;border-radius:8px;
@@ -1923,7 +1951,68 @@ function renderAnalysis(d){
              <button class="vp-tab" data-tab="trend">🚀 趋势票视角</button>`
           : `<button class="vp-tab on" data-tab="trend">🚀 趋势票视角</button>
              <button class="vp-tab" data-tab="band">🎯 波段票视角</button>`}
+      </div>
+      ${buildZzSection(d)}`;
+
+    // ---- ZigZag 波段分析栏目 ----
+    function buildZzSection(d){
+      const ex = (d.bs && d.bs.my_style && d.bs.my_style.extra) || {};
+      const pivots = ex.zz_recent_pivots || [];
+      if(!pivots.length && !ex.zz_up_days_med) return '';
+      // 波峰波谷时间线
+      const tl = pivots.map((p,i)=>{
+        const isH = p.type==='H';
+        const arrow = isH ? '▼' : '▲';
+        const typCls = isH ? 'hh' : 'll';
+        const typName = isH ? '波峰' : '波谷';
+        const swing = p.swing_days>0
+          ? `${isH?'↑':'↓'} ${p.swing_days}天 / ${p.swing_pct>=0?'+':''}${p.swing_pct}%`
+          : '起点';
+        return `<div class="zz-pivot zz-${isH?'h':'l'}">
+          <span class="zz-arrow">${arrow}</span>
+          <span class="zz-p-date">${esc(p.day||'')}</span>
+          <span class="zz-p-type ${typCls}">${typName}</span>
+          <span class="zz-p-price">${p.price}</span>
+          <span class="zz-p-swing">${swing}</span>
+        </div>`;
+      }).join('');
+      // 统计卡片
+      const upDays = ex.zz_up_days_med || 0;
+      const upPct = ex.zz_up_pct_med || 0;
+      const dnDays = ex.zz_dn_days_med || 0;
+      const dnPct = ex.zz_dn_pct_med || 0;
+      const statsHtml = `
+        <div class="zz-stats">
+          <div class="zz-stat zz-up">
+            <div class="zz-st-label">📈 上涨波段(中位)</div>
+            <div class="zz-st-val">${upDays}天 / +${upPct}%</div>
+            <div class="zz-st-sub">持仓周期参考 / 止盈目标参考</div>
+          </div>
+          <div class="zz-stat zz-dn">
+            <div class="zz-st-label">📉 下跌波段(中位)</div>
+            <div class="zz-st-val">${dnDays}天 / ${dnPct}%</div>
+            <div class="zz-st-sub">止损 / 抄底参考</div>
+          </div>
+        </div>`;
+      // 横盘区间
+      const rHi = ex.range_20d_high, rLo = ex.range_20d_low;
+      const rPos = ex.range_pos_pct;
+      const tUp = ex.breakout_target_up, tDn = ex.breakout_target_dn;
+      let rangeHtml = '';
+      if(rHi && rLo){
+        rangeHtml = `<div class="zz-range">
+          <b>📊 20日横盘区间：</b><b class="dn">${rLo}</b> ~ <b class="up">${rHi}</b>
+          （振幅 ${ex.range_20d_amp_pct||0}%），现价处区间 <b>${rPos}%</b> 位置<br>
+          <b>突破方向：</b>向上突破看 <b class="up">${tUp}</b>（+2×ATR）｜跌破下沿看 <b class="dn">${tDn}</b>（-2×ATR）
+        </div>`;
+      }
+      return `<div class="zz-section">
+        <div class="zz-title">🌊 ZigZag 波段分析 <span class="zz-sub">（阈值=1×ATR，过滤噪音后的真实波峰波谷）</span></div>
+        <div class="zz-timeline">${tl}</div>
+        ${statsHtml}
+        ${rangeHtml}
       </div>`;
+    }
 
     // ---- 共享函数: 生成某模式的【简化总结】量价分析卡片 ----
     // 用户要求: 描述过于复杂 → 默认只展示总结, 详细版折叠到「展开看原始6步分析」

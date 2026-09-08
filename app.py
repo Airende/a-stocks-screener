@@ -3409,6 +3409,25 @@ def analyze_buy_sell(bars: list[dict]) -> dict:
         _style_extra["zz_dn_days_med"] = round(_zz_median(_zz_dn_days), 1)
         _style_extra["zz_dn_pct_avg"] = round(sum(_zz_dn_pct) / len(_zz_dn_pct), 1)
         _style_extra["zz_dn_pct_med"] = round(_zz_median(_zz_dn_pct), 1)
+    # 最近6个转折点 (供前端画波段时间线)
+    _zz_recent = []
+    for _j in range(max(0, len(_zz_pivots) - 6), len(_zz_pivots)):
+        _idx, _pp, _tt = _zz_pivots[_j]
+        _day_str = str(bars[_idx].get("day", "")) if _idx < len(bars) else ""
+        _swing_days = 0
+        _swing_pct = 0.0
+        if _j > 0:
+            _pi, _pp_prev, _ = _zz_pivots[_j - 1]
+            _swing_days = _idx - _pi
+            _swing_pct = (_pp / _pp_prev - 1) * 100 if _pp_prev > 0 else 0
+        _zz_recent.append({
+            "day": _day_str,
+            "price": round(_pp, 2),
+            "type": _tt,  # 'H' 波峰 / 'L' 波谷
+            "swing_days": _swing_days,
+            "swing_pct": round(_swing_pct, 1),
+        })
+    _style_extra["zz_recent_pivots"] = _zz_recent
 
     # 当前横盘区间 (近20日高低点) — 用于区间操作和突破目标测算
     _h20 = max(highs[-20:]) if len(highs) >= 20 else max(highs)
@@ -3654,18 +3673,21 @@ def analyze_buy_sell(bars: list[dict]) -> dict:
         elif diff <= -10 or (swing_score > trend_score and (alignment == "交叉纠缠" or trend == "震荡")):
             # 明确波段票
             style_type = "波段票 · 快进快出"
+            # 用 ZigZag 中位上涨天数校准持仓周期 (有数据时用, 无数据时用默认)
+            _zz_up_med_days = int(_zz_median(_zz_up_days)) if _zz_up_days else 0
+            _hd_max = max(_zz_up_med_days, 3) if _zz_up_med_days else 5
             if tr_dir == "down":
                 style_tag_color = "down"; style_badge = "📉 波段票"
-                hold_days = [1, 3]
-                hold_days_text = "下降波段(波段分占优+方向朝下), 抢超跌反弹 1～3 天, 见好就收"
+                hold_days = [1, min(_hd_max, 4)]
+                hold_days_text = f"下降波段(波段分占优+方向朝下), 抢超跌反弹 1～{hold_days[1]} 天(ZigZag中位{_zz_up_med_days or 3}天), 见好就收"
             elif tr_dir == "up":
                 style_tag_color = "up"; style_badge = "📈 波段票"
-                hold_days = [2, 5]
-                hold_days_text = "上升波段(波段分占优+方向朝上), 顺势操作 2～5 天（有肉就走）"
+                hold_days = [2, _hd_max]
+                hold_days_text = f"上升波段(波段分占优+方向朝上), 顺势操作 2～{_hd_max} 天(ZigZag中位{_zz_up_med_days or 3}天)（有肉就走）"
             else:
                 style_tag_color = "gold"; style_badge = "🎯 波段票"
-                hold_days = [2, 5]
-                hold_days_text = "震荡市波段票, 建议持仓 2～5 天（有肉就走，切勿恋战）"
+                hold_days = [2, _hd_max]
+                hold_days_text = f"震荡市波段票, 建议持仓 2～{_hd_max} 天(ZigZag中位{_zz_up_med_days or 3}天)（有肉就走，切勿恋战）"
         else:
             # ===== 模糊区间: swing>=trend 就优先偏波段 =====
             swing_like = swing_long_period or (swing_score >= trend_score)
@@ -3804,7 +3826,10 @@ def analyze_buy_sell(bars: list[dict]) -> dict:
         else:
             # 波段票: 1 档止盈, 到了就走 (高波动偏好: ATR×0.9→1.2, 不贪0.9, 吃到1段1.2ATR)
             atr_mul_swing = 1.2 if pref_bonus_highvol else 0.9
-            move_one = max(q50_pos, atr_pct * atr_mul_swing, 2.0 if pref_bonus_highvol else 1.5)
+            # 止盈幅度 = max(单日正收益q50, ATR倍数, ZigZag上涨中位涨幅×0.8)
+            # ZigZag中位代表该股历史典型波段涨幅, ×0.8 留安全边际(不奢求吃满整段)
+            _zz_up_med_pct = _zz_median(_zz_up_pct) if _zz_up_pct else 0
+            move_one = max(q50_pos, atr_pct * atr_mul_swing, _zz_up_med_pct * 0.8, 2.0 if pref_bonus_highvol else 1.5)
             tp_main_raw = round(c * (1 + move_one / 100), 2)
             # 高波动偏好: 止盈不以前高硬性限制(高波动容易冲过前高), 只在当前价离前高很近时夹一下
             if pref_bonus_highvol:
