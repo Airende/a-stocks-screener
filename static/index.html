@@ -2577,7 +2577,9 @@ function renderAnalysis(d){
 
   // 简易K线图 (已删除 ATR 副图)
   const bars=d.bars||[];
-  const chartHtml=(bars.length?buildMiniChart(bars):'');
+  // ZigZag 转折点: 叠加到 K 线图 (波峰▼/波谷▲ + 折线)
+  const zzPivots=((d.bs&&d.bs.my_style&&d.bs.my_style.extra)||{}).zz_recent_pivots||[];
+  const chartHtml=(bars.length?buildMiniChart(bars, zzPivots):'');
   // 所属板块 + 主营业务
   const boardHtml=(d.industry||d.concept)?`
     <div class="sa-row" style="margin-bottom:6px">
@@ -2951,7 +2953,7 @@ function renderAnalysis(d){
   // K线图十字光标 + OHLC悬浮绑定 (20260906)
   bindChartInteractivity(saPanel);
 }
-function buildMiniChart(bars){
+function buildMiniChart(bars, pivots){
   const w=800,h=220,padL=8,padR=8,padT=12,padB=18;
   const n=bars.length;
   if(n<2) return '';
@@ -3018,6 +3020,39 @@ function buildMiniChart(bars){
   // 注册图表数据, 供 bindChartInteractivity 十字光标/OHLC悬浮 (20260906)
   const cid='chart'+(++_chartSeq);
   _chartReg[cid]={bars, w, padL, padR, n, h};
+  // ---- ZigZag 转折点叠加 (波峰▼/波谷▲ + 折线) ----
+  let zzHtml='';
+  if(pivots && pivots.length){
+    // 建立 day -> 索引 映射
+    const dayIdx={};
+    for(let i=0;i<n;i++){ const k=(bars[i].day||'').slice(0,10); dayIdx[k]=i; }
+    const visPivots=[];
+    for(const p of pivots){
+      const k=(p.day||'').slice(0,10);
+      const i=dayIdx[k];
+      if(i==null) continue;  // 不在当前显示区间内, 跳过
+      visPivots.push({...p, i});
+    }
+    if(visPivots.length){
+      // 1) ZigZag 折线: 连接相邻转折点 (紫色虚线)
+      let zzPath='', started=false;
+      for(const p of visPivots){
+        const x=padL+p.i*xStep+xStep/2, yy=y(p.price);
+        zzPath+=`${started?'L':'M'}${x.toFixed(1)},${yy.toFixed(1)} `;
+        started=true;
+      }
+      // 2) 标记: 波峰▼在 high 上方, 波谷▲在 low 下方
+      const marks=visPivots.map(p=>{
+        const x=padL+p.i*xStep+xStep/2;
+        const isH=p.type==='H';
+        const col=isH?'#dc3545':'#26a69a';
+        const arrow=isH?'▼':'▲';
+        const yy=isH ? y(bars[p.i].high)-6 : y(bars[p.i].low)+10;
+        return `<text x="${x.toFixed(1)}" y="${yy.toFixed(1)}" fill="${col}" font-size="11" text-anchor="middle" font-weight="bold">${arrow}</text>`;
+      }).join('');
+      zzHtml=`<path d="${zzPath}" fill="none" stroke="#a06bff" stroke-width="1.2" stroke-dasharray="4,3" opacity="0.8"/>${marks}`;
+    }
+  }
   return `
     <div class="sa-chart" id="${cid}" style="height:220px">
       <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:100%" preserveAspectRatio="none">
@@ -3026,6 +3061,7 @@ function buildMiniChart(bars){
         <path d="${maPath(ma5)}" fill="none" stroke="#f5c842" stroke-width="1.2" opacity="0.9"/>
         <path d="${maPath(ma10)}" fill="none" stroke="#4f9dff" stroke-width="1.2" opacity="0.9"/>
         <path d="${maPath(ma20)}" fill="none" stroke="#a06bff" stroke-width="1.2" opacity="0.9"/>
+        ${zzHtml}
         ${dateTxt}
         ${legend}
       </svg>
