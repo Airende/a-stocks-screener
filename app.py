@@ -3409,7 +3409,9 @@ def analyze_buy_sell(bars: list[dict]) -> dict:
         return _s[_n // 2] if _n % 2 else (_s[_n // 2 - 1] + _s[_n // 2]) / 2
 
     _style_extra["zz_pivot_count"] = len(_zz_pivots)
-    _style_extra["zz_threshold"] = f"1.5×ATR({atr_abs*1.5:.1f})"
+    _zz_thr_price = atr_abs * 1.5
+    _zz_thr_pct = (_zz_thr_price / closes[-1] * 100) if closes and closes[-1] > 0 else 0
+    _style_extra["zz_threshold"] = f"1.5×ATR({_zz_thr_price:.1f}元 / {_zz_thr_pct:.1f}%)"
     _style_extra["zz_period"] = "近半年(120交易日)"
     # 距最后一个转折点的天数
     if _zz_pivots:
