@@ -1104,30 +1104,66 @@ function bindChartInteractivity(rootEl){
       vline.setAttribute('stroke-dasharray','3,3'); vline.style.display='none';
       svg.appendChild(vline);
     }
+    // 横向价格虚线 + 右端价格标签 (跟随鼠标Y, 显示对应价格)
+    let hline = svg.querySelector('.xhair-h');
+    if(!hline){
+      hline = document.createElementNS('http://www.w3.org/2000/svg','line');
+      hline.setAttribute('class','xhair-h');
+      hline.setAttribute('x1', reg.padL); hline.setAttribute('x2', reg.w - reg.padR);
+      hline.setAttribute('stroke','rgba(255,200,80,.5)'); hline.setAttribute('stroke-width','1');
+      hline.setAttribute('stroke-dasharray','4,3'); hline.style.display='none';
+      svg.appendChild(hline);
+    }
+    let hlbl = svg.querySelector('.xhair-hlbl');
+    if(!hlbl){
+      hlbl = document.createElementNS('http://www.w3.org/2000/svg','text');
+      hlbl.setAttribute('class','xhair-hlbl');
+      hlbl.setAttribute('fill','#fff'); hlbl.setAttribute('font-size','10');
+      hlbl.setAttribute('font-weight','bold'); hlbl.setAttribute('text-anchor','end');
+      hlbl.style.display='none';
+      svg.appendChild(hlbl);
+    }
     const tip = document.createElement('div');
     tip.className='chart-tip'; div.appendChild(tip);
     div.addEventListener('mousemove', ev=>{
       const rect = div.getBoundingClientRect();
       const vx = (ev.clientX - rect.left) / rect.width * reg.w;  // 视口坐标→viewBox坐标(preserveAspectRatio=none)
+      const vy = (ev.clientY - rect.top) / rect.height * reg.h;
       const xStep = (reg.w - reg.padL - reg.padR) / reg.n;
       let i = Math.floor((vx - reg.padL) / xStep);
-      if(i < 0 || i >= reg.n){ tip.style.display='none'; vline.style.display='none'; return; }
-      const b = reg.bars[i];
-      const px = reg.padL + i*xStep + xStep/2;
-      vline.setAttribute('x1', px); vline.setAttribute('x2', px);
-      vline.style.display='';
-      // 悬浮内容: 注册了 tipFn 的图表(悬浮预览的量/KDJ副图)用自定义内容, 其余默认OHLC (20260906)
-      tip.innerHTML = reg.tipFn ? reg.tipFn(b, i) :
-        `<b>${esc(b.day||'')}</b><br>开 ${b.open} · 高 ${b.high}<br>低 ${b.low} · 收 <b>${b.close}</b> ${((b.chg!=null&&!isNaN(b.chg))?'<span style="color:'+(b.chg>=0?'#ff4d4f':'#26a69a')+'">'+(b.chg>=0?'+':'')+b.chg.toFixed(2)+'%</span>':'')}`;
-      tip.style.display='block';
-      // 悬浮框跟随鼠标, 靠右时翻转到左侧
-      const tw = tip.offsetWidth, th = tip.offsetHeight;
-      let lx = ev.clientX - rect.left + 14;
-      if(lx + tw > rect.width - 4) lx = ev.clientX - rect.left - tw - 14;
-      tip.style.left = Math.max(4, lx) + 'px';
-      tip.style.top = Math.max(4, Math.min(rect.height - th - 4, ev.clientY - rect.top - th/2)) + 'px';
+      if(i < 0 || i >= reg.n){ tip.style.display='none'; vline.style.display='none'; }
+      else {
+        const b = reg.bars[i];
+        const px = reg.padL + i*xStep + xStep/2;
+        vline.setAttribute('x1', px); vline.setAttribute('x2', px);
+        vline.style.display='';
+        // 悬浮内容: 注册了 tipFn 的图表(悬浮预览的量/KDJ副图)用自定义内容, 其余默认OHLC (20260906)
+        tip.innerHTML = reg.tipFn ? reg.tipFn(b, i) :
+          `<b>${esc(b.day||'')}</b><br>开 ${b.open} · 高 ${b.high}<br>低 ${b.low} · 收 <b>${b.close}</b> ${((b.chg!=null&&!isNaN(b.chg))?'<span style="color:'+(b.chg>=0?'#ff4d4f':'#26a69a')+'">'+(b.chg>=0?'+':'')+b.chg.toFixed(2)+'%</span>':'')}`;
+        tip.style.display='block';
+        // 悬浮框跟随鼠标, 靠右时翻转到左侧
+        const tw = tip.offsetWidth, th = tip.offsetHeight;
+        let lx = ev.clientX - rect.left + 14;
+        if(lx + tw > rect.width - 4) lx = ev.clientX - rect.left - tw - 14;
+        tip.style.left = Math.max(4, lx) + 'px';
+        tip.style.top = Math.max(4, Math.min(rect.height - th - 4, ev.clientY - rect.top - th/2)) + 'px';
+      }
+      // 横向价格线: 鼠标Y反算价格 (仅在绘图区 padT~h-padB 内显示)
+      const plotH = reg.h - reg.padT - reg.padB;
+      const rng = (reg.hi - reg.lo) || 1;
+      if(vy >= reg.padT && vy <= reg.h - reg.padB){
+        const price = reg.hi - (vy - reg.padT) / plotH * rng;
+        hline.setAttribute('y1', vy); hline.setAttribute('y2', vy);
+        hline.style.display='';
+        hlbl.setAttribute('x', (reg.w - reg.padR - 2));
+        hlbl.setAttribute('y', (vy - 3));
+        hlbl.textContent = price.toFixed(2);
+        hlbl.style.display='';
+      } else {
+        hline.style.display='none'; hlbl.style.display='none';
+      }
     });
-    div.addEventListener('mouseleave', ()=>{ tip.style.display='none'; vline.style.display='none'; });
+    div.addEventListener('mouseleave', ()=>{ tip.style.display='none'; vline.style.display='none'; hline.style.display='none'; hlbl.style.display='none'; });
   });
 }
 // ---- SSE 实时事件 (20260906): 订阅 /api/events, ts 变化才拉全量数据; 原有轮询保留作断连兜底 ----
@@ -3019,7 +3055,7 @@ function buildMiniChart(bars, pivots){
                `<text x="${padL+82}" y="${padT-2}" fill="#a06bff" font-size="10">MA20</text>`;
   // 注册图表数据, 供 bindChartInteractivity 十字光标/OHLC悬浮 (20260906)
   const cid='chart'+(++_chartSeq);
-  _chartReg[cid]={bars, w, padL, padR, n, h};
+  _chartReg[cid]={bars, w, padL, padR, padT, padB, n, h, hi, lo};
   // ---- ZigZag 转折点叠加 (波峰▼/波谷▲ + 折线) ----
   let zzHtml='';
   if(pivots && pivots.length){
@@ -3237,7 +3273,7 @@ function buildMiniChartWithMarkers(bars, buyMarkers, sellMarkers, prewarmDays){
                (prewarmDays?`<text x="${padL+325}" y="${padT-20}" fill="#f5c842" font-size="10">┊ 预热分界</text>`:'');
   // 注册图表数据, 供 bindChartInteractivity 十字光标/OHLC悬浮 (20260906)
   const cid='chart'+(++_chartSeq);
-  _chartReg[cid]={bars, w, padL, padR, n, h};
+  _chartReg[cid]={bars, w, padL, padR, padT, padB, n, h, hi, lo};
   return `
     <div class="sa-chart" id="${cid}" style="height:${h}px">
       <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:100%" preserveAspectRatio="none">
