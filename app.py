@@ -49,6 +49,9 @@ HEADERS = {"Referer": REFERER, "User-Agent": UA}
 
 # 线程池: 用于并发拉取行情/K线
 POOL = ThreadPoolExecutor(max_workers=40)
+# 专用快照池: fetch_spot_all 独立于选股/MA屏的大任务池, 避免被 5000+ K线任务阻塞
+# 导致 market-snapshot / 个股分析 等轻量接口在选股期间长时间挂起 (20260909)
+_SPOT_POOL = ThreadPoolExecutor(max_workers=12)
 
 # 缓存
 _CACHE = {}
@@ -370,6 +373,10 @@ _SINA_FAIL_WINDOW_SEC = 60        # 单只K线失败计数窗口
 _SINA_FAIL_THRESHOLD = 5          # 窗口内失败次数达到阈值才熔断
 _SOURCE_BREAKER = {"sina_down_until": 0.0, "fails": []}
 _SOURCE_BREAKER_LOCK = threading.Lock()
+# 新浪K线(含qfq因子)并发上限: 选股时40线程同时打新浪K线会触发限流,
+# 限流后返回空→连锁触发全局熔断→腾讯/东财K线在本环境又被WAF拦截, 导致大批股票无K线。
+# 用信号量把并发压到新浪能稳定服务的水平 (20260909)
+_SINA_KLINE_SEM = threading.Semaphore(8)
 
 
 def _sina_available() -> bool:
@@ -655,7 +662,7 @@ def fetch_spot_all() -> list[dict]:
             return data if isinstance(data, list) else []
 
         rows: list[dict] = []
-        futs = [POOL.submit(fetch_page, p) for p in range(1, pages + 1)]
+        futs = [_SPOT_POOL.submit(fetch_page, p) for p in range(1, pages + 1)]
         for f in as_completed(futs):
             try:
                 rows.extend(f.result())
@@ -701,14 +708,16 @@ _QFQ_FACTOR_CACHE: dict[str, list[tuple[str, float]]] = {}
 
 def _fetch_qfq_factors(symbol: str) -> list[tuple[str, float]]:
     """从新浪 qfq.js 获取前复权因子列表, 按日期升序返回 [(date, factor), ...]。
-    新浪 qfq.js 因子 = 不复权价 / 前复权价, 故 前复权价 = 不复权价 / factor。"""
+    新浪 qfq.js 因子 = 不复权价 / 前复权价, 故 前复权价 = 不复权价 / factor。
+    20260909: 复用 K 线信号量, 避免选股时因子请求与K线请求叠加打爆新浪。"""
     cached = _QFQ_FACTOR_CACHE.get(symbol)
     if cached is not None:
         return cached
     factors: list[tuple[str, float]] = []
     try:
         url = f"https://finance.sina.com.cn/realstock/company/{symbol}/qfq.js"
-        text = _get(url, timeout=10)
+        with _SINA_KLINE_SEM:
+            text = _get(url, timeout=10)
         if isinstance(text, str):
             import re as _re
             m = _re.search(r"=(\{.*\})", text, _re.DOTALL)
@@ -754,8 +763,18 @@ def _apply_qfq(bars: list[dict], factors: list[tuple[str, float]]) -> list[dict]
 
 
 def _fetch_kline_sina(symbol: str, datalen: int) -> list[dict]:
-    """新浪日K(不复权) + qfq.js 因子 → 前复权。本环境主用路径。"""
-    data = _get(SINA_KLINE, {"symbol": symbol, "scale": 240, "ma": "no", "datalen": datalen})
+    """新浪日K(不复权) + qfq.js 因子 → 前复权。本环境主用路径。
+    20260909: 加并发信号量 + 空结果重试, 防止选股高并发触发新浪限流。"""
+    for attempt in range(3):
+        with _SINA_KLINE_SEM:
+            try:
+                data = _get(SINA_KLINE, {"symbol": symbol, "scale": 240, "ma": "no", "datalen": datalen}, timeout=10)
+            except Exception:
+                data = None
+        if isinstance(data, list) and data:
+            break
+        # 限流/空响应: 退避后重试
+        time.sleep(0.4 * (attempt + 1))
     if not isinstance(data, list):
         return []
     bars: list[dict] = []
@@ -779,7 +798,9 @@ def _fetch_kline_remote(symbol: str, datalen: int) -> list[dict]:
     """K线远程拉取(前复权):
       新浪(不复权+qfq因子本地算前复权) → 腾讯qfq → 东财fqt=1。
     本环境腾讯/东财被WAF/代理拦截, 故新浪+因子为主路径; 其余源作跨环境容灾。
-    前复权使除权日前后价格可比, 自绘K线图与均线/MACD/KDJ口径一致。"""
+    前复权使除权日前后价格可比, 自绘K线图与均线/MACD/KDJ口径一致。
+    20260909: K线失败不再调用 _record_sina_failure —— 限流是瞬态的, 不应触发
+      全局600s熔断(那会连 spot 一起废掉); 全局熔断只由 fetch_spot_all 探测。"""
     out: list[dict] = []
     sina_err = ""
     if _sina_available():
@@ -789,20 +810,21 @@ def _fetch_kline_remote(symbol: str, datalen: int) -> list[dict]:
                 sina_err = "新浪K线返回为空"
         except Exception as e:  # noqa: BLE001
             sina_err = str(e)[:80]
-        if sina_err:
-            _record_sina_failure(sina_err)
     # ---- 备源: 腾讯前复权(直接返回qfq) ----
     if not out:
         try:
             out = _fetch_kline_tencent(symbol, datalen)
-        except Exception as e:  # noqa: BLE001
-            print(f"[source] [{bj_now()}] 腾讯K线(qfq)失败 {symbol}: {str(e)[:60]}, 改用东财", flush=True)
+        except Exception:  # noqa: BLE001
+            pass  # 本环境腾讯K线被WAF拦截, 静默降级, 不再刷日志 (20260909)
     # ---- 备源: 东财前复权(fqt=1) ----
     if not out:
         try:
             out = _fetch_kline_eastmoney(symbol, datalen)
-        except Exception as e:  # noqa: BLE001
-            print(f"[source] [{bj_now()}] K线三源均失败 {symbol}: 新浪:{sina_err[:40]} / 东财:{str(e)[:60]}", flush=True)
+        except Exception:  # noqa: BLE001
+            pass
+    if not out and sina_err:
+        # 仅在真正三源皆空时记录一次 (新浪错误对排障有用), 避免选股时刷屏
+        print(f"[source] [{bj_now()}] K线无数据 {symbol}: 新浪:{sina_err[:50]}", flush=True)
     return out
 
 
