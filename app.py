@@ -3386,12 +3386,12 @@ def analyze_buy_sell(bars: list[dict]) -> dict:
     _style_extra["avg_up_run_days_60d"] = round(avg_run_pos, 1)
     _style_extra["avg_down_run_days_60d"] = round(avg_run_neg, 1)
 
-    # ====== ZigZag 波段周期统计 (阈值=1.3×ATR, 近半年数据) ======
-    # 原理: 反向波动≥1.3×ATR才确认转折点, 过滤噪音, 保留真实波段结构
+    # ====== ZigZag 波段周期统计 (阈值=1.5×ATR, 近半年数据) ======
+    # 原理: 反向波动≥1.5×ATR才确认转折点, 过滤噪音, 保留真实波段结构
     # 数据范围: 近120个交易日(约半年)
     _zz_n = min(120, len(closes))
     _zz_closes = closes[-_zz_n:]
-    _zz_threshold = atr_abs * 1.3  # 1.3×ATR 作为转折阈值 (自适应波动率)
+    _zz_threshold = atr_abs * 1.5  # 1.5×ATR 作为转折阈值 (自适应波动率)
     _zz_pivots = []  # [(index_in_zz, price, 'H'/'L'), ...]
     if len(_zz_closes) >= 30 and _zz_threshold > 0:
         _zz_dir = 0  # 0=neutral, 1=up, -1=down
@@ -3431,9 +3431,9 @@ def analyze_buy_sell(bars: list[dict]) -> dict:
         return _s[_n // 2] if _n % 2 else (_s[_n // 2 - 1] + _s[_n // 2]) / 2
 
     _style_extra["zz_pivot_count"] = len(_zz_pivots)
-    _zz_thr_price = atr_abs * 1.3
+    _zz_thr_price = atr_abs * 1.5
     _zz_thr_pct = (_zz_thr_price / closes[-1] * 100) if closes and closes[-1] > 0 else 0
-    _style_extra["zz_threshold"] = f"1.3×ATR({_zz_thr_price:.1f}元 / {_zz_thr_pct:.1f}%)"
+    _style_extra["zz_threshold"] = f"1.5×ATR({_zz_thr_price:.1f}元 / {_zz_thr_pct:.1f}%)"
     _style_extra["zz_period"] = "近半年(120交易日)"
     # 距最后一个转折点的天数
     if _zz_pivots:
@@ -4031,7 +4031,7 @@ def analyze_buy_sell(bars: list[dict]) -> dict:
             _zz_up_med_pct = _zz_median(_zz_up_pct) if _zz_up_pct else 0
             take_profit_plan = (f"波段票 1 档止盈: 主兑现位 {tp_single} (现价上方≈+{tgt1:.1f}%, 对应近60日正收益中位数≈{q50_pos:.1f}%)。"
                                 f"到价**一次性清仓**，留小尾巴容易从赚到亏；如果第二天跳空高开越过止盈 3% 以上再留 1/3 看惯性，其余全走。"
-                                + (f" 参考: 该股ZigZag上涨中位数≈{_zz_up_med_pct:.0f}%(1.3×ATR), 吃其中约1/3, 20日区间上沿{_h20:.0f}附近也应减仓。" if _zz_up_med_pct else ""))
+                                + (f" 参考: 该股ZigZag上涨中位数≈{_zz_up_med_pct:.0f}%(1.5×ATR), 吃其中约1/3, 20日区间上沿{_h20:.0f}附近也应减仓。" if _zz_up_med_pct else ""))
         else:
             take_profit_plan = "波段票到止盈位一次性兑现，不拖。"
         stop_loss_plan = (f"严格止损 {sl_style} (现价下方≈{sl_style_pct:.1f}%)。"
