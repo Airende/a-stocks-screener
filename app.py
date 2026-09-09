@@ -3388,8 +3388,8 @@ def analyze_buy_sell(bars: list[dict]) -> dict:
 
     # ====== ZigZag 波段周期统计 (阈值=1.5×ATR, 近半年数据) ======
     # 原理: 反向波动≥1.5×ATR才确认转折点, 过滤噪音, 保留真实波段结构
-    # 数据范围: 近120个交易日(约半年)
-    _zz_n = min(120, len(closes))
+    # 数据范围: 近244个交易日(约一年)
+    _zz_n = min(244, len(closes))
     _zz_closes = closes[-_zz_n:]
     _zz_threshold = atr_abs * 1.5  # 1.5×ATR 作为转折阈值 (自适应波动率)
     _zz_pivots = []  # [(index_in_zz, price, 'H'/'L'), ...]
@@ -3434,7 +3434,7 @@ def analyze_buy_sell(bars: list[dict]) -> dict:
     _zz_thr_price = atr_abs * 1.5
     _zz_thr_pct = (_zz_thr_price / closes[-1] * 100) if closes and closes[-1] > 0 else 0
     _style_extra["zz_threshold"] = f"1.5×ATR({_zz_thr_price:.1f}元 / {_zz_thr_pct:.1f}%)"
-    _style_extra["zz_period"] = "近半年(120交易日)"
+    _style_extra["zz_period"] = "近一年(244交易日)"
     # 距最后一个转折点的天数
     if _zz_pivots:
         _last_pivot_idx = _zz_pivots[-1][0]
@@ -5239,17 +5239,18 @@ def api_stock_analyze(code: str = "", date: str = ""):
             break
     # 如果缓存里找不到, 尝试拉K线判断是否存在
     # 20260906 历史时点: 传date时拉更长K线(300根)以便截断后仍有足够历史
-    bars_all = fetch_kline(symbol, datalen=300 if as_of_date else 120)
+    # 20260909 K线图改为一年时长(约244交易日), 非历史时点拉250根留余量
+    bars_all = fetch_kline(symbol, datalen=300 if as_of_date else 250)
     if not bars_all:
         return JSONResponse({"error": f"找不到股票 {code} 或无K线数据"}, status_code=404)
     as_of_date_actual = bars_all[-1].get("day", "")[:10]
     if as_of_date:
-        # 截断到选定日期(含当天), 最多保留120根 —— 等价于"回到那天看当时的分析"
+        # 截断到选定日期(含当天), 最多保留244根(约一年) —— 等价于"回到那天看当时的分析"
         sliced = [b for b in bars_all if (b.get("day") or "")[:10] <= as_of_date]
         if not sliced:
             return JSONResponse({"error": f"{as_of_date} 早于该股票的数据起点({bars_all[0].get('day','')[:10]})"},
                                 status_code=404)
-        bars = sliced[-120:]
+        bars = sliced[-244:]
         as_of_date_actual = bars[-1].get("day", "")[:10]
     else:
         bars = bars_all
@@ -5512,7 +5513,7 @@ def api_stock_analyze(code: str = "", date: str = ""):
         "bars": [{"day": b["day"], "close": b["close"], "open": b["open"],
                   "high": b["high"], "low": b["low"], "volume": b["volume"],
                   "chg": round(c, 2) if not math.isnan(c) else 0}
-                 for b, c in zip(bars[-120:], chgs[-120:])],
+                 for b, c in zip(bars[-244:], chgs[-244:])],
         # ATR 多周期序列 (用于 K 线图下方 ATR 副图: ATR60/ATR30/ATR14/ATR5)
         "atr_series": (lambda H, L, C: (lambda TRs: {
             p: [round(sum(TRs[max(0,i-p+1):i+1])/min(p, i+1), 3) for i in range(len(TRs))]
