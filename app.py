@@ -765,7 +765,7 @@ def _apply_qfq(bars: list[dict], factors: list[tuple[str, float]]) -> list[dict]
 def _fetch_kline_sina(symbol: str, datalen: int) -> list[dict]:
     """新浪日K(不复权) + qfq.js 因子 → 前复权。本环境主用路径。
     20260909: 加并发信号量 + 空结果重试, 防止选股高并发触发新浪限流。"""
-    for attempt in range(3):
+    for attempt in range(2):
         with _SINA_KLINE_SEM:
             try:
                 data = _get(SINA_KLINE, {"symbol": symbol, "scale": 240, "ma": "no", "datalen": datalen}, timeout=10)
@@ -774,7 +774,7 @@ def _fetch_kline_sina(symbol: str, datalen: int) -> list[dict]:
         if isinstance(data, list) and data:
             break
         # 限流/空响应: 退避后重试
-        time.sleep(0.4 * (attempt + 1))
+        time.sleep(0.3 * (attempt + 1))
     if not isinstance(data, list):
         return []
     bars: list[dict] = []
@@ -4638,8 +4638,12 @@ def run_screen(conds=None) -> dict:
 
     results: list[dict] = []
     futs = [POOL.submit(work, r) for r in candidates]
-    for f in as_completed(futs):
-        res = f.result()
+    # 20260909: as_completed + result 均加超时, 避免个别 fetch_kline 卡死拖死全扫描
+    for f in as_completed(futs, timeout=900):
+        try:
+            res = f.result(timeout=120)
+        except Exception:  # noqa: BLE001
+            res = None
         done_cnt[0] += 1
         if not res:
             if done_cnt[0] % 100 == 0 or done_cnt[0] == total_cand:
@@ -6134,10 +6138,6 @@ def _run_ssp_scan_thread():
         P = _SSP_PARAMS
 
         def proc(cand):
-            done[0] += 1
-            if done[0] % 40 == 0:
-                with _SSP_STATE["lock"]:
-                    _SSP_STATE["progress"] = f"扫描中 {done[0]}/{total}"
             try:
                 sym = _to_symbol(cand["code"])
                 bars = fetch_kline(sym, datalen=140)
@@ -6226,8 +6226,23 @@ def _run_ssp_scan_thread():
                 return None
 
         import concurrent.futures
+        # 20260909 修复卡住: 原 ex.map 按输入顺序返回, 前面某只 fetch_kline 慢会
+        # 阻塞后续所有结果收集; 改用 submit + as_completed, 完成即计入进度,
+        # 并给单任务加 90s 超时, 避免个别慢请求拖死整个扫描。
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as ex:
-            all_matches = [r for r in list(ex.map(proc, cands, timeout=600)) if r]
+            futs = {ex.submit(proc, c): c for c in cands}
+            all_matches = []
+            for fut in concurrent.futures.as_completed(futs, timeout=600):
+                done[0] += 1
+                if done[0] % 40 == 0 or done[0] == total:
+                    with _SSP_STATE["lock"]:
+                        _SSP_STATE["progress"] = f"扫描中 {done[0]}/{total}"
+                try:
+                    r = fut.result(timeout=90)
+                    if r:
+                        all_matches.append(r)
+                except Exception:  # noqa: BLE001
+                    continue
 
         for m in all_matches:
             if m.get("A"): new_sigs.append(m["A"])
