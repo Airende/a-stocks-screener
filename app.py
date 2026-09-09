@@ -3386,24 +3386,21 @@ def analyze_buy_sell(bars: list[dict]) -> dict:
     _style_extra["avg_up_run_days_60d"] = round(avg_run_pos, 1)
     _style_extra["avg_down_run_days_60d"] = round(avg_run_neg, 1)
 
-    # ====== ZigZag 波段周期统计 (阈值=1.0×ATR%, 近一年数据) ======
-    # 原理: 反向波动≥1.0×ATR%才确认转折点, 过滤噪音, 保留真实波段结构
-    # 20260909: 阈值从固定绝对值(1.5×ATR)改为动态百分比(1.0×ATR%),
-    #   原因: 固定绝对值用最近120天的高ATR去判断一年前的低波动期,
-    #   阈值过大导致早期转折点无法识别, 统计只覆盖最近几个月。
-    #   百分比阈值天然适应不同价格水平(40元 vs 300元), 覆盖完整一年。
+    # ====== ZigZag 波段周期统计 (阈值=1.5×ATR%, 近一年数据) ======
+    # 原理: 反向波动≥1.5×ATR%才确认转折点, 过滤噪音, 保留真实波段结构
+    # 阈值用动态百分比(ATR%): 适应不同价格水平(40元 vs 300元), 覆盖完整一年。
     # 数据范围: 近244个交易日(约一年)
     _zz_n = min(244, len(closes))
     _zz_closes = closes[-_zz_n:]
     # atr_pct 已在上方计算 (ATR14/收盘价*100), 这里用作动态百分比阈值
-    _zz_pct_threshold = atr_pct * 1.0  # 1.0×ATR%
+    _zz_pct_threshold = atr_pct * 1.5  # 1.5×ATR%
     _zz_pivots = []  # [(index_in_zz, price, 'H'/'L'), ...]
     if len(_zz_closes) >= 30 and _zz_pct_threshold > 0:
         _zz_dir = 0  # 0=neutral, 1=up, -1=down
         _zz_li = 0
         _zz_lp = _zz_closes[0]
         for _i in range(1, len(_zz_closes)):
-            # 动态阈值: 当前极值价的 1.0×ATR% (适应不同时期的价格水平)
+            # 动态阈值: 当前极值价的 1.5×ATR% (适应不同时期的价格水平)
             _zz_threshold = _zz_lp * _zz_pct_threshold / 100
             if _zz_dir >= 0:
                 if _zz_closes[_i] > _zz_lp:
@@ -3438,8 +3435,8 @@ def analyze_buy_sell(bars: list[dict]) -> dict:
         return _s[_n // 2] if _n % 2 else (_s[_n // 2 - 1] + _s[_n // 2]) / 2
 
     _style_extra["zz_pivot_count"] = len(_zz_pivots)
-    # 实际阈值 = 1.0×ATR% (动态百分比, 适应不同价格水平)
-    _style_extra["zz_threshold"] = f"1.0×ATR%({_zz_pct_threshold:.1f}%)"
+    # 实际阈值 = 1.5×ATR% (动态百分比, 适应不同价格水平)
+    _style_extra["zz_threshold"] = f"1.5×ATR%({_zz_pct_threshold:.1f}%)"
     _style_extra["zz_period"] = "近一年(244交易日)"
     # 距最后一个转折点的天数
     if _zz_pivots:
@@ -4053,7 +4050,7 @@ def analyze_buy_sell(bars: list[dict]) -> dict:
     feat_parts.append(f"均线：{alignment} / {trend}")
     if run_lens_pos:
         feat_parts.append(f"平均单边上涨波段{avg_run_pos:.1f}天")
-    # ZigZag 波段统计 (1×ATR阈值, 真实波峰波谷)
+    # ZigZag 波段统计 (1.5×ATR%阈值, 真实波峰波谷)
     if _zz_up_days:
         feat_parts.append(f"ZigZag上涨: {_zz_median(_zz_up_days):.0f}天/{_zz_median(_zz_up_pct):.0f}%")
     if _zz_dn_days:
