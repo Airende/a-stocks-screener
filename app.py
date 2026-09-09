@@ -3462,6 +3462,34 @@ def analyze_buy_sell(bars: list[dict]) -> dict:
     _style_extra["breakout_target_up"] = round(_h20 + atr_abs * 2, 2)
     _style_extra["breakout_target_dn"] = round(_l20 - atr_abs * 2, 2)
 
+    # ====== ZigZag 波段买卖价位 (基于历史波段统计) ======
+    # 买入参考价: 取最近波谷 与 20日区间下沿 的较大值(更保守的支撑)
+    _zz_last_trough = 0.0
+    for _p in reversed(_zz_pivots):
+        if _p[2] == 'L':
+            _zz_last_trough = _p[1]
+            break
+    _zz_buy = max(_zz_last_trough, _l20) if _zz_last_trough > 0 else _l20
+    # 若当前价已低于买入参考, 说明可能已破位, 买入价下调到当前价附近
+    if c < _zz_buy:
+        _zz_buy = round(c * 0.99, 2)  # 当前价下方1%作为挂单价
+    # 止盈价 = 买入价 × (1 + 上涨中位涨幅 × 0.3), 吃波段的约1/3
+    _zz_up_med = _zz_median(_zz_up_pct) if _zz_up_pct else 15.0
+    _zz_tp = round(_zz_buy * (1 + _zz_up_med / 100 * 0.3), 2)
+    # 止损价 = 买入价 × (1 - min(下跌中位跌幅, 10%) × 0.3), 控制单笔风险
+    _zz_dn_med = abs(_zz_median(_zz_dn_pct)) if _zz_dn_pct else 8.0
+    _zz_dn_med = min(_zz_dn_med, 10.0)  # 风险上限10%
+    _zz_sl = round(_zz_buy * (1 - _zz_dn_med / 100 * 0.3), 2)
+    # 相对当前价的涨跌幅
+    _cur = c
+    _style_extra["zz_buy_price"] = round(_zz_buy, 2)
+    _style_extra["zz_buy_pct"] = round((_zz_buy / _cur - 1) * 100, 1) if _cur > 0 else 0
+    _style_extra["zz_tp_price"] = _zz_tp
+    _style_extra["zz_tp_pct"] = round((_zz_tp / _cur - 1) * 100, 1) if _cur > 0 else 0
+    _style_extra["zz_sl_price"] = _zz_sl
+    _style_extra["zz_sl_pct"] = round((_zz_sl / _cur - 1) * 100, 1) if _cur > 0 else 0
+    _style_extra["zz_risk_reward"] = round((_zz_tp - _zz_buy) / (_zz_buy - _zz_sl), 2) if _zz_buy > _zz_sl else 0
+
     # ====== 打分: 趋势得分 / 波段得分 (0~100, 越大越像) ======
     trend_score = 50.0
     swing_score = 50.0

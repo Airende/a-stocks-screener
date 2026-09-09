@@ -310,6 +310,21 @@
   .zz-toggle{text-align:center;font-size:10px;color:var(--sub);cursor:pointer;padding:5px;margin-top:1px;border-radius:4px;user-select:none;transition:background .15s}
   .zz-toggle:hover{background:var(--panel2);color:var(--txt)}
   .zz-st-period{font-weight:500;color:var(--sub);font-size:9px}
+  /* ZigZag 买卖价位 */
+  .zz-prices{margin:6px 0}
+  .zz-prices-title{font-size:10.5px;font-weight:700;color:var(--txt);margin-bottom:5px}
+  .zz-prices-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+  .zz-price-item{background:var(--panel2);border-radius:5px;padding:5px 4px;text-align:center;border:1px solid var(--border)}
+  .zz-price-item .zz-pi-label{font-size:9px;color:var(--sub);font-weight:600}
+  .zz-price-item .zz-pi-val{font-size:13px;font-weight:800;margin-top:1px}
+  .zz-price-item .zz-pi-pct{font-size:9px;margin-top:1px}
+  .zz-price-item.zz-buy .zz-pi-val{color:#4169e1}
+  .zz-price-item.zz-tp .zz-pi-val{color:#dc3545}
+  .zz-price-item.zz-sl .zz-pi-val{color:#26a69a}
+  .zz-price-item.zz-rr .zz-pi-val{color:var(--txt)}
+  @media (max-width:480px){
+    .zz-prices-grid{grid-template-columns:repeat(2,1fr)}
+  }
   /* Tabs 切换 */
   .vp-tabs{display:flex;gap:6px;margin:4px 0 10px;flex-wrap:wrap}
   .vp-tab{padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;border-radius:8px;
@@ -2036,10 +2051,46 @@ function renderAnalysis(d){
           <b>突破方向：</b>向上突破看 <b class="up">${tUp}</b>（+2×ATR）｜跌破下沿看 <b class="dn">${tDn}</b>（-2×ATR）
         </div>`;
       }
+      // ZigZag 波段买卖价位
+      const zzBuy = ex.zz_buy_price, zzBuyPct = ex.zz_buy_pct;
+      const zzTp = ex.zz_tp_price, zzTpPct = ex.zz_tp_pct;
+      const zzSl = ex.zz_sl_price, zzSlPct = ex.zz_sl_pct;
+      const zzRR = ex.zz_risk_reward;
+      let priceHtml = '';
+      if(zzBuy){
+        const pctColor = (p)=> p>=0 ? '#dc3545' : '#26a69a';
+        const pctSign = (p)=> p>=0 ? '+' : '';
+        priceHtml = `<div class="zz-prices">
+          <div class="zz-prices-title">🎯 波段操作价位（基于ZigZag统计）</div>
+          <div class="zz-prices-grid">
+            <div class="zz-price-item zz-buy">
+              <div class="zz-pi-label">买入价</div>
+              <div class="zz-pi-val">${zzBuy}</div>
+              <div class="zz-pi-pct" style="color:${pctColor(zzBuyPct)}">${pctSign(zzBuyPct)}${zzBuyPct}%</div>
+            </div>
+            <div class="zz-price-item zz-tp">
+              <div class="zz-pi-label">止盈价</div>
+              <div class="zz-pi-val">${zzTp}</div>
+              <div class="zz-pi-pct" style="color:${pctColor(zzTpPct)}">${pctSign(zzTpPct)}${zzTpPct}%</div>
+            </div>
+            <div class="zz-price-item zz-sl">
+              <div class="zz-pi-label">止损价</div>
+              <div class="zz-pi-val">${zzSl}</div>
+              <div class="zz-pi-pct" style="color:${pctColor(zzSlPct)}">${pctSign(zzSlPct)}${zzSlPct}%</div>
+            </div>
+            <div class="zz-price-item zz-rr">
+              <div class="zz-pi-label">盈亏比</div>
+              <div class="zz-pi-val">${zzRR}:1</div>
+              <div class="zz-pi-pct">${zzRR>=2?'✅ 合理':'⚠ 偏低'}</div>
+            </div>
+          </div>
+        </div>`;
+      }
       return `<div class="zz-section">
         <div class="zz-title">🌊 ZigZag 波段分析 <span class="zz-sub">（阈值=${thresh}，${period}）</span></div>
         ${tlHtml}
         ${statsHtml}
+        ${priceHtml}
         ${rangeHtml}
       </div>`;
     }
