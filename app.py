@@ -5584,7 +5584,8 @@ def api_stock_analyze(code: str = "", date: str = ""):
 # 均线形态筛选模块
 # ============================================================
 MA_PATTERNS = ["多头排列", "多头排列向上发散", "粘合向上突破", "空头排列向下发散", "粘合向下突破",
-               "KDJ底背离", "MACD底背离"]
+               "KDJ底背离", "MACD底背离",
+               "周线A·强势主升", "周线B·趋势回踩", "周线C·底部反转"]
 
 _ma_state = {"data": None, "running": False, "error": None, "progress": "",
              "ts": 0.0, "lock": threading.Lock(),
@@ -5650,6 +5651,164 @@ def classify_ma_pattern(bars: list[dict]) -> str | None:
     if m5 < m10 < m20 and m5 < m5p and m10 < m10p:
         return "空头排列向下发散"
     return None
+
+
+# ============================================================
+# 周线均线形态筛选 (基于日K线聚合为周K线)
+# 逻辑来源: 用户提供的"两类图本质差异 + 一票否决 + A/B/C三档"选股公式
+# ============================================================
+def _aggregate_weekly(bars: list[dict]) -> list[dict]:
+    """将日K线聚合为周K线(按ISO周, 周一至周五为一周)。
+    每周取: open=首日开, high=周内最高, low=周内最低, close=末日收, volume=周内求和。"""
+    if not bars:
+        return []
+    weeks: dict[tuple, dict] = {}
+    for b in bars:
+        day = (b.get("day") or "")[:10]
+        if not day:
+            continue
+        try:
+            dt = datetime.strptime(day, "%Y-%m-%d").date()
+        except ValueError:
+            continue
+        iso = dt.isocalendar()
+        key = (iso[0], iso[1])  # (year, week_number)
+        if key not in weeks:
+            weeks[key] = {"day": day, "open": float(b["open"]), "high": float(b["high"]),
+                          "low": float(b["low"]), "close": float(b["close"]),
+                          "volume": float(b["volume"])}
+        else:
+            w = weeks[key]
+            w["high"] = max(w["high"], float(b["high"]))
+            w["low"] = min(w["low"], float(b["low"]))
+            w["close"] = float(b["close"])
+            w["volume"] += float(b["volume"])
+    return [weeks[k] for k in sorted(weeks.keys())]
+
+
+WEEKLY_PATTERNS = ["周线A·强势主升", "周线B·趋势回踩", "周线C·底部反转"]
+
+
+def classify_weekly_ma_pattern(bars: list[dict]) -> tuple[list[str], dict]:
+    """周线均线形态筛选: 返回 (命中类型列表, 指标快照)。
+    否决条件(满足任一直接剔除):
+      1. 收盘价 < MA30(30周线)
+      2. MA30 向下 (MA30 <= 8周前的MA30)
+      3. 空头排列 (MA5 < MA10 < MA20)
+      4. 52周区间位置 < 0.5 ((收盘-52周最低)/(52周最高-52周最低))
+    入选分档:
+      A类 强势主升: 多头排列(MA5>MA10>MA20>MA30) + MA20连续4周上行 + 收盘>MA10 + 距52周高回撤<15%
+      B类 趋势回踩: MA30/MA60均向上 + 收盘>=MA30 + 距MA30在0~+5% + 距52周高回撤<25%
+      C类 底部反转: MA20由平转升 + 近4周MA5上穿MA10 + 收盘>MA30 + 放量(>20周均量×1.5) + 距52周低涨>20%
+    """
+    weekly = _aggregate_weekly(bars)
+    if len(weekly) < 60:  # 至少60周数据(MA60需要)
+        return [], {}
+    closes = [b["close"] for b in weekly]
+    vols = [b["volume"] for b in weekly]
+    highs = [b["high"] for b in weekly]
+    lows = [b["low"] for b in weekly]
+    ma5 = sma(closes, 5)
+    ma10 = sma(closes, 10)
+    ma20 = sma(closes, 20)
+    ma30 = sma(closes, 30)
+    ma60 = sma(closes, 60)
+
+    def _v(arr, idx):
+        """安全取值, 越界或nan返回None"""
+        if idx < 0:
+            idx = len(arr) + idx
+        if 0 <= idx < len(arr) and not math.isnan(arr[idx]):
+            return arr[idx]
+        return None
+
+    m5, m10, m20, m30, m60 = _v(ma5, -1), _v(ma10, -1), _v(ma20, -1), _v(ma30, -1), _v(ma60, -1)
+    c = closes[-1]
+    if not all([m5, m10, m20, m30]):
+        return [], {}
+
+    # 52周高低
+    high52 = max(highs[-52:]) if len(highs) >= 52 else max(highs)
+    low52 = min(lows[-52:]) if len(lows) >= 52 else min(lows)
+    pos52 = (c - low52) / (high52 - low52) if high52 > low52 else 1.0
+
+    # ---- 一票否决 ----
+    # PASS1: 收盘价 > MA30
+    if c <= m30:
+        return [], {}
+    # PASS2: MA30 向上 (MA30 > 8周前的MA30)
+    m30_8w = _v(ma30, -9)
+    if m30_8w is None or m30 <= m30_8w:
+        return [], {}
+    # PASS3: 非空头排列
+    if m5 < m10 < m20:
+        return [], {}
+    # PASS4: 52周区间位置 >= 0.5
+    if pos52 < 0.5:
+        return [], {}
+
+    snapshot = {
+        "w_ma5": round(m5, 2), "w_ma10": round(m10, 2), "w_ma20": round(m20, 2),
+        "w_ma30": round(m30, 2), "w_ma60": round(m60, 2) if m60 else 0,
+        "w_pos52": round(pos52, 3),
+        "w_high52": round(high52, 2), "w_low52": round(low52, 2),
+        "w_vol_boost": False,
+    }
+
+    hits: list[str] = []
+
+    # ---- A类: 强势主升 ----
+    if m5 > m10 > m20 > m30:
+        m20_4w = _v(ma20, -5)
+        if m20_4w is not None and m20 > m20_4w:  # MA20 连续4周上行 (当前>4周前)
+            if c > m10:  # 收盘在MA10上方
+                if c / high52 > 0.85:  # 距52周高回撤 < 15%
+                    hits.append("周线A·强势主升")
+                    # 加分项: 近4周内有成交量 > 10周均量×1.5
+                    if len(vols) >= 10:
+                        vol_avg10 = sum(vols[-11:-1]) / 10
+                        if vol_avg10 > 0:
+                            for vi in range(max(0, len(vols) - 4), len(vols)):
+                                if vols[vi] > vol_avg10 * 1.5:
+                                    snapshot["w_vol_boost"] = True
+                                    break
+
+    # ---- B类: 趋势回踩 ----
+    m30_4w = _v(ma30, -5)
+    m60_4w = _v(ma60, -5)
+    if m30_4w is not None and m60_4w is not None and m60 is not None:
+        if m30 > m30_4w and m60 > m60_4w:  # MA30/MA60均向上
+            if c >= m30 and c / m30 < 1.05:  # 回踩MA30, 距0~+5%
+                if c / high52 > 0.75:  # 距52周高回撤 < 25%
+                    hits.append("周线B·趋势回踩")
+
+    # ---- C类: 底部反转 ----
+    m20_1w = _v(ma20, -2)   # 上周
+    m20_4w = _v(ma20, -5)   # 4周前
+    m20_8w = _v(ma20, -9)   # 8周前
+    if m20_1w is not None and m20_4w is not None and m20_8w is not None:
+        # MA20 由平转升: 本周>上周, 且4周前<=8周前(此前走平或下行)
+        if m20 > m20_1w and m20_4w <= m20_8w:
+            # 近4周内 MA5 上穿 MA10 (金叉)
+            golden = False
+            for i in range(max(1, len(ma5) - 4), len(ma5)):
+                p = i - 1
+                v5i, v10i = _v(ma5, i), _v(ma10, i)
+                v5p, v10p = _v(ma5, p), _v(ma10, p)
+                if all(v is not None for v in (v5i, v10i, v5p, v10p)):
+                    if v5p <= v10p and v5i > v10i:
+                        golden = True
+                        break
+            if golden:
+                # 放量确认: 最近一周成交量 > 20周均量×1.5
+                if len(vols) >= 20:
+                    vol_avg20 = sum(vols[-21:-1]) / 20
+                    if vol_avg20 > 0 and vols[-1] > vol_avg20 * 1.5:
+                        # 距52周低点已上涨 > 20%
+                        if low52 > 0 and c / low52 > 1.2:
+                            hits.append("周线C·底部反转")
+
+    return hits, snapshot
 
 
 def _ma_quality_score(item: dict) -> float:
@@ -5775,10 +5934,13 @@ def _run_ma_screen_thread():
 
         def process_stock(cand):
             symbol = _to_symbol(cand["code"])
-            bars = fetch_kline(symbol, datalen=80)
+            # 周线形态需52周≈260日数据, 取300日保证充足
+            bars = fetch_kline(symbol, datalen=300)
             if not bars or len(bars) < 70:
                 return None
             pat = classify_ma_pattern(bars)  # 均线形态; 可能为None(此时仅可能命中背离tab)
+            # 周线均线形态筛选 (A/B/C三类 + 一票否决)
+            weekly_pats, weekly_snap = classify_weekly_ma_pattern(bars)
             closes = [b["close"] for b in bars]
             ma5 = sma(closes, 5)
             ma10 = sma(closes, 10)
@@ -5806,7 +5968,7 @@ def _run_ma_screen_thread():
             dif_arr, _dea_arr, _hist_arr = calc_macd(closes)
             kdj_bottom = _calc_kdj_bottom_diverge(closes, highs_a, lows_a, j_arr)
             macd_bottom = _calc_macd_bottom_diverge(closes, lows_a, dif_arr)
-            # 收集该股票命中的所有 tab (均线形态 + 背离可同时命中)
+            # 收集该股票命中的所有 tab (均线形态 + 背离 + 周线形态可同时命中)
             pats = []
             if pat and ma_pass:
                 pats.append(pat)
@@ -5814,6 +5976,9 @@ def _run_ma_screen_thread():
                 pats.append("KDJ底背离")
             if macd_bottom:
                 pats.append("MACD底背离")
+            # 周线形态 (已通过否决条件, 直接加入)
+            for wp in weekly_pats:
+                pats.append(wp)
             if not pats:
                 return None
             # 买卖点分析
@@ -5848,6 +6013,17 @@ def _run_ma_screen_thread():
                 "bs_resonance_count": bs.get("resonance_count", 0),
                 "bs_warnings": bs.get("warnings", []),
                 "bs_motto": bs.get("motto", ""),
+                # 周线形态指标快照
+                "w_ma5": weekly_snap.get("w_ma5", 0),
+                "w_ma10": weekly_snap.get("w_ma10", 0),
+                "w_ma20": weekly_snap.get("w_ma20", 0),
+                "w_ma30": weekly_snap.get("w_ma30", 0),
+                "w_ma60": weekly_snap.get("w_ma60", 0),
+                "w_pos52": weekly_snap.get("w_pos52", 0),
+                "w_high52": weekly_snap.get("w_high52", 0),
+                "w_low52": weekly_snap.get("w_low52", 0),
+                "w_vol_boost": weekly_snap.get("w_vol_boost", False),
+                "weekly_pats": weekly_pats,
             }
         futs = [POOL.submit(process_stock, c) for c in cands]
         for f in as_completed(futs):

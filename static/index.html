@@ -3339,7 +3339,7 @@ function buildEquityCurve(curve){
 }
 
 
-// ===== 均线形态筛选模块（均线形态 5 tab + 上试盘策略 3 tab，共8 tab） =====
+// ===== 均线形态筛选模块（均线形态 7 tab + 周线形态 3 tab + 上试盘策略 3 tab，共13 tab） =====
 const MA_PATS=[
   ['多头排列','MA5>MA10>MA20>MA60，四线今日均>5日前，收盘≥MA10，多头排列持续≥5日（稳健型）'],
   ['多头排列向上发散','MA5>MA10>MA20，三线同步上行，间距扩大（不含MA60，宽松版）'],
@@ -3348,12 +3348,16 @@ const MA_PATS=[
   ['粘合向下突破','近3日MA5/MA10/MA20间距<1.5%(粘合)，现转为空头排列，破位下行'],
   ['KDJ底背离','近20日价格创新低但KDJ的J值未创新低（动能未跟随下行），潜在反转信号'],
   ['MACD底背离','近20日价格创新低但MACD的DIF未创新低（空头动能减弱），潜在反转信号'],
+  // 周线均线形态 (A/B/C三类 + 一票否决)
+  ['周线A·强势主升','周线多头排列(MA5>MA10>MA20>MA30) + MA20连续4周上行 + 收盘>MA10 + 距52周高回撤<15%；否决：收盘<MA30/MA30向下/空头排列/52周位<0.5'],
+  ['周线B·趋势回踩','周线MA30与MA60均向上 + 收盘≥MA30且距MA30在0~+5% + 距52周高回撤<25%（上升趋势中回踩30周线低吸）'],
+  ['周线C·底部反转','周线MA20由平转升 + 近4周MA5上穿MA10金叉 + 收盘>MA30 + 放量(>20周均量×1.5) + 距52周低涨>20%（底部反转初期）'],
   // 上试盘策略 3 个池子（对应说明书 A/B/C 三栏）
   ['上试盘·新信号','A池：今日刚出现长上影试盘日，观察不买；待后续放量突破再入场'],
   ['上试盘·观察池','B池：10日确认窗口内，未破信号日最低价、未放量突破的股票，附待突破价'],
   ['上试盘·已确认','C池：今日刚放量×1.01突破试盘高点 + 量比≥2 + 沪深300在MA20上方，当日收盘买入'],
 ];
-const SSP_KIND_TAB_OFFSET = 7; // tabIndex 7/8/9 对应 A/B/C 池
+const SSP_KIND_TAB_OFFSET = 10; // tabIndex 10/11/12 对应 A/B/C 池
 let maCurrentTab=0;
 let maData=null;
 let sspData=null;   // 上试盘三池缓存 {new_signals,watch_pool,confirmed_pool,counts,mkt_filter,updated,running,progress,error}
@@ -3672,9 +3676,17 @@ function maRowHtml(s,i){
   if(maSortMode==='concept' && s._grpKey){
     conHtml += ` <span class="ma-grp-badge">${s._grpCnt}</span>`;
   }
+  // 周线标签页: 在股票名下方显示周线关键指标 (MA30 / 52周位置 / 放量加分)
+  const isWeeklyTab = MA_PATS[maCurrentTab][0].startsWith('周线');
+  let weeklyLine = '';
+  if(isWeeklyTab && s.w_ma30){
+    const posColor = (s.w_pos52||0) >= 0.6 ? 'var(--up)' : ((s.w_pos52||0) < 0.3 ? 'var(--down)' : 'var(--gold)');
+    const boostTag = s.w_vol_boost ? ' <span style="color:var(--gold)">🔥放量</span>' : '';
+    weeklyLine = `<div class="code" style="color:var(--sub);font-size:11px">周MA30:${s.w_ma30} · 52周位:<span style="color:${posColor}">${((s.w_pos52||0)*100).toFixed(0)}%</span>${boostTag}</div>`;
+  }
   return `<tr>
     <td class="l">${i+1}</td>
-    <td class="l">${markNameHtml(s.code,s.name,s.price)}<div class="code"><a class="cd-link" title="点击打开同花顺" href="https://stockpage.10jqka.com.cn/${s.code}/" target="_blank" rel="noopener" onclick="openStock('${s.code}','${s.name}',event)">${mkt(s.code)}</a></div></td>
+    <td class="l">${markNameHtml(s.code,s.name,s.price)}<div class="code"><a class="cd-link" title="点击打开同花顺" href="https://stockpage.10jqka.com.cn/${s.code}/" target="_blank" rel="noopener" onclick="openStock('${s.code}','${s.name}',event)">${mkt(s.code)}</a></div>${weeklyLine}</td>
     <td class="l col-opt">${indHtml}</td>
     <td class="l col-opt">${conHtml}</td>
     <td>${fmtPct(s.change_pct)}</td>
