@@ -377,9 +377,9 @@ _SOURCE_BREAKER_LOCK = threading.Lock()
 # K线全局并发信号量: 选股时40线程同时打数据源会触发限流。
 # 新浪/腾讯/东财任一源被限流返回空, 连锁导致大批股票无K线不落盘。
 # 用全局信号量把所有K线请求(含备源)并发压到安全水平 (20260910)
-_KLINE_SEM = threading.Semaphore(6)
+_KLINE_SEM = threading.Semaphore(20)
 # 新浪qfq因子单独信号量(因子请求轻量, 可与K线分开控制)
-_SINA_KLINE_SEM = threading.Semaphore(8)
+_SINA_KLINE_SEM = threading.Semaphore(25)
 
 
 def _sina_available() -> bool:
@@ -6072,8 +6072,8 @@ def _run_ma_screen_thread():
             except Exception:  # noqa: BLE001
                 pass
             done[0] += 1
-            if done[0] % 100 == 0:
-                _ma_state["progress"] = f"已处理 {done[0]}/{total}…"
+            if done[0] % 20 == 0 or done[0] == total:
+                _ma_state["progress"] = f"拉取K线 {done[0]}/{total}…"
         for p in MA_PATTERNS:
             # 综合排序分: 买点强度×3 + 量价配合×2 + 趋势排列×2 + 活跃度×1 (见 _ma_quality_score)
             results[p].sort(key=lambda x: -_ma_quality_score(x))
