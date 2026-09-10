@@ -3677,9 +3677,9 @@ function maRowHtml(s,i){
     conHtml += ` <span class="ma-grp-badge">${s._grpCnt}</span>`;
   }
   // 周线相关标签页: 在股票名下方显示周线关键指标 (MA30 / 52周位置 / 放量加分)
-  // 包括: 周线A/B/C + 日线向上形态(多头排列/多头排列向上发散/粘合向上突破, 已遵循周线否决)
+  // 包括: 周线A/B/C + 所有遵循周线一票否决的均线/背离tab
   const curPat = MA_PATS[maCurrentTab][0];
-  const showWeekly = curPat.startsWith('周线') || ['多头排列','多头排列向上发散','粘合向上突破'].includes(curPat);
+  const showWeekly = curPat.startsWith('周线') || !curPat.startsWith('上试盘');
   let weeklyLine = '';
   if(showWeekly && s.w_ma30){
     const posColor = (s.w_pos52||0) >= 0.6 ? 'var(--up)' : ((s.w_pos52||0) < 0.3 ? 'var(--down)' : 'var(--gold)');

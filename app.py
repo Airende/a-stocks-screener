@@ -5688,8 +5688,12 @@ def _aggregate_weekly(bars: list[dict]) -> list[dict]:
 
 WEEKLY_PATTERNS = ["周线A·强势主升", "周线B·趋势回踩", "周线C·底部反转"]
 
-# 需遵循周线一票否决的日线向上形态 (作为"底仓逻辑")
-DAILY_UP_PATTERNS_NEED_VETO = {"多头排列", "多头排列向上发散", "粘合向上突破"}
+# 需遵循周线一票否决的形态 (作为"底仓逻辑", 除上试盘外所有均线/背离tab均适用)
+PATTERNS_NEED_WEEKLY_VETO = {
+    "多头排列", "多头排列向上发散", "粘合向上突破",      # 日线向上形态
+    "空头排列向下发散", "粘合向下突破",                  # 日线向下形态
+    "KDJ底背离", "MACD底背离",                          # 背离形态
+}
 
 
 def _weekly_veto_check(bars: list[dict]) -> tuple[bool, dict]:
@@ -5997,16 +6001,16 @@ def _run_ma_screen_thread():
             macd_bottom = _calc_macd_bottom_diverge(closes, lows_a, dif_arr)
             # 收集该股票命中的所有 tab (均线形态 + 背离 + 周线形态可同时命中)
             pats = []
+            # 周线一票否决: weekly_snap 非空=通过, 空=未通过
+            veto_pass = bool(weekly_snap)
             if pat and ma_pass:
-                # 日线向上形态(多头排列/多头排列向上发散/粘合向上突破)需遵循周线一票否决
-                # weekly_snap 非空 = 否决通过; 空 = 否决未通过
-                if pat in DAILY_UP_PATTERNS_NEED_VETO and not weekly_snap:
-                    pass  # 周线否决未通过, 剔除该日线形态
+                if pat in PATTERNS_NEED_WEEKLY_VETO and not veto_pass:
+                    pass  # 周线否决未通过, 剔除
                 else:
                     pats.append(pat)
-            if kdj_bottom:
+            if kdj_bottom and ("KDJ底背离" not in PATTERNS_NEED_WEEKLY_VETO or veto_pass):
                 pats.append("KDJ底背离")
-            if macd_bottom:
+            if macd_bottom and ("MACD底背离" not in PATTERNS_NEED_WEEKLY_VETO or veto_pass):
                 pats.append("MACD底背离")
             # 周线形态 (已通过否决条件, 直接加入)
             for wp in weekly_pats:
