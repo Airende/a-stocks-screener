@@ -373,9 +373,11 @@ _SINA_FAIL_WINDOW_SEC = 60        # 单只K线失败计数窗口
 _SINA_FAIL_THRESHOLD = 5          # 窗口内失败次数达到阈值才熔断
 _SOURCE_BREAKER = {"sina_down_until": 0.0, "fails": []}
 _SOURCE_BREAKER_LOCK = threading.Lock()
-# 新浪K线(含qfq因子)并发上限: 选股时40线程同时打新浪K线会触发限流,
-# 限流后返回空→连锁触发全局熔断→腾讯/东财K线在本环境又被WAF拦截, 导致大批股票无K线。
-# 用信号量把并发压到新浪能稳定服务的水平 (20260909)
+# K线全局并发信号量: 选股时40线程同时打数据源会触发限流。
+# 新浪/腾讯/东财任一源被限流返回空, 连锁导致大批股票无K线不落盘。
+# 用全局信号量把所有K线请求(含备源)并发压到安全水平 (20260910)
+_KLINE_SEM = threading.Semaphore(6)
+# 新浪qfq因子单独信号量(因子请求轻量, 可与K线分开控制)
 _SINA_KLINE_SEM = threading.Semaphore(8)
 
 
@@ -672,8 +674,10 @@ def fetch_spot_all() -> list[dict]:
             raise RuntimeError(f"新浪快照仅返回{len(rows)}条, 判定主源异常")
         # 保存股票池供容灾使用 (20260906)
         _save_universe(rows)
-        # 收盘后保存缓存
-        if _should_use_spot_cache() and rows:
+        # 总是保存快照缓存 (20260910): 不论盘中/盘后, 拉取成功即落盘。
+        # 盘中 _should_use_spot_cache() 仍为 False, 不会读缓存(实时拉取),
+        # 但缓存文件存在可避免刷新后显示 0MB, 且作为主源失败时的容灾兜底。
+        if rows:
             _save_spot_cache(_cache_date_for_fetch(), rows)
         # 更新内存缓存
         _SPOT_MEM_CACHE["data"] = rows
@@ -797,31 +801,32 @@ def _fetch_kline_sina(symbol: str, datalen: int) -> list[dict]:
 def _fetch_kline_remote(symbol: str, datalen: int) -> list[dict]:
     """K线远程拉取(前复权):
       新浪(不复权+qfq因子本地算前复权) → 腾讯qfq → 东财fqt=1。
-    本环境腾讯/东财被WAF/代理拦截, 故新浪+因子为主路径; 其余源作跨环境容灾。
     前复权使除权日前后价格可比, 自绘K线图与均线/MACD/KDJ口径一致。
     20260909: K线失败不再调用 _record_sina_failure —— 限流是瞬态的, 不应触发
-      全局600s熔断(那会连 spot 一起废掉); 全局熔断只由 fetch_spot_all 探测。"""
+      全局600s熔断(那会连 spot 一起废掉); 全局熔断只由 fetch_spot_all 探测。
+    20260910: 加全局信号量 _KLINE_SEM, 三源总并发受控, 避免备源被高并发打爆。"""
     out: list[dict] = []
     sina_err = ""
-    if _sina_available():
-        try:
-            out = _fetch_kline_sina(symbol, datalen)
-            if not out:
-                sina_err = "新浪K线返回为空"
-        except Exception as e:  # noqa: BLE001
-            sina_err = str(e)[:80]
-    # ---- 备源: 腾讯前复权(直接返回qfq) ----
-    if not out:
-        try:
-            out = _fetch_kline_tencent(symbol, datalen)
-        except Exception:  # noqa: BLE001
-            pass  # 本环境腾讯K线被WAF拦截, 静默降级, 不再刷日志 (20260909)
-    # ---- 备源: 东财前复权(fqt=1) ----
-    if not out:
-        try:
-            out = _fetch_kline_eastmoney(symbol, datalen)
-        except Exception:  # noqa: BLE001
-            pass
+    with _KLINE_SEM:
+        if _sina_available():
+            try:
+                out = _fetch_kline_sina(symbol, datalen)
+                if not out:
+                    sina_err = "新浪K线返回为空"
+            except Exception as e:  # noqa: BLE001
+                sina_err = str(e)[:80]
+        # ---- 备源: 腾讯前复权(直接返回qfq) ----
+        if not out:
+            try:
+                out = _fetch_kline_tencent(symbol, datalen)
+            except Exception:  # noqa: BLE001
+                pass
+        # ---- 备源: 东财前复权(fqt=1) ----
+        if not out:
+            try:
+                out = _fetch_kline_eastmoney(symbol, datalen)
+            except Exception:  # noqa: BLE001
+                pass
     if not out and sina_err:
         # 仅在真正三源皆空时记录一次 (新浪错误对排障有用), 避免选股时刷屏
         print(f"[source] [{bj_now()}] K线无数据 {symbol}: 新浪:{sina_err[:50]}", flush=True)
@@ -4621,8 +4626,15 @@ def run_screen(conds=None) -> dict:
 
     # 用 run_screen 开头已拉取的 spot 数据补全当日bar, 避免每只股票重复拉全市场快照 (20260907)
     def work(r):
+        sym = r.get("symbol")
         try:
-            bars = fetch_kline(r.get("symbol"), datalen=300, spot_data=spot)
+            # 20260910: K线拉取失败时重试2次(间隔递增), 避免瞬态限流导致缓存缺失
+            bars = None
+            for attempt in range(3):
+                bars = fetch_kline(sym, datalen=300, spot_data=spot)
+                if bars:
+                    break
+                time.sleep(0.5 * (attempt + 1))
             if not bars:
                 return None
             return check_stock(r, bars, conds)
@@ -4642,7 +4654,8 @@ def run_screen(conds=None) -> dict:
     results: list[dict] = []
     futs = [POOL.submit(work, r) for r in candidates]
     # 20260909: as_completed + result 均加超时, 避免个别 fetch_kline 卡死拖死全扫描
-    for f in as_completed(futs, timeout=900):
+    # 20260910: 全局并发降至6后总耗时上升, 超时放宽到30分钟
+    for f in as_completed(futs, timeout=1800):
         try:
             res = f.result(timeout=120)
         except Exception:  # noqa: BLE001
@@ -4676,6 +4689,24 @@ def run_screen(conds=None) -> dict:
     near.sort(key=lambda x: (x["score"], x["est_20d"]), reverse=True)
     near = near[:60]  # 控制前端载荷
     _set_screen_progress(f"筛选完成: 命中 {len(exact)} 只, 接近满足 {len(near)} 只")
+
+    # 20260910: 补拉缺失K线缓存。首轮因限流失败的股票, 此处串行重试拉取并落盘,
+    # 确保下次筛选时缓存完整, 不再出现"更新不全就中断"的问题。
+    missing = [r for r in candidates if _load_kline_cache(r.get("symbol")) is None]
+    if missing:
+        _set_screen_progress(f"补拉缺失K线缓存 0/{len(missing)}…")
+        filled = 0
+        for i, r in enumerate(missing):
+            sym = r.get("symbol")
+            try:
+                # force=False: 有缓存就跳过; 无缓存则远程拉取并落盘
+                fetch_kline(sym, datalen=300, spot_data=spot)
+                if _load_kline_cache(sym) is not None:
+                    filled += 1
+            except Exception:  # noqa: BLE001
+                pass
+            if (i + 1) % 100 == 0 or i == len(missing) - 1:
+                _set_screen_progress(f"补拉缺失K线缓存 {i+1}/{len(missing)} (成功 {filled})…")
 
     return {
         "updated": bj_now(),
