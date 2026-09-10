@@ -3676,10 +3676,12 @@ function maRowHtml(s,i){
   if(maSortMode==='concept' && s._grpKey){
     conHtml += ` <span class="ma-grp-badge">${s._grpCnt}</span>`;
   }
-  // 周线标签页: 在股票名下方显示周线关键指标 (MA30 / 52周位置 / 放量加分)
-  const isWeeklyTab = MA_PATS[maCurrentTab][0].startsWith('周线');
+  // 周线相关标签页: 在股票名下方显示周线关键指标 (MA30 / 52周位置 / 放量加分)
+  // 包括: 周线A/B/C + 日线向上形态(多头排列/多头排列向上发散/粘合向上突破, 已遵循周线否决)
+  const curPat = MA_PATS[maCurrentTab][0];
+  const showWeekly = curPat.startsWith('周线') || ['多头排列','多头排列向上发散','粘合向上突破'].includes(curPat);
   let weeklyLine = '';
-  if(isWeeklyTab && s.w_ma30){
+  if(showWeekly && s.w_ma30){
     const posColor = (s.w_pos52||0) >= 0.6 ? 'var(--up)' : ((s.w_pos52||0) < 0.3 ? 'var(--down)' : 'var(--gold)');
     const boostTag = s.w_vol_boost ? ' <span style="color:var(--gold)">🔥放量</span>' : '';
     weeklyLine = `<div class="code" style="color:var(--sub);font-size:11px">周MA30:${s.w_ma30} · 52周位:<span style="color:${posColor}">${((s.w_pos52||0)*100).toFixed(0)}%</span>${boostTag}</div>`;

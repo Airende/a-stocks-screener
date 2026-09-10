@@ -5688,24 +5688,23 @@ def _aggregate_weekly(bars: list[dict]) -> list[dict]:
 
 WEEKLY_PATTERNS = ["周线A·强势主升", "周线B·趋势回踩", "周线C·底部反转"]
 
+# 需遵循周线一票否决的日线向上形态 (作为"底仓逻辑")
+DAILY_UP_PATTERNS_NEED_VETO = {"多头排列", "多头排列向上发散", "粘合向上突破"}
 
-def classify_weekly_ma_pattern(bars: list[dict]) -> tuple[list[str], dict]:
-    """周线均线形态筛选: 返回 (命中类型列表, 指标快照)。
+
+def _weekly_veto_check(bars: list[dict]) -> tuple[bool, dict]:
+    """周线一票否决检查 (作为底仓逻辑, 同时应用于日线向上形态)。
+    返回 (是否通过否决, 周线指标快照)。
     否决条件(满足任一直接剔除):
       1. 收盘价 < MA30(30周线)
       2. MA30 向下 (MA30 <= 8周前的MA30)
       3. 空头排列 (MA5 < MA10 < MA20)
       4. 52周区间位置 < 0.5 ((收盘-52周最低)/(52周最高-52周最低))
-    入选分档:
-      A类 强势主升: 多头排列(MA5>MA10>MA20>MA30) + MA20连续4周上行 + 收盘>MA10 + 距52周高回撤<15%
-      B类 趋势回踩: MA30/MA60均向上 + 收盘>=MA30 + 距MA30在0~+5% + 距52周高回撤<25%
-      C类 底部反转: MA20由平转升 + 近4周MA5上穿MA10 + 收盘>MA30 + 放量(>20周均量×1.5) + 距52周低涨>20%
     """
     weekly = _aggregate_weekly(bars)
-    if len(weekly) < 60:  # 至少60周数据(MA60需要)
-        return [], {}
+    if len(weekly) < 60:
+        return False, {}
     closes = [b["close"] for b in weekly]
-    vols = [b["volume"] for b in weekly]
     highs = [b["high"] for b in weekly]
     lows = [b["low"] for b in weekly]
     ma5 = sma(closes, 5)
@@ -5715,7 +5714,6 @@ def classify_weekly_ma_pattern(bars: list[dict]) -> tuple[list[str], dict]:
     ma60 = sma(closes, 60)
 
     def _v(arr, idx):
-        """安全取值, 越界或nan返回None"""
         if idx < 0:
             idx = len(arr) + idx
         if 0 <= idx < len(arr) and not math.isnan(arr[idx]):
@@ -5725,27 +5723,25 @@ def classify_weekly_ma_pattern(bars: list[dict]) -> tuple[list[str], dict]:
     m5, m10, m20, m30, m60 = _v(ma5, -1), _v(ma10, -1), _v(ma20, -1), _v(ma30, -1), _v(ma60, -1)
     c = closes[-1]
     if not all([m5, m10, m20, m30]):
-        return [], {}
+        return False, {}
 
-    # 52周高低
     high52 = max(highs[-52:]) if len(highs) >= 52 else max(highs)
     low52 = min(lows[-52:]) if len(lows) >= 52 else min(lows)
     pos52 = (c - low52) / (high52 - low52) if high52 > low52 else 1.0
 
-    # ---- 一票否决 ----
     # PASS1: 收盘价 > MA30
     if c <= m30:
-        return [], {}
+        return False, {}
     # PASS2: MA30 向上 (MA30 > 8周前的MA30)
     m30_8w = _v(ma30, -9)
     if m30_8w is None or m30 <= m30_8w:
-        return [], {}
+        return False, {}
     # PASS3: 非空头排列
     if m5 < m10 < m20:
-        return [], {}
+        return False, {}
     # PASS4: 52周区间位置 >= 0.5
     if pos52 < 0.5:
-        return [], {}
+        return False, {}
 
     snapshot = {
         "w_ma5": round(m5, 2), "w_ma10": round(m10, 2), "w_ma20": round(m20, 2),
@@ -5754,17 +5750,52 @@ def classify_weekly_ma_pattern(bars: list[dict]) -> tuple[list[str], dict]:
         "w_high52": round(high52, 2), "w_low52": round(low52, 2),
         "w_vol_boost": False,
     }
+    return True, snapshot
+
+
+def classify_weekly_ma_pattern(bars: list[dict]) -> tuple[list[str], dict]:
+    """周线均线形态筛选: 返回 (命中类型列表, 指标快照)。
+    已内置一票否决 (_weekly_veto_check), 否决未通过返回 ([], {})。
+    入选分档:
+      A类 强势主升: 多头排列(MA5>MA10>MA20>MA30) + MA20连续4周上行 + 收盘>MA10 + 距52周高回撤<15%
+      B类 趋势回踩: MA30/MA60均向上 + 收盘>=MA30 + 距MA30在0~+5% + 距52周高回撤<25%
+      C类 底部反转: MA20由平转升 + 近4周MA5上穿MA10 + 收盘>MA30 + 放量(>20周均量×1.5) + 距52周低涨>20%
+    """
+    # 一票否决
+    veto_pass, snapshot = _weekly_veto_check(bars)
+    if not veto_pass:
+        return [], {}
+
+    weekly = _aggregate_weekly(bars)
+    closes = [b["close"] for b in weekly]
+    vols = [b["volume"] for b in weekly]
+    ma5 = sma(closes, 5)
+    ma10 = sma(closes, 10)
+    ma20 = sma(closes, 20)
+    ma30 = sma(closes, 30)
+    ma60 = sma(closes, 60)
+
+    def _v(arr, idx):
+        if idx < 0:
+            idx = len(arr) + idx
+        if 0 <= idx < len(arr) and not math.isnan(arr[idx]):
+            return arr[idx]
+        return None
+
+    m5, m10, m20, m30, m60 = _v(ma5, -1), _v(ma10, -1), _v(ma20, -1), _v(ma30, -1), _v(ma60, -1)
+    c = closes[-1]
+    high52 = snapshot["w_high52"]
+    low52 = snapshot["w_low52"]
 
     hits: list[str] = []
 
     # ---- A类: 强势主升 ----
     if m5 > m10 > m20 > m30:
         m20_4w = _v(ma20, -5)
-        if m20_4w is not None and m20 > m20_4w:  # MA20 连续4周上行 (当前>4周前)
-            if c > m10:  # 收盘在MA10上方
-                if c / high52 > 0.85:  # 距52周高回撤 < 15%
+        if m20_4w is not None and m20 > m20_4w:
+            if c > m10:
+                if c / high52 > 0.85:
                     hits.append("周线A·强势主升")
-                    # 加分项: 近4周内有成交量 > 10周均量×1.5
                     if len(vols) >= 10:
                         vol_avg10 = sum(vols[-11:-1]) / 10
                         if vol_avg10 > 0:
@@ -5777,19 +5808,17 @@ def classify_weekly_ma_pattern(bars: list[dict]) -> tuple[list[str], dict]:
     m30_4w = _v(ma30, -5)
     m60_4w = _v(ma60, -5)
     if m30_4w is not None and m60_4w is not None and m60 is not None:
-        if m30 > m30_4w and m60 > m60_4w:  # MA30/MA60均向上
-            if c >= m30 and c / m30 < 1.05:  # 回踩MA30, 距0~+5%
-                if c / high52 > 0.75:  # 距52周高回撤 < 25%
+        if m30 > m30_4w and m60 > m60_4w:
+            if c >= m30 and c / m30 < 1.05:
+                if c / high52 > 0.75:
                     hits.append("周线B·趋势回踩")
 
     # ---- C类: 底部反转 ----
-    m20_1w = _v(ma20, -2)   # 上周
-    m20_4w = _v(ma20, -5)   # 4周前
-    m20_8w = _v(ma20, -9)   # 8周前
+    m20_1w = _v(ma20, -2)
+    m20_4w = _v(ma20, -5)
+    m20_8w = _v(ma20, -9)
     if m20_1w is not None and m20_4w is not None and m20_8w is not None:
-        # MA20 由平转升: 本周>上周, 且4周前<=8周前(此前走平或下行)
         if m20 > m20_1w and m20_4w <= m20_8w:
-            # 近4周内 MA5 上穿 MA10 (金叉)
             golden = False
             for i in range(max(1, len(ma5) - 4), len(ma5)):
                 p = i - 1
@@ -5800,11 +5829,9 @@ def classify_weekly_ma_pattern(bars: list[dict]) -> tuple[list[str], dict]:
                         golden = True
                         break
             if golden:
-                # 放量确认: 最近一周成交量 > 20周均量×1.5
                 if len(vols) >= 20:
                     vol_avg20 = sum(vols[-21:-1]) / 20
                     if vol_avg20 > 0 and vols[-1] > vol_avg20 * 1.5:
-                        # 距52周低点已上涨 > 20%
                         if low52 > 0 and c / low52 > 1.2:
                             hits.append("周线C·底部反转")
 
@@ -5971,7 +5998,12 @@ def _run_ma_screen_thread():
             # 收集该股票命中的所有 tab (均线形态 + 背离 + 周线形态可同时命中)
             pats = []
             if pat and ma_pass:
-                pats.append(pat)
+                # 日线向上形态(多头排列/多头排列向上发散/粘合向上突破)需遵循周线一票否决
+                # weekly_snap 非空 = 否决通过; 空 = 否决未通过
+                if pat in DAILY_UP_PATTERNS_NEED_VETO and not weekly_snap:
+                    pass  # 周线否决未通过, 剔除该日线形态
+                else:
+                    pats.append(pat)
             if kdj_bottom:
                 pats.append("KDJ底背离")
             if macd_bottom:
