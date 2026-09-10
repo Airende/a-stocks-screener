@@ -1,7 +1,7 @@
 {
   "2026-09-10": {
     "ma": {
-      "updated": "2026-09-10 20:12:38",
+      "updated": "2026-09-10 20:14:40",
       "counts": {
         "多头排列": 39,
         "多头排列向上发散": 44,
@@ -15,7 +15,7 @@
         "周线C·底部反转": 7
       },
       "total_stocks": 2348,
-      "elapsed_sec": 13.4,
+      "elapsed_sec": 28.5,
       "patterns": {
         "多头排列": [
           {
@@ -12761,13 +12761,13 @@
       }
     },
     "date": "2026-09-10",
-    "updated_at": "2026-09-10 20:13:17",
+    "updated_at": "2026-09-10 20:15:34",
     "ssp": {
       "updated": "2026-09-10",
       "mkt_filter": false,
       "counts": {
         "上试盘·新信号": 13,
-        "上试盘·观察池": 23,
+        "上试盘·观察池": 24,
         "上试盘·已确认": 4
       },
       "new_signals": [
@@ -13375,6 +13375,25 @@
           "invalidate_price": 11.36
         },
         {
+          "code": "920010",
+          "name": "凯添燃气",
+          "price": 10.09,
+          "change_pct": 1.51,
+          "amount_y": 1.82,
+          "industry": "公用事业",
+          "concept": "燃气、公用事业",
+          "today": "2026-09-10",
+          "sig_day": "2026-09-01",
+          "days_since": 7,
+          "remain_days": 3,
+          "sig_high": 10.25,
+          "sig_low": 9.16,
+          "shadow_pct": 7.75,
+          "vol_ratio": 3.04,
+          "break_price": 10.35,
+          "invalidate_price": 9.16
+        },
+        {
           "code": "300085",
           "name": "银之杰",
           "price": 32.23,
@@ -13508,7 +13527,7 @@
       ]
     },
     "screen": {
-      "updated": "2026-09-10 20:13:17",
+      "updated": "2026-09-10 20:15:34",
       "conds": [
         "b1",
         "b2",
