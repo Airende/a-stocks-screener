@@ -1381,10 +1381,8 @@ $('#cacheRefreshBtn').onclick=async()=>{
   if(!confirm('确认刷新K线数据？将清空本地缓存并重新从服务拉取（约需2-3分钟）。')) return;
   const btn=$('#cacheRefreshBtn');
   btn.disabled=true; btn.textContent='刷新中…';
-  $('#cacheInfo').textContent='K线数据: 正在清空并重新拉取…';
-  // 清空表格, 避免显示旧数据
-  $('#tbodyExact').innerHTML='<tr><td colspan="11" class="empty"><span class="spin"></span>正在重新拉取数据…</td></tr>';
-  $('#tbodyNear').innerHTML='';
+  $('#cacheInfo').textContent='K线数据: 正在清空并重新拉取… (下方保留旧数据, 完成后自动更新)';
+  // 20260910: 不清空表格, 保留旧数据直到新数据就绪, 避免"下面数据刷不出"
   try{
     await fetch('/api/cache_refresh',{method:'POST'});
     // 轮询筛选进度: 等待新数据(universe>0 且 !running)才完成

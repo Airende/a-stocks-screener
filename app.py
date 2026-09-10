@@ -56,8 +56,12 @@ _SPOT_POOL = ThreadPoolExecutor(max_workers=12)
 # 缓存
 _CACHE = {}
 _CACHE_LOCK = threading.Lock()
-# K线内存缓存: symbol -> bars, 选股时避免5353次文件IO
+# K线内存缓存: symbol -> bars, 选股时避免重复文件IO
+# 20260910: 限制内存缓存上限, 5356只*300根全部入内存会占用~1GB导致进程变慢/崩溃。
+# 采用简单LRU: 超过上限时淘汰最早写入的条目。
 _KLINE_MEM_CACHE: dict[str, list[dict]] = {}
+_KLINE_MEM_ORDER: list[str] = []
+_KLINE_MEM_MAX = 800  # 内存缓存上限(只), 兼顾IO效率与内存占用
 _KLINE_MEM_LOCK = threading.Lock()
 # 行业/概念映射缓存 (构建一次, 当日内复用)
 _BOARD_MAP_TTL = 6 * 3600  # 6 小时
@@ -298,7 +302,12 @@ def _load_kline_cache(symbol: str) -> list[dict] | None:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
             with _KLINE_MEM_LOCK:
-                _KLINE_MEM_CACHE[symbol] = data
+                if symbol not in _KLINE_MEM_CACHE:
+                    if len(_KLINE_MEM_CACHE) >= _KLINE_MEM_MAX:
+                        old = _KLINE_MEM_ORDER.pop(0)
+                        _KLINE_MEM_CACHE.pop(old, None)
+                    _KLINE_MEM_CACHE[symbol] = data
+                    _KLINE_MEM_ORDER.append(symbol)
             return data
         except (json.JSONDecodeError, OSError):
             return None
@@ -307,6 +316,11 @@ def _load_kline_cache(symbol: str) -> list[dict] | None:
 
 def _save_kline_cache(symbol: str, data: list[dict]) -> None:
     with _KLINE_MEM_LOCK:
+        if symbol not in _KLINE_MEM_CACHE:
+            if len(_KLINE_MEM_CACHE) >= _KLINE_MEM_MAX:
+                old = _KLINE_MEM_ORDER.pop(0)
+                _KLINE_MEM_CACHE.pop(old, None)
+            _KLINE_MEM_ORDER.append(symbol)
         _KLINE_MEM_CACHE[symbol] = data
     d = _kline_cache_dir()
     os.makedirs(d, exist_ok=True)
@@ -319,27 +333,14 @@ def _save_kline_cache(symbol: str, data: list[dict]) -> None:
 
 
 def _preload_kline_cache() -> int:
-    """选股前预加载所有K线缓存到内存, 避免5353次文件IO。返回加载数量。"""
+    """选股前预加载部分K线缓存到内存(受_KLINE_MEM_MAX限制), 返回磁盘缓存总数。
+    20260910: 不再全量载入内存(5356只*300根≈1GB), 改为只统计磁盘数量,
+    选股时按需从磁盘加载并LRU缓存, 内存占用稳定在 _KLINE_MEM_MAX 只以内。"""
     d = _kline_cache_dir()
     if not os.path.isdir(d):
         return 0
-    loaded = 0
-    for fn in os.listdir(d):
-        if not fn.endswith(".json"):
-            continue
-        symbol = fn[:-5]
-        with _KLINE_MEM_LOCK:
-            if symbol in _KLINE_MEM_CACHE:
-                continue
-        try:
-            with open(os.path.join(d, fn), "r", encoding="utf-8") as f:
-                data = json.load(f)
-            with _KLINE_MEM_LOCK:
-                _KLINE_MEM_CACHE[symbol] = data
-            loaded += 1
-        except (json.JSONDecodeError, OSError):
-            continue
-    return loaded
+    total = sum(1 for fn in os.listdir(d) if fn.endswith(".json"))
+    return total
 
 
 def _cache_date_for_fetch() -> str:
@@ -4690,23 +4691,34 @@ def run_screen(conds=None) -> dict:
     near = near[:60]  # 控制前端载荷
     _set_screen_progress(f"筛选完成: 命中 {len(exact)} 只, 接近满足 {len(near)} 只")
 
-    # 20260910: 补拉缺失K线缓存。首轮因限流失败的股票, 此处串行重试拉取并落盘,
+    # 20260910: 补拉缺失K线缓存。首轮因限流失败的股票, 此处并发重试拉取并落盘,
     # 确保下次筛选时缓存完整, 不再出现"更新不全就中断"的问题。
     missing = [r for r in candidates if _load_kline_cache(r.get("symbol")) is None]
     if missing:
         _set_screen_progress(f"补拉缺失K线缓存 0/{len(missing)}…")
-        filled = 0
-        for i, r in enumerate(missing):
+        missing_cnt = [0]
+        filled_cnt = [0]
+
+        def fill_one(r):
             sym = r.get("symbol")
             try:
-                # force=False: 有缓存就跳过; 无缓存则远程拉取并落盘
                 fetch_kline(sym, datalen=300, spot_data=spot)
                 if _load_kline_cache(sym) is not None:
-                    filled += 1
+                    filled_cnt[0] += 1
             except Exception:  # noqa: BLE001
                 pass
-            if (i + 1) % 100 == 0 or i == len(missing) - 1:
-                _set_screen_progress(f"补拉缺失K线缓存 {i+1}/{len(missing)} (成功 {filled})…")
+            finally:
+                missing_cnt[0] += 1
+                if missing_cnt[0] % 100 == 0 or missing_cnt[0] == len(missing):
+                    _set_screen_progress(
+                        f"补拉缺失K线缓存 {missing_cnt[0]}/{len(missing)} (成功 {filled_cnt[0]})…")
+
+        futs = [POOL.submit(fill_one, r) for r in missing]
+        for f in as_completed(futs, timeout=1800):
+            try:
+                f.result(timeout=60)
+            except Exception:  # noqa: BLE001
+                pass
 
     return {
         "updated": bj_now(),
@@ -4987,6 +4999,9 @@ def cache_refresh():
     _board_cache["industry3"] = {}
     _board_cache["concept"] = {}
     _INDEX_KLINE_CACHE.clear()
+    with _KLINE_MEM_LOCK:
+        _KLINE_MEM_CACHE.clear()
+        _KLINE_MEM_ORDER.clear()
     _stock_search_cache["items"] = []
     _stock_search_cache["built_at"] = 0.0
     _MARKET_SNAP_CACHE["ts"] = 0.0
