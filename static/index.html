@@ -3369,6 +3369,9 @@ let maFilterConcept=null; // 当前选中的板块筛选(null=全部)
 // ATR过滤勾选项 (20260906): 多选满足其一, 默认勾选e2(3~8%波段弹性)
 let maAtrConds = ['e2'];
 function passMaAtr(s){
+  // ATR过滤仅作用于日线均线形态tab; 背离tab(KDJ/MACD底背离)和周线tab不受ATR限制 (与后端一致)
+  const curPat = MA_PATS[maCurrentTab][0];
+  if(curPat.endsWith('底背离') || curPat.startsWith('周线')) return true;
   if(!maAtrConds.length) return true;
   if(s.atr_pct == null) return true;  // 旧扫描结果无ATR字段时不隐藏
   if(maAtrConds.includes('e1') && s.atr_pct < 4) return true;
