@@ -855,20 +855,18 @@ def fetch_kline(symbol: str, datalen: int = 40, spot_data: list[dict] | None = N
 
     # 有缓存且长度足够 → 直接用, 不再远程拉取
     if not force and cached is not None and len(cached) >= datalen:
-        if not _kline_has_today(cached, today_str):
-            # 缓存缺今日 → 用spot快照补全当日bar(运行时, 不落盘)
-            patched = _patch_today_bar_from_spot(cached, symbol, today_str, spot_data)
-            if _kline_has_today(patched, today_str):
-                return patched
-        return cached
+        # 不论缓存是否已有今日bar, 都用最新spot刷新最后一根(盘中实时/盘后最终价)。
+        # 否则盘中远程拉取后落盘的旧价会被"冻住", 不再随行情更新 (20260910 修复)。
+        patched = _patch_today_bar_from_spot(cached, symbol, today_str, spot_data)
+        return patched
 
     # 无缓存 / 强制刷新 / 缓存不足 → 远程拉取
     out = _fetch_kline_remote(symbol, datalen)
     if not out:
         # 拉取失败 → 回退到已有缓存
         return cached if cached else []
-    if not _kline_has_today(out, today_str):
-        out = _patch_today_bar_from_spot(out, symbol, today_str, spot_data)
+    # 远程拉取后同样用spot刷新最后一根: 若远程源不含当日bar则追加, 若已含则用最新价覆盖
+    out = _patch_today_bar_from_spot(out, symbol, today_str, spot_data)
     if out:
         _save_kline_cache(symbol, out)
     return out
@@ -935,7 +933,10 @@ def _build_board_maps():
     now = time.time()
     if now - _board_cache["built_at"] < _BOARD_MAP_TTL and _board_cache["industry"]:
         return
-    tree = _get(SINA_NODES)
+    try:
+        tree = _get(SINA_NODES)
+    except Exception:
+        return  # Sina不可用时跳过, 保留旧缓存(空则板块字段为空)
     try:
         a_group = tree[1][0][1]  # "A股" 的子分类列表
     except (IndexError, TypeError):
@@ -5277,8 +5278,11 @@ def api_stock_analyze(code: str = "", date: str = ""):
         except ValueError:
             return JSONResponse({"error": "date 格式应为 YYYY-MM-DD"}, status_code=400)
     symbol = _to_symbol(code)
-    # 1. 实时行情
-    spot = _get(SINA_HQ, {"page": 1, "num": 1, "node": "hs_a"})
+    # 1. 实时行情 (Sina限流时不阻塞, 用K线最后一天代替)
+    try:
+        spot = _get(SINA_HQ, {"page": 1, "num": 1, "node": "hs_a"})
+    except Exception:
+        spot = None
     # 上面方式取不到单只, 改用直接搜索全量缓存
     _build_search_index()
     info = None
