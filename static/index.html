@@ -3840,7 +3840,7 @@ async function loadIndicesRealtime(){
   }catch(e){}
 }
 loadMarketSnap();
-setInterval(loadMarketSnap, 60000);
+setInterval(loadMarketSnap, 3000);
 function _tickIndices(){
   loadIndicesRealtime();
   setTimeout(_tickIndices, _idxTickMs);

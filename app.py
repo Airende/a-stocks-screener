@@ -628,7 +628,7 @@ def _get(url: str, params: dict | None = None, timeout: int = 15) -> Any:
 # ============================================================
 # fetch_spot_all 内存缓存: 避免选股时每只股票补全当日bar都重复拉全市场快照
 _SPOT_MEM_CACHE = {"data": None, "ts": 0.0}
-_SPOT_MEM_TTL = 30  # 30秒TTL, 盘中足够新, 收盘后几乎不变
+_SPOT_MEM_TTL = 3  # 行情快照每3秒刷新, 同步降低spot缓存TTL
 
 
 def fetch_spot_all() -> list[dict]:
@@ -6420,7 +6420,7 @@ def api_history(date: str = ""):
 # 顶栏指数快照 (上证/深证/创业板 + 行情研判)
 # ============================================================
 _MARKET_SNAP_CACHE: dict = {"ts": 0.0, "data": None}
-_MARKET_SNAP_TTL = 60  # 1 分钟刷新一次 (顶栏实时性不要求秒级)
+_MARKET_SNAP_TTL = 3  # 行情快照每 3 秒刷新一次
 _MARKET_SNAP_LOCK = threading.Lock()
 
 # 三大指数：symbol, 中文名
