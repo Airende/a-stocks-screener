@@ -65,7 +65,10 @@ _KLINE_MEM_MAX = 800  # 内存缓存上限(只), 兼顾IO效率与内存占用
 _KLINE_MEM_LOCK = threading.Lock()
 # 行业/概念映射缓存 (构建一次, 当日内复用)
 _BOARD_MAP_TTL = 6 * 3600  # 6 小时
-_board_cache = {"built_at": 0.0, "industry": {}, "industry2": {}, "industry3": {}, "concept": {}}
+# 一次"未完成"的构建(如新浪节点接口被反爬)后的重试间隔, 避免每次选股都重打数据源
+_BOARD_MAP_RETRY_SEC = 600  # 10 分钟
+_board_cache = {"built_at": 0.0, "attempt_at": 0.0, "industry": {}, "industry2": {},
+                "industry3": {}, "concept": {}}
 # ============================================================
 # 板块分类: 对齐"开盘啦"口径的修正与增强
 # 策略: 细分概念/行业(第1位) + 大行业/大概念(第2位)
@@ -1018,15 +1021,114 @@ def _patch_today_bar_from_spot(bars: list[dict], symbol: str,
 # ============================================================
 # 数据层: 行业 + 概念板块映射
 # ============================================================
-def _build_board_maps():
-    """构建 code -> 申万一级/二级行业, code -> [过滤后概念板块...] 映射 (缓存)"""
-    now = time.time()
-    if now - _board_cache["built_at"] < _BOARD_MAP_TTL and _board_cache["industry"]:
-        return
+_EM_LIST_URL = "https://push2delay.eastmoney.com/api/qt/clist/get"
+
+
+def _board_cache_path() -> str:
+    return os.path.join(CACHE_DIR, "board_map.json")
+
+
+def _save_board_cache() -> None:
+    """板块映射落盘 (20260911): 新浪节点接口被反爬(456)期间无法重建,
+    落盘后可跨重启保留, 避免重启后行业/板块整列变成"—"。"""
     try:
-        tree = _get(SINA_NODES)
-    except Exception:
-        return  # Sina不可用时跳过, 保留旧缓存(空则板块字段为空)
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        with open(_board_cache_path(), "w", encoding="utf-8") as f:
+            json.dump({
+                "built_at": _board_cache["built_at"],
+                "industry": _board_cache["industry"],
+                "industry2": _board_cache["industry2"],
+                "industry3": _board_cache["industry3"],
+                "concept": _board_cache["concept"],
+            }, f, ensure_ascii=False)
+    except OSError:
+        pass
+
+
+def _load_board_cache() -> bool:
+    """内存为空时从磁盘恢复板块映射。"""
+    if _board_cache["industry"]:
+        return True
+    path = _board_cache_path()
+    if not os.path.exists(path):
+        return False
+    try:
+        with open(path, encoding="utf-8") as f:
+            d = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return False
+    if not isinstance(d, dict) or not d.get("industry"):
+        return False
+    _board_cache["industry"] = d.get("industry") or {}
+    _board_cache["industry2"] = d.get("industry2") or {}
+    _board_cache["industry3"] = d.get("industry3") or {}
+    _board_cache["concept"] = d.get("concept") or {}
+    _board_cache["built_at"] = float(d.get("built_at") or 0.0)
+    return True
+
+
+def _fetch_board_eastmoney() -> tuple[dict[str, str], dict[str, list[str]]]:
+    """东财兜底源: f100=行业(申万二级口径), f103=概念(逗号分隔)。
+    新浪节点接口(Market_Center.getHQNodes/getHQNodeData)被反爬返回 456 时,
+    新浪侧板块数据会整块丢失; 东财该接口可一次分页取回全市场行业+概念。"""
+    industry_map: dict[str, str] = {}
+    concept_map: dict[str, list[str]] = {}
+    pz = 100
+    for page in range(1, 71):  # 全市场约 5558 只, 安全上限 7000
+        try:
+            data = _get(_EM_LIST_URL, {
+                "pn": page, "pz": pz, "po": 1, "np": 1, "fltt": 2, "invt": 2,
+                "fs": "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048",
+                "fields": "f12,f14,f100,f103",
+            }, timeout=15)
+        except Exception:  # noqa: BLE001
+            break
+        diff = ((data or {}).get("data") or {}).get("diff") or []
+        if not diff:
+            break
+        for row in diff:
+            code = row.get("f12")
+            if not code:
+                continue
+            ind = _clean_ind(row.get("f100"))
+            if ind and ind != "-":
+                industry_map[code] = ind
+            con = (row.get("f103") or "").strip()
+            if con and con != "-":
+                names = [c for c in con.split(",") if c and c not in _CONCEPT_BLACKLIST]
+                if names:
+                    concept_map[code] = names
+        if len(diff) < pz:
+            break
+    return industry_map, concept_map
+
+
+def _merge_board_maps(industry_map, industry2_map, industry3_map, concept_map,
+                      only_missing: bool) -> None:
+    """合并新映射进缓存。only_missing=True 时只补空缺(兜底源, 不覆盖主源结果)。"""
+    def merge_str(key: str, src: dict) -> None:
+        dst = _board_cache[key]
+        for c, v in src.items():
+            if only_missing and c in dst:
+                continue
+            dst[c] = v
+
+    merge_str("industry", industry_map)
+    merge_str("industry2", industry2_map)
+    merge_str("industry3", industry3_map)
+
+    dst_c = _board_cache["concept"]
+    for c, names in concept_map.items():
+        if only_missing and c in dst_c:
+            continue
+        cur = dst_c.setdefault(c, [])
+        for n in names:
+            if n not in cur:
+                cur.append(n)
+
+
+def _build_board_maps_sina(tree) -> None:
+    """从新浪节点树构建 申万一级/二级/三级 + 概念板块 映射并合并进缓存。"""
     try:
         a_group = tree[1][0][1]  # "A股" 的子分类列表
     except (IndexError, TypeError):
@@ -1049,8 +1151,16 @@ def _build_board_maps():
     def fetch_node_members(node_code: str) -> list[str]:
         codes = []
         page = 1
-        while True:
-            data = _get(SINA_HQ, {"page": page, "num": 100, "node": node_code})
+        while page <= 60:  # 安全上限: 单节点最多 6000 只
+            data = None
+            for attempt in range(2):  # 分页失败重试一次, 避免单个行业整块丢失
+                try:
+                    data = _get(SINA_HQ, {"page": page, "num": 100, "node": node_code}, timeout=10)
+                    break
+                except Exception:  # noqa: BLE001
+                    if attempt == 1:
+                        raise
+                    time.sleep(0.3)
             if not isinstance(data, list) or not data:
                 break
             for row in data:
@@ -1101,11 +1211,48 @@ def _build_board_maps():
     for f in as_completed(futs):
         f.result()
 
-    _board_cache["industry"] = industry_map
-    _board_cache["industry2"] = industry2_map
-    _board_cache["industry3"] = industry3_map
-    _board_cache["concept"] = concept_map
-    _board_cache["built_at"] = now
+    _merge_board_maps(industry_map, industry2_map, industry3_map, concept_map,
+                      only_missing=False)
+
+
+def _build_board_maps():
+    """构建 code -> 申万一级/二级行业, code -> [过滤后概念板块...] 映射 (缓存)。
+
+    20260911 修复"部分行业/板块丢失": 新浪节点接口偶发 456 反爬时, 单个行业节点
+      拉取失败会被静默丢弃, 而结果又被缓存 6 小时 —— 表现为一半股票的行业显示"—"。
+      现改为: 先读磁盘缓存; 新浪节点分页失败重试; 构建覆盖不足时用东财接口兜底补齐;
+      覆盖足够才标记完成(6h), 否则 10 分钟后重试。"""
+    now = time.time()
+    _load_board_cache()
+    if _board_cache["industry"] and now - _board_cache["built_at"] < _BOARD_MAP_TTL:
+        return
+    if now - _board_cache["attempt_at"] < _BOARD_MAP_RETRY_SEC:
+        return
+    _board_cache["attempt_at"] = now
+
+    # ---- 1. 主源: 新浪节点树 ----
+    try:
+        tree = _get(SINA_NODES)
+    except Exception:  # noqa: BLE001
+        tree = None
+    if tree is not None:
+        try:
+            _build_board_maps_sina(tree)
+        except Exception:  # noqa: BLE001
+            pass
+
+    # ---- 2. 兜底: 仍缺失的股票用东财补齐(不覆盖新浪已给出的行业) ----
+    if len(_board_cache["industry"]) < 3000:
+        try:
+            em_ind, em_con = _fetch_board_eastmoney()
+        except Exception:  # noqa: BLE001
+            em_ind, em_con = {}, {}
+        _merge_board_maps(em_ind, {}, {}, em_con, only_missing=True)
+
+    # ---- 3. 覆盖足够视为完成; 否则留待下次重试 ----
+    if len(_board_cache["industry"]) >= 3000:
+        _board_cache["built_at"] = time.time()
+        _save_board_cache()
 
 
 def get_industry(code: str) -> str:
