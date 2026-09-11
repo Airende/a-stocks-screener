@@ -372,6 +372,9 @@ def _should_use_spot_cache() -> bool:
 _SINA_COOLDOWN_SEC = 600          # 主源熔断时长(秒)
 _SINA_FAIL_WINDOW_SEC = 60        # 单只K线失败计数窗口
 _SINA_FAIL_THRESHOLD = 5          # 窗口内失败次数达到阈值才熔断
+# 20260911: 该熔断仅针对 spot(新浪全市场快照)接口。此前 K线取数也查阅它, 导致
+#   快照接口被反爬(HTTP 456)熔断后, 正常的 K线接口被一起跳过而腾讯备源(501)也不
+#   可用, 个股分析大面积 404。K线限流是瞬态的, 不纳入熔断(见 _fetch_kline_remote)。
 _SOURCE_BREAKER = {"sina_down_until": 0.0, "fails": []}
 _SOURCE_BREAKER_LOCK = threading.Lock()
 # K线全局并发信号量: 选股时40线程同时打数据源会触发限流。
@@ -381,14 +384,49 @@ _KLINE_SEM = threading.Semaphore(20)
 # 新浪qfq因子单独信号量(因子请求轻量, 可与K线分开控制)
 _SINA_KLINE_SEM = threading.Semaphore(25)
 
+# K线各数据源健康度 (20260911): 新浪K线被封返回456、东财主机在本网络不可达,
+# 若每次都按 新浪→腾讯→东财 顺序试, 每只股票都要白白等待这两个已失效源的超时。
+# 连续失败达阈值即冷却期内跳过该源, 待冷却结束再探测恢复。
+_KLINE_SRC_LOCK = threading.Lock()
+_KLINE_SRC_DOWN_UNTIL: dict[str, float] = {}
+_KLINE_SRC_FAILS: dict[str, list[float]] = {}
+_KLINE_SRC_FAIL_THRESHOLD = 3
+_KLINE_SRC_COOLDOWN_SEC = 180
+
+
+def _kline_src_ok(name: str) -> bool:
+    """该K线源当前是否可用(未在冷却期内)。"""
+    with _KLINE_SRC_LOCK:
+        return time.time() >= _KLINE_SRC_DOWN_UNTIL.get(name, 0.0)
+
+
+def _kline_src_record(name: str, ok: bool) -> None:
+    with _KLINE_SRC_LOCK:
+        if ok:
+            _KLINE_SRC_FAILS.pop(name, None)
+            _KLINE_SRC_DOWN_UNTIL.pop(name, None)
+            return
+        now = time.time()
+        fails = [t for t in _KLINE_SRC_FAILS.get(name, []) if now - t < _KLINE_SRC_COOLDOWN_SEC]
+        fails.append(now)
+        if len(fails) >= _KLINE_SRC_FAIL_THRESHOLD:
+            # 并发下多个已在途的请求会先后越过阈值, 仅在首次进入冷却时打印, 避免刷屏
+            first_trip = _KLINE_SRC_DOWN_UNTIL.get(name, 0.0) <= now
+            _KLINE_SRC_DOWN_UNTIL[name] = now + _KLINE_SRC_COOLDOWN_SEC
+            fails = []
+            if first_trip:
+                print(f"[source] [{bj_now()}] K线源 {name} 连续失败, 冷却{_KLINE_SRC_COOLDOWN_SEC}s 内跳过", flush=True)
+        _KLINE_SRC_FAILS[name] = fails
+
 
 def _sina_available() -> bool:
+    """新浪行情快照(spot)主源当前是否可用(不在熔断期内)。"""
     with _SOURCE_BREAKER_LOCK:
         return time.time() >= _SOURCE_BREAKER.get("sina_down_until", 0.0)
 
 
 def _record_sina_failure(reason: str = "", immediate: bool = False) -> None:
-    """记录主源失败。immediate=全市场级失败直接熔断; 否则窗口内累计达阈值才熔断。"""
+    """记录 spot 主源失败。immediate=全市场级失败直接熔断; 否则窗口内累计达阈值才熔断。"""
     with _SOURCE_BREAKER_LOCK:
         now = time.time()
         fails = [t for t in _SOURCE_BREAKER.get("fails", []) if now - t < _SINA_FAIL_WINDOW_SEC]
@@ -398,21 +436,44 @@ def _record_sina_failure(reason: str = "", immediate: bool = False) -> None:
             return
         _SOURCE_BREAKER["sina_down_until"] = now + _SINA_COOLDOWN_SEC
         _SOURCE_BREAKER["fails"] = []
-    print(f"[source] [{bj_now()}] 新浪主源异常({reason[:80]}), 熔断{_SINA_COOLDOWN_SEC}s 内改用腾讯备源", flush=True)
+    print(f"[source] [{bj_now()}] 新浪行情快照接口异常({reason[:80]}), 熔断{_SINA_COOLDOWN_SEC}s 内改用备源", flush=True)
 
 
-_TENCENT_KLINE_URL = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+# 腾讯日K多入口 (20260911): 部分网络(如本机代理/中间设备)会把 web.ifzq.gtimg.cn
+# 拦成 HTTP 501, 而 ifzq.gtimg.cn / proxy.finance.qq.com 返回同一格式数据;
+# 逐个尝试, 任一返回有效 K线即用, 避免备源整体不可用导致个股分析取不到数据。
+_TENCENT_KLINE_URLS = [
+    "https://ifzq.gtimg.cn/appstock/app/fqkline/get",
+    "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get",
+    "https://proxy.finance.qq.com/ifzqgtimg/appstock/app/fqkline/get",
+]
+# 记住最近一次成功的入口, 下次优先使用 (WAF 封锁会随时段变化, 固定顺序会让
+# 已可用的入口排在最后而白白多打两个被封入口)。20260911
+_TENCENT_KLINE_GOOD: str | None = None
 
 
 def _fetch_kline_tencent(symbol: str, datalen: int = 40) -> list[dict]:
     """腾讯日K主源: 返回前复权(qfq) [{day,open,high,low,close,volume}]。
     前复权使除权日前后价格可比, 均线/MACD/KDJ等指标在除权日不跳变。
     腾讯K线成交量为手, 新浪为股, 必须×100 (实测茅台 45416手 vs 4541564股)。"""
-    data = _get(_TENCENT_KLINE_URL, {"param": f"{symbol},day,,,{datalen},qfq"}, timeout=10)
-    node = {}
-    if isinstance(data, dict):
-        node = (data.get("data") or {}).get(symbol) or {}
-    rows = node.get("qfqday") or node.get("day") or []
+    global _TENCENT_KLINE_GOOD
+    rows: list = []
+    bases = list(_TENCENT_KLINE_URLS)
+    if _TENCENT_KLINE_GOOD in bases:
+        bases.remove(_TENCENT_KLINE_GOOD)
+        bases.insert(0, _TENCENT_KLINE_GOOD)
+    for base in bases:
+        try:
+            data = _get(base, {"param": f"{symbol},day,,,{datalen},qfq"}, timeout=10)
+        except Exception:  # noqa: BLE001
+            continue
+        node = {}
+        if isinstance(data, dict):
+            node = (data.get("data") or {}).get(symbol) or {}
+        rows = node.get("qfqday") or node.get("day") or []
+        if rows:
+            _TENCENT_KLINE_GOOD = base
+            break
     out: list[dict] = []
     for r in rows:
         try:
@@ -468,18 +529,21 @@ _TENCENT_SPOT_URL = "https://qt.gtimg.cn/q="
 
 def _fetch_spot_tencent(codes: list[str]) -> list[dict]:
     """腾讯实时行情备源: qt.gtimg.cn 批量查询(GBK文本), 输出与新浪 spot 行对齐的字典。
-    股票池由调用方提供(本地缓存), 本函数只负责刷新价格字段。"""
+    股票池由调用方提供(本地缓存), 本函数只负责刷新价格字段。
+    20260911 性能: 原 CHUNK=60 串行, 全市场需 90+ 次请求耗时近 30s, 与 3s 的
+    spot 缓存 TTL 叠加后导致接口长期挂起; 腾讯单次可接受数百只(实测 600 只
+    ~0.34s), 改为 CHUNK=600 并发拉取, 全市场降至 ~1s。"""
     import re as _re
-    out: list[dict] = []
-    CHUNK = 60
-    for i in range(0, len(codes), CHUNK):
-        chunk = codes[i:i + CHUNK]
+    CHUNK = 600
+
+    def _fetch_chunk(chunk: list[str]) -> list[dict]:
+        chunk_out: list[dict] = []
         try:
             r = requests.get(_TENCENT_SPOT_URL + ",".join(chunk), headers=HEADERS, timeout=10)
             r.encoding = "gbk"
             text = r.text
         except Exception:  # noqa: BLE001
-            continue
+            return chunk_out
         for line in text.split(";"):
             line = line.strip()
             m = _re.search(r'v_(sh|sz|bj)(\d{6})="([^"]*)"', line)
@@ -495,7 +559,7 @@ def _fetch_spot_tencent(codes: list[str]) -> list[dict]:
                         return float(f[idx])
                     except (ValueError, TypeError, IndexError):
                         return default
-                out.append({
+                chunk_out.append({
                     "code": m.group(2),
                     "symbol": sym,
                     "name": f[1],
@@ -512,6 +576,17 @@ def _fetch_spot_tencent(codes: list[str]) -> list[dict]:
                 })
             except Exception:  # noqa: BLE001
                 continue
+        return chunk_out
+
+    if not codes:
+        return []
+    out: list[dict] = []
+    futs = [_SPOT_POOL.submit(_fetch_chunk, codes[i:i + CHUNK]) for i in range(0, len(codes), CHUNK)]
+    for f in as_completed(futs):
+        try:
+            out.extend(f.result())
+        except Exception:  # noqa: BLE001
+            continue
     return out
 
 
@@ -606,7 +681,11 @@ def _load_any_spot_universe() -> list[dict]:
 
 
 def _get(url: str, params: dict | None = None, timeout: int = 15) -> Any:
-    """带重试的 GET 请求, 返回 JSON 或原始文本"""
+    """带重试的 GET 请求, 返回 JSON 或原始文本
+    20260911: 4xx(如新浪 456 反爬/403)属确定性拒绝, 重试无意义且拖慢故障切换
+    (全市场快照 50+ 分页各重试 3 次需近 10s), 改为立即失败交由上层切备源。
+    20260911: 501 亦为腾讯WAF返回的确定性拒绝(HTML 拦截页), 同样立即失败;
+      否则每个被封入口都要重试 3 次(含 2×0.5s sleep), 单只K线多耗约 4s。"""
     last = None
     for _ in range(3):
         try:
@@ -617,6 +696,8 @@ def _get(url: str, params: dict | None = None, timeout: int = 15) -> Any:
                 except json.JSONDecodeError:
                     return r.text
             last = f"{r.status_code}:{r.text[:80]}"
+            if (400 <= r.status_code < 500 and r.status_code != 429) or r.status_code == 501:
+                break
         except Exception as e:  # noqa: BLE001
             last = str(e)
         time.sleep(0.5)
@@ -651,7 +732,7 @@ def fetch_spot_all() -> list[dict]:
     try:
         tried_sina = _sina_available()
         if not tried_sina:
-            raise RuntimeError("新浪主源熔断中")
+            raise RuntimeError("新浪行情快照主源熔断中")
         # 先取总数
         total = _get(SINA_NODE_COUNT, {"node": "hs_a"})
         if not isinstance(total, (int, str)) or int(total) <= 0:
@@ -803,31 +884,35 @@ def _fetch_kline_remote(symbol: str, datalen: int) -> list[dict]:
     """K线远程拉取(前复权):
       新浪(不复权+qfq因子本地算前复权) → 腾讯qfq → 东财fqt=1。
     前复权使除权日前后价格可比, 自绘K线图与均线/MACD/KDJ口径一致。
-    20260909: K线失败不再调用 _record_sina_failure —— 限流是瞬态的, 不应触发
-      全局600s熔断(那会连 spot 一起废掉); 全局熔断只由 fetch_spot_all 探测。
+    20260911: K线只走自己的取数链路, 不再查看 spot 作用域的熔断 —— 此前 spot
+      (新浪全市场快照)被反爬熔断后连带跳过正常的新浪K线, 而备源腾讯K线返回 501、
+      东财不通, 导致个股分析大面积取不到K线(404)。K线限流是瞬态的, 不做全局熔断。
     20260910: 加全局信号量 _KLINE_SEM, 三源总并发受控, 避免备源被高并发打爆。"""
     out: list[dict] = []
     sina_err = ""
     with _KLINE_SEM:
-        if _sina_available():
+        if _kline_src_ok("sina"):
             try:
                 out = _fetch_kline_sina(symbol, datalen)
                 if not out:
                     sina_err = "新浪K线返回为空"
             except Exception as e:  # noqa: BLE001
                 sina_err = str(e)[:80]
+            _kline_src_record("sina", bool(out))
         # ---- 备源: 腾讯前复权(直接返回qfq) ----
-        if not out:
+        if not out and _kline_src_ok("tencent"):
             try:
                 out = _fetch_kline_tencent(symbol, datalen)
             except Exception:  # noqa: BLE001
                 pass
+            _kline_src_record("tencent", bool(out))
         # ---- 备源: 东财前复权(fqt=1) ----
-        if not out:
+        if not out and _kline_src_ok("eastmoney"):
             try:
                 out = _fetch_kline_eastmoney(symbol, datalen)
             except Exception:  # noqa: BLE001
                 pass
+            _kline_src_record("eastmoney", bool(out))
     if not out and sina_err:
         # 仅在真正三源皆空时记录一次 (新浪错误对排障有用), 避免选股时刷屏
         print(f"[source] [{bj_now()}] K线无数据 {symbol}: 新浪:{sina_err[:50]}", flush=True)
@@ -850,14 +935,13 @@ def fetch_kline(symbol: str, datalen: int = 40, spot_data: list[dict] | None = N
       · force=True(手动刷新) 或 无缓存/缓存不足 → 远程拉取并写盘。
       · 远程拉取失败时回退到已有缓存, 避免数据中断。
     容灾: 新浪主源失败(或熔断期内)自动切换腾讯/东财备源。"""
-    today_str = _latest_trade_date_str()
     cached = _load_kline_cache(symbol)
 
     # 有缓存且长度足够 → 直接用, 不再远程拉取
     if not force and cached is not None and len(cached) >= datalen:
-        # 不论缓存是否已有今日bar, 都用最新spot刷新最后一根(盘中实时/盘后最终价)。
-        # 否则盘中远程拉取后落盘的旧价会被"冻住", 不再随行情更新 (20260910 修复)。
-        patched = _patch_today_bar_from_spot(cached, symbol, today_str, spot_data)
+        # 不论缓存是否已有当日bar, 都用最新spot刷新当日bar(盘中实时/盘后最终价),
+        # 否则盘中落盘的旧价会被"冻住"不再更新 (20260910 修复)。
+        patched = _patch_today_bar_from_spot(cached, symbol, spot_data)
         return patched
 
     # 无缓存 / 强制刷新 / 缓存不足 → 远程拉取
@@ -865,8 +949,8 @@ def fetch_kline(symbol: str, datalen: int = 40, spot_data: list[dict] | None = N
     if not out:
         # 拉取失败 → 回退到已有缓存
         return cached if cached else []
-    # 远程拉取后同样用spot刷新最后一根: 若远程源不含当日bar则追加, 若已含则用最新价覆盖
-    out = _patch_today_bar_from_spot(out, symbol, today_str, spot_data)
+    # 远程拉取后同样用spot刷新当日bar: 若远程源不含当日则追加, 若已含则用最新价覆盖
+    out = _patch_today_bar_from_spot(out, symbol, spot_data)
     if out:
         _save_kline_cache(symbol, out)
     return out
@@ -875,13 +959,19 @@ def fetch_kline(symbol: str, datalen: int = 40, spot_data: list[dict] | None = N
 _SPOT_DICT_CACHE: dict[int, dict[str, dict]] = {}
 
 
-def _patch_today_bar_from_spot(bars: list[dict], symbol: str, today_str: str,
+def _patch_today_bar_from_spot(bars: list[dict], symbol: str,
                                spot_data: list[dict] | None = None) -> list[dict]:
-    """用spot实时快照数据补全今天的K线条目。
-    symbol: 如 sh601398; today_str: YYYYMMDD格式。
+    """用spot实时快照数据补全"当前交易日"的K线条目。
+    symbol: 如 sh601398。
     spot_data: 可选, 已拉取的全市场快照; 为None时调用 fetch_spot_all()。
-    如果spot数据有今天的价格，追加一条K线; 否则原样返回。"""
+    快照有效时: 若最后一根已是当日则用最新价覆盖(盘中实时刷新), 否则追加一根当日bar。
+    20260911 修复: 快照是"当前交易日"的实时价, bar 日期必须取当前自然交易日,
+      不能用 _latest_trade_date_str() —— 它在 15:00 前返回上一交易日, 会把昨天的
+      bar 覆盖成今天的价(或追加出日期错位的重复 bar)。"""
     global _SPOT_DICT_CACHE
+    now_bj = datetime.now(_BJ_TZ)
+    if now_bj.weekday() >= 5:
+        return bars  # 周末无实时行情, 不补当日bar
     if spot_data is None:
         try:
             spot_all = fetch_spot_all()
@@ -899,8 +989,8 @@ def _patch_today_bar_from_spot(bars: list[dict], symbol: str, today_str: str,
             if sym:
                 spot_dict[sym] = r
         _SPOT_DICT_CACHE[spot_key] = spot_dict
-    # 转成标准日期格式 YYYY-MM-DD
-    today_iso = f"{today_str[:4]}-{today_str[4:6]}-{today_str[6:]}"
+    # 当日bar日期: 当前自然交易日 (YYYY-MM-DD)
+    spot_day = now_bj.strftime("%Y-%m-%d")
     code6 = symbol[-6:] if symbol[:2] in ("sh", "sz", "bj") else symbol
     r = spot_dict.get(symbol) or spot_dict.get(code6)
     if r:
@@ -908,14 +998,14 @@ def _patch_today_bar_from_spot(bars: list[dict], symbol: str, today_str: str,
             trade = float(r.get("trade") or 0)
             if trade > 0:
                 bar = {
-                    "day": today_iso,
+                    "day": spot_day,
                     "open": float(r.get("open") or trade),
                     "high": float(r.get("high") or trade),
                     "low": float(r.get("low") or trade),
                     "close": trade,
                     "volume": float(r.get("volume") or 0),
                 }
-                if bars and (bars[-1].get("day") or "")[:10] == today_iso:
+                if bars and (bars[-1].get("day") or "")[:10] == spot_day:
                     bars[-1] = bar
                 else:
                     bars.append(bar)
