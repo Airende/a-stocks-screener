@@ -5504,8 +5504,8 @@ def api_stock_history_del(code: str):
 # 流水线: K线包含关系处理 → 分型 → 笔 → 线段 → 中枢 → 三类买卖点
 # 口径说明(缠论分歧点, 此处取可稳定落地的一版):
 #   · 笔 = 新笔定义(两分型之间至少 1 根独立K线)
-#   · 线段 = "特征序列分型"判定, 不做缺口(第二种特征序列)二次处理
-#   · 中枢 = 笔中枢(连续三笔重叠区间), 并向同向延伸
+#   · 线段 = "特征序列分型"判定, 特征序列先做包含处理(缺口/第二种情况未做二次确认)
+#   · 中枢 = 笔中枢(连续三笔重叠区间), 并向同向延伸; 附 进入段/延伸笔数/离开段/状态
 #   · 一/二类买卖点用 MACD 面积比较判背驰; 三类买卖点只看中枢突破与回抽
 # 返回的索引均为"传入 bars 数组"的下标, 便于前端直接映射到 x 轴。
 # ============================================================
@@ -5582,29 +5582,65 @@ def _chan_strokes(fracs: list[dict]) -> list[dict]:
     return pts
 
 
+def _chan_seq_merge(seq: list[dict], up: bool) -> list[dict]:
+    """特征序列的包含关系处理(20260914 补)。
+    口径: 包含方向取"线段方向" —— 向上线段取高高(高取高、低也取高), 向下线段取低低。
+    特征序列元素视同一根K线(高=笔的高点、低=笔的低点), 从左至右依次处理。
+    hi_i/lo_i 记录该极值落在笔端点序列的哪个下标, 供线段端点精确定位(不是简单取最后一个元素)。"""
+    out: list[dict] = []
+    for e in seq:
+        if not out:
+            out.append(dict(e))
+            continue
+        last = out[-1]
+        contained = (e["hi"] <= last["hi"] + _CHAN_EPS and e["lo"] >= last["lo"] - _CHAN_EPS) or \
+                    (e["hi"] >= last["hi"] - _CHAN_EPS and e["lo"] <= last["lo"] + _CHAN_EPS)
+        if not contained:
+            out.append(dict(e))
+            continue
+        if up:
+            if e["hi"] > last["hi"]:
+                last["hi"], last["hi_i"] = e["hi"], e["hi_i"]
+            if e["lo"] > last["lo"]:
+                last["lo"], last["lo_i"] = e["lo"], e["lo_i"]
+        else:
+            if e["hi"] < last["hi"]:
+                last["hi"], last["hi_i"] = e["hi"], e["hi_i"]
+            if e["lo"] < last["lo"]:
+                last["lo"], last["lo_i"] = e["lo"], e["lo_i"]
+    return out
+
+
 def _chan_segments(pts: list[dict]) -> list[dict]:
-    """线段: 由笔端点序列按"特征序列分型"划分(简化版, 不做缺口二次处理)。
-    向上线段的特征序列 = 其中的向下笔; 特征序列出现顶分型 → 线段在该顶结束。"""
+    """线段: 由笔端点序列按"特征序列分型"划分。
+    向上线段的特征序列 = 其中的向下笔, 出现顶分型 → 线段在该顶结束(向下线段对称)。
+    20260914 补: 特征序列先做包含处理(_chan_seq_merge)再找分型, 端点取分型的极值点。
+    未做: 第二种情况(分型第1、2元素间有缺口)需要"第二特征序列"二次确认,
+    这里仍按"出现分型即结束"处理, 属于已知简化。"""
     m = len(pts)
     segs: list[dict] = []
     s = 0
     while s + 3 < m:
         up = pts[s + 1]["price"] > pts[s]["price"]
-        seq: list[dict] = []
+        raw: list[dict] = []
         for k in range(s, m - 1):
             d = pts[k + 1]["price"] > pts[k]["price"]
             if (up and not d) or ((not up) and d):
-                seq.append({"hi": max(pts[k]["price"], pts[k + 1]["price"]),
-                            "lo": min(pts[k]["price"], pts[k + 1]["price"]),
-                            "end": k + 1})
+                pk, pk1 = pts[k]["price"], pts[k + 1]["price"]
+                hi_i, lo_i = (k, k + 1) if pk >= pk1 else (k + 1, k)
+                raw.append({"hi": max(pk, pk1), "lo": min(pk, pk1),
+                            "hi_i": hi_i, "lo_i": lo_i})
+        seq = _chan_seq_merge(raw, up)
         end_idx = None
         for j in range(1, len(seq) - 1):
             a, b, c = seq[j - 1], seq[j], seq[j + 1]
-            if up and b["hi"] > a["hi"] and b["hi"] > c["hi"] and b["lo"] > a["lo"] and b["lo"] > c["lo"]:
-                end_idx = b["end"] - 1
+            if up and b["hi"] > a["hi"] and b["hi"] > c["hi"] \
+                    and b["lo"] > a["lo"] and b["lo"] > c["lo"]:
+                end_idx = b["hi_i"]      # 向上线段终止于最高点
                 break
-            if (not up) and b["lo"] < a["lo"] and b["lo"] < c["lo"] and b["hi"] < a["hi"] and b["hi"] < c["hi"]:
-                end_idx = b["end"] - 1
+            if (not up) and b["lo"] < a["lo"] and b["lo"] < c["lo"] \
+                    and b["hi"] < a["hi"] and b["hi"] < c["hi"]:
+                end_idx = b["lo_i"]      # 向下线段终止于最低点
                 break
         if end_idx is None or end_idx <= s:
             end_idx = min(s + 3, m - 1)
@@ -5637,9 +5673,28 @@ def _chan_pivots(strokes: list[dict]) -> list[dict]:
                     j += 2              # 短暂冲出又拉回 → 仍属中枢震荡
                     continue
                 break                    # 离开且未回 → 中枢结束
+            # 中枢细分(20260914 补): 进入段 / 延伸笔数 / 离开段 / 状态
+            #   进入段 = 形成中枢前的那一笔; 延伸笔数 = 超出初始3笔的部分;
+            #   离开段 = 终点离开区间且未回抽的那一笔(若中枢一直延伸到数据末尾则为 None);
+            #   状态   = 新生(刚好3笔) / 延伸中(>3笔且未离开) / 已离开
+            enter = strokes[i - 1] if i > 0 else None
+            leave = strokes[j] if j < n else None
+            ext = (j - 1) - i + 1 - 3
+            if leave is not None:
+                status = "已离开"
+            elif ext > 0:
+                status = "延伸中"
+            else:
+                status = "新生"
             pivots.append({"zg": round(zg, 3), "zd": round(zd, 3),
                            "i0": strokes[i]["i0"], "i1": strokes[j - 1]["i1"],
-                           "s0": i, "s1": j - 1})
+                           "s0": i, "s1": j - 1, "ext": ext,
+                           "kind": ("上涨中枢" if enter["dir"] == "up" else "下跌中枢") if enter else "—",
+                           "enter": ({"dir": enter["dir"], "i": enter["i0"],
+                                      "p": enter["p0"]} if enter else None),
+                           "leave": ({"dir": leave["dir"], "i": leave["i1"],
+                                      "p": leave["p1"]} if leave else None),
+                           "status": status})
             i = j
         else:
             i += 1
