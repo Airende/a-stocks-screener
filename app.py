@@ -5614,8 +5614,12 @@ def _chan_segments(pts: list[dict]) -> list[dict]:
 
 
 def _chan_pivots(strokes: list[dict]) -> list[dict]:
-    """中枢: 连续三笔的重叠区间 ZG=三笔高点的最低者, ZD=三笔低点的最高者,
-    成立后向同向延伸(下一笔仍与 [ZD,ZG] 有重叠则并入)。"""
+    """中枢: 连续三笔的重叠区间 ZG=三笔高点的最低者, ZD=三笔低点的最高者。
+    延伸判据(20260911 修正): 用"笔的终点"是否仍在 [ZD,ZG] 内判断, 而不是用笔的
+      最高/最低价 —— 否则突破中枢的那一笔(从区间内一路打到区间外)会被误判为
+      "仍与中枢重叠"而并入, 中枢一路吞掉整段行情(实测出现过跨度 225/244 根),
+      后续再也形成不了新中枢, 三类买卖点也就无从产生。
+      终点离开区间且下一笔未回到区间内 → 中枢结束, 该笔即"离开笔"。"""
     pivots: list[dict] = []
     n = len(strokes)
     i = 0
@@ -5626,12 +5630,13 @@ def _chan_pivots(strokes: list[dict]) -> list[dict]:
         if zg > zd:
             j = i + 3
             while j < n:
-                h = max(strokes[j]["p0"], strokes[j]["p1"])
-                l = min(strokes[j]["p0"], strokes[j]["p1"])
-                if l <= zg and h >= zd:
-                    j += 1
-                else:
-                    break
+                if zd <= strokes[j]["p1"] <= zg:
+                    j += 1              # 终点仍在区间内 → 中枢震荡, 继续延伸
+                    continue
+                if j + 1 < n and zd <= strokes[j + 1]["p1"] <= zg:
+                    j += 2              # 短暂冲出又拉回 → 仍属中枢震荡
+                    continue
+                break                    # 离开且未回 → 中枢结束
             pivots.append({"zg": round(zg, 3), "zd": round(zd, 3),
                            "i0": strokes[i]["i0"], "i1": strokes[j - 1]["i1"],
                            "s0": i, "s1": j - 1})
@@ -5683,19 +5688,18 @@ def _chan_signals(strokes: list[dict], pivots: list[dict], hist: list[float]) ->
         sigs.append({"i": i, "price": round(price, 2), "type": typ,
                      "label": label, "side": side, "desc": desc})
 
-    # ---- 三买 / 三卖 (基于中枢, 最可量化) ----
+    # ---- 三买 / 三卖 (基于中枢: 离开笔的终点在区间外, 回抽笔仍未回到区间内) ----
     for pv in pivots:
-        j = pv["s1"] + 1  # 离开中枢的第一笔
+        j = pv["s1"] + 1  # 离开中枢的那一笔
         if j + 1 >= len(strokes):
             continue
-        s_in, s_out = strokes[j], strokes[j + 1]
-        h_in, l_in = max(s_in["p0"], s_in["p1"]), min(s_in["p0"], s_in["p1"])
-        if l_in > pv["zg"] and s_in["dir"] == "up" and s_out["dir"] == "down" and s_out["p1"] > pv["zg"]:
-            add(s_out["i1"], s_out["p1"], "B3", "三买", "buy",
-                f"向上离开中枢后回抽不回中枢(低点{s_out['p1']:.2f} > ZG{pv['zg']:.2f})")
-        if h_in < pv["zd"] and s_in["dir"] == "down" and s_out["dir"] == "up" and s_out["p1"] < pv["zd"]:
-            add(s_out["i1"], s_out["p1"], "S3", "三卖", "sell",
-                f"向下离开中枢后反抽不回中枢(高点{s_out['p1']:.2f} < ZD{pv['zd']:.2f})")
+        leave, back = strokes[j], strokes[j + 1]
+        if leave["p1"] > pv["zg"] and back["p1"] > pv["zg"]:
+            add(back["i1"], back["p1"], "B3", "三买", "buy",
+                f"向上离开中枢后回抽不回中枢(低点{back['p1']:.2f} > ZG{pv['zg']:.2f})")
+        elif leave["p1"] < pv["zd"] and back["p1"] < pv["zd"]:
+            add(back["i1"], back["p1"], "S3", "三卖", "sell",
+                f"向下离开中枢后反抽不回中枢(高点{back['p1']:.2f} < ZD{pv['zd']:.2f})")
 
     # ---- 一买/二买 (下跌背驰) / 一卖/二卖 (上涨背驰) ----
     for k in range(len(strokes) - 2):
@@ -5727,14 +5731,23 @@ def _chan_signals(strokes: list[dict], pivots: list[dict], hist: list[float]) ->
                     add(s4["i1"], s4["p1"], "S2", "二卖", "sell",
                         f"一卖后首次反抽不创新高({s4['p1']:.2f} < {s2['p1']:.2f})")
 
-    # 同一根K线的信号去重(优先保留一/二类)
-    sigs.sort(key=lambda x: (x["i"], 0 if x["type"][1] != "3" else 1))
-    dedup: list[dict] = []
+    # 同一根K线可能同时满足多个同类买卖点(例如"二买"与"三买"落在同一低点),
+    # 早期版本在这里直接丢弃后者, 导致图上"只显示部分买卖点"。
+    # 现改为合并标签后一并保留(如 "二买/三买"), 只丢弃类型完全相同的重复项。
+    order = {"B1": 0, "S1": 0, "B2": 1, "S2": 1, "B3": 2, "S3": 2}
+    sigs.sort(key=lambda x: (x["i"], 0 if x["side"] == "buy" else 1, order.get(x["type"], 9)))
+    out: list[dict] = []
     for s in sigs:
-        if dedup and dedup[-1]["i"] == s["i"] and dedup[-1]["side"] == s["side"]:
+        if out and out[-1]["i"] == s["i"] and out[-1]["side"] == s["side"]:
+            prev = out[-1]
+            if s["type"] in prev["type"].split("/"):
+                continue  # 类型完全相同 → 真重复
+            prev["type"] = prev["type"] + "/" + s["type"]
+            prev["label"] = prev["label"] + "/" + s["label"]
+            prev["desc"] = prev["desc"] + "；" + s["desc"]
             continue
-        dedup.append(s)
-    return dedup
+        out.append(dict(s))
+    return out
 
 
 def chan_analysis(bars: list[dict]) -> dict:

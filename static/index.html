@@ -3180,12 +3180,15 @@ function buildChanChart(bars, chan){
   const lastClose=bars[n-1].close;
   const priceLine=`<line x1="${padL}" y1="${y(lastClose).toFixed(1)}" x2="${w-padR}" y2="${y(lastClose).toFixed(1)}" stroke="rgba(255,255,255,.25)" stroke-width="1" stroke-dasharray="5,4"/>`+
     `<text x="${w-padR-2}" y="${(y(lastClose)-4).toFixed(1)}" fill="#fff" font-size="9" text-anchor="end">${lastClose}</text>`;
-  // 三类买卖点标记
-  const sigMarks=(chan.signals||[]).map(s=>{
+  // 三类买卖点标记(近邻信号错层排布, 避免标签互相遮盖导致"只看到部分买卖点")
+  let _lastX=-1e9, _lane=0;
+  const sigMarks=(chan.signals||[]).slice().sort((a,b)=>a.i-b.i).map(s=>{
     const x=xi(s.i), yy=y(s.price);
     const isBuy=s.side==='buy';
     const col=isBuy?'#ff4d4f':'#26a69a';
-    const ay=isBuy?yy+11:yy-5, ty=isBuy?yy+23:yy-17;
+    _lane = (x-_lastX<28) ? (_lane+1)%3 : 0; _lastX=x;
+    const off=_lane*11;
+    const ay=(isBuy?yy+11+off:yy-5-off), ty=(isBuy?yy+23+off:yy-17-off);
     return `<text x="${x.toFixed(1)}" y="${ay.toFixed(1)}" fill="${col}" font-size="9" text-anchor="middle">${isBuy?'▲':'▼'}</text>`+
            `<text x="${x.toFixed(1)}" y="${ty.toFixed(1)}" fill="${col}" font-size="10" font-weight="700" text-anchor="middle">${esc(s.label)}</text>`;
   }).join('');
