@@ -5499,6 +5499,300 @@ def api_stock_history_del(code: str):
     return {"ok": True, "count": len(items)}
 
 
+# ============================================================
+# 缠论结构 (20260911)
+# 流水线: K线包含关系处理 → 分型 → 笔 → 线段 → 中枢 → 三类买卖点
+# 口径说明(缠论分歧点, 此处取可稳定落地的一版):
+#   · 笔 = 新笔定义(两分型之间至少 1 根独立K线)
+#   · 线段 = "特征序列分型"判定, 不做缺口(第二种特征序列)二次处理
+#   · 中枢 = 笔中枢(连续三笔重叠区间), 并向同向延伸
+#   · 一/二类买卖点用 MACD 面积比较判背驰; 三类买卖点只看中枢突破与回抽
+# 返回的索引均为"传入 bars 数组"的下标, 便于前端直接映射到 x 轴。
+# ============================================================
+_CHAN_EPS = 1e-9
+
+
+def _chan_merge(bars: list[dict]) -> list[dict]:
+    """包含关系处理: 相邻K线一方完全包含另一方时, 按当前方向合并。
+    方向向上取"高高", 向下取"低低"; 返回 [{h,l,hi_i,lo_i}]。
+    hi_i/lo_i 记录极值所在的原始K线下标, 供分型定位。"""
+    merged: list[dict] = []
+    for i, b in enumerate(bars):
+        h, l = float(b["high"]), float(b["low"])
+        if not merged:
+            merged.append({"h": h, "l": l, "hi_i": i, "lo_i": i})
+            continue
+        last = merged[-1]
+        contained = (h <= last["h"] + _CHAN_EPS and l >= last["l"] - _CHAN_EPS) or \
+                    (h >= last["h"] - _CHAN_EPS and l <= last["l"] + _CHAN_EPS)
+        if not contained:
+            merged.append({"h": h, "l": l, "hi_i": i, "lo_i": i})
+            continue
+        if len(merged) >= 2:
+            up = last["h"] > merged[-2]["h"]
+        else:
+            up = h >= last["h"]
+        if up:
+            if h >= last["h"]:
+                last["h"], last["hi_i"] = h, i
+            if l >= last["l"]:
+                last["l"], last["lo_i"] = l, i
+        else:
+            if h <= last["h"]:
+                last["h"], last["hi_i"] = h, i
+            if l <= last["l"]:
+                last["l"], last["lo_i"] = l, i
+    return merged
+
+
+def _chan_fractals(merged: list[dict]) -> list[dict]:
+    """分型: 三根相邻(合并后)K线, 中间那根的高点与低点"同时"最高/最低。
+    顶分型取高点所在原始K线下标, 底分型取低点所在原始K线下标。"""
+    out: list[dict] = []
+    for k in range(1, len(merged) - 1):
+        a, b, c = merged[k - 1], merged[k], merged[k + 1]
+        if b["h"] > a["h"] and b["h"] > c["h"] and b["l"] > a["l"] and b["l"] > c["l"]:
+            out.append({"mi": k, "i": b["hi_i"], "type": "top", "price": b["h"]})
+        elif b["l"] < a["l"] and b["l"] < c["l"] and b["h"] < a["h"] and b["h"] < c["h"]:
+            out.append({"mi": k, "i": b["lo_i"], "type": "bottom", "price": b["l"]})
+    return out
+
+
+def _chan_strokes(fracs: list[dict]) -> list[dict]:
+    """笔: 相邻顶底分型连线。新笔定义 —— 两分型(合并后)索引差 >= 4,
+    即两个分型之间至少有 1 根独立K线。同类型分型只保留更极端者。"""
+    if not fracs:
+        return []
+    pts: list[dict] = [fracs[0]]
+    for f in fracs[1:]:
+        last = pts[-1]
+        if f["type"] == last["type"]:
+            if (f["type"] == "top" and f["price"] >= last["price"]) or \
+               (f["type"] == "bottom" and f["price"] <= last["price"]):
+                pts[-1] = f
+            continue
+        if f["mi"] - last["mi"] < 4:
+            continue  # 不满足独立K线条件, 丢弃
+        # 顶必须高于底, 否则视为无效转折
+        if f["type"] == "top" and f["price"] <= last["price"]:
+            continue
+        if f["type"] == "bottom" and f["price"] >= last["price"]:
+            continue
+        pts.append(f)
+    return pts
+
+
+def _chan_segments(pts: list[dict]) -> list[dict]:
+    """线段: 由笔端点序列按"特征序列分型"划分(简化版, 不做缺口二次处理)。
+    向上线段的特征序列 = 其中的向下笔; 特征序列出现顶分型 → 线段在该顶结束。"""
+    m = len(pts)
+    segs: list[dict] = []
+    s = 0
+    while s + 3 < m:
+        up = pts[s + 1]["price"] > pts[s]["price"]
+        seq: list[dict] = []
+        for k in range(s, m - 1):
+            d = pts[k + 1]["price"] > pts[k]["price"]
+            if (up and not d) or ((not up) and d):
+                seq.append({"hi": max(pts[k]["price"], pts[k + 1]["price"]),
+                            "lo": min(pts[k]["price"], pts[k + 1]["price"]),
+                            "end": k + 1})
+        end_idx = None
+        for j in range(1, len(seq) - 1):
+            a, b, c = seq[j - 1], seq[j], seq[j + 1]
+            if up and b["hi"] > a["hi"] and b["hi"] > c["hi"] and b["lo"] > a["lo"] and b["lo"] > c["lo"]:
+                end_idx = b["end"] - 1
+                break
+            if (not up) and b["lo"] < a["lo"] and b["lo"] < c["lo"] and b["hi"] < a["hi"] and b["hi"] < c["hi"]:
+                end_idx = b["end"] - 1
+                break
+        if end_idx is None or end_idx <= s:
+            end_idx = min(s + 3, m - 1)
+        segs.append({"s": s, "e": end_idx, "dir": "up" if up else "down"})
+        s = end_idx
+    return segs
+
+
+def _chan_pivots(strokes: list[dict]) -> list[dict]:
+    """中枢: 连续三笔的重叠区间 ZG=三笔高点的最低者, ZD=三笔低点的最高者,
+    成立后向同向延伸(下一笔仍与 [ZD,ZG] 有重叠则并入)。"""
+    pivots: list[dict] = []
+    n = len(strokes)
+    i = 0
+    while i + 2 < n:
+        s3 = strokes[i:i + 3]
+        zg = min(max(st["p0"], st["p1"]) for st in s3)
+        zd = max(min(st["p0"], st["p1"]) for st in s3)
+        if zg > zd:
+            j = i + 3
+            while j < n:
+                h = max(strokes[j]["p0"], strokes[j]["p1"])
+                l = min(strokes[j]["p0"], strokes[j]["p1"])
+                if l <= zg and h >= zd:
+                    j += 1
+                else:
+                    break
+            pivots.append({"zg": round(zg, 3), "zd": round(zd, 3),
+                           "i0": strokes[i]["i0"], "i1": strokes[j - 1]["i1"],
+                           "s0": i, "s1": j - 1})
+            i = j
+        else:
+            i += 1
+    return pivots
+
+
+def _chan_ema(vals: list[float], n: int) -> list[float]:
+    k = 2.0 / (n + 1)
+    out: list[float] = []
+    prev = None
+    for v in vals:
+        prev = v if prev is None else v * k + prev * (1 - k)
+        out.append(prev)
+    return out
+
+
+def _chan_macd(closes: list[float]) -> list[float]:
+    """返回 MACD 柱(hist = (DIF-DEA)*2), 用于背驰的力度比较。"""
+    e12 = _chan_ema(closes, 12)
+    e26 = _chan_ema(closes, 26)
+    dif = [a - b for a, b in zip(e12, e26)]
+    dea = _chan_ema(dif, 9)
+    return [(a - b) * 2 for a, b in zip(dif, dea)]
+
+
+def _chan_area(hist: list[float], i0: int, i1: int, sign: int) -> float:
+    """一段走势的 MACD 面积(同向柱绝对值之和), 越大力度越强。"""
+    a = 0.0
+    for k in range(max(0, i0), min(len(hist) - 1, i1) + 1):
+        v = hist[k]
+        if sign < 0 and v < 0:
+            a += -v
+        elif sign > 0 and v > 0:
+            a += v
+    return a
+
+
+def _chan_signals(strokes: list[dict], pivots: list[dict], hist: list[float]) -> list[dict]:
+    """三类买卖点:
+      一买/一卖 = 趋势末端 MACD 面积衰减(背驰);
+      二买/二卖 = 一类点后的首次回抽不创新低/新高;
+      三买/三卖 = 突破中枢后回抽不回中枢区间。"""
+    sigs: list[dict] = []
+
+    def add(i, price, typ, label, side, desc):
+        sigs.append({"i": i, "price": round(price, 2), "type": typ,
+                     "label": label, "side": side, "desc": desc})
+
+    # ---- 三买 / 三卖 (基于中枢, 最可量化) ----
+    for pv in pivots:
+        j = pv["s1"] + 1  # 离开中枢的第一笔
+        if j + 1 >= len(strokes):
+            continue
+        s_in, s_out = strokes[j], strokes[j + 1]
+        h_in, l_in = max(s_in["p0"], s_in["p1"]), min(s_in["p0"], s_in["p1"])
+        if l_in > pv["zg"] and s_in["dir"] == "up" and s_out["dir"] == "down" and s_out["p1"] > pv["zg"]:
+            add(s_out["i1"], s_out["p1"], "B3", "三买", "buy",
+                f"向上离开中枢后回抽不回中枢(低点{s_out['p1']:.2f} > ZG{pv['zg']:.2f})")
+        if h_in < pv["zd"] and s_in["dir"] == "down" and s_out["dir"] == "up" and s_out["p1"] < pv["zd"]:
+            add(s_out["i1"], s_out["p1"], "S3", "三卖", "sell",
+                f"向下离开中枢后反抽不回中枢(高点{s_out['p1']:.2f} < ZD{pv['zd']:.2f})")
+
+    # ---- 一买/二买 (下跌背驰) / 一卖/二卖 (上涨背驰) ----
+    for k in range(len(strokes) - 2):
+        s0, s1, s2 = strokes[k], strokes[k + 1], strokes[k + 2]
+        # 底背驰 → 一买
+        if s0["dir"] == "down" and s1["dir"] == "up" and s2["dir"] == "down" \
+                and s2["p1"] < s0["p1"] - _CHAN_EPS:
+            a0 = _chan_area(hist, s0["i0"], s0["i1"], -1)
+            a2 = _chan_area(hist, s2["i0"], s2["i1"], -1)
+            if a0 > 0 and a2 < a0 * 0.9:
+                add(s2["i1"], s2["p1"], "B1", "一买", "buy",
+                    f"下跌创新低但MACD面积衰减(底背驰, {a2:.1f} < {a0:.1f})")
+                if k + 4 < len(strokes) and strokes[k + 4]["dir"] == "down" \
+                        and strokes[k + 4]["p1"] > s2["p1"]:
+                    s4 = strokes[k + 4]
+                    add(s4["i1"], s4["p1"], "B2", "二买", "buy",
+                        f"一买后首次回抽不创新低({s4['p1']:.2f} > {s2['p1']:.2f})")
+        # 顶背驰 → 一卖
+        if s0["dir"] == "up" and s1["dir"] == "down" and s2["dir"] == "up" \
+                and s2["p1"] > s0["p1"] + _CHAN_EPS:
+            a0 = _chan_area(hist, s0["i0"], s0["i1"], 1)
+            a2 = _chan_area(hist, s2["i0"], s2["i1"], 1)
+            if a0 > 0 and a2 < a0 * 0.9:
+                add(s2["i1"], s2["p1"], "S1", "一卖", "sell",
+                    f"上涨创新高但MACD面积衰减(顶背驰, {a2:.1f} < {a0:.1f})")
+                if k + 4 < len(strokes) and strokes[k + 4]["dir"] == "up" \
+                        and strokes[k + 4]["p1"] < s2["p1"]:
+                    s4 = strokes[k + 4]
+                    add(s4["i1"], s4["p1"], "S2", "二卖", "sell",
+                        f"一卖后首次反抽不创新高({s4['p1']:.2f} < {s2['p1']:.2f})")
+
+    # 同一根K线的信号去重(优先保留一/二类)
+    sigs.sort(key=lambda x: (x["i"], 0 if x["type"][1] != "3" else 1))
+    dedup: list[dict] = []
+    for s in sigs:
+        if dedup and dedup[-1]["i"] == s["i"] and dedup[-1]["side"] == s["side"]:
+            continue
+        dedup.append(s)
+    return dedup
+
+
+def chan_analysis(bars: list[dict]) -> dict:
+    """对一段日K做缠论结构分析。bars 需含 day/open/high/low/close。"""
+    if not bars or len(bars) < 30:
+        return {"ok": False, "reason": "K线不足30根"}
+    merged = _chan_merge(bars)
+    fracs = _chan_fractals(merged)
+    pts = _chan_strokes(fracs)
+    strokes = [{"i0": pts[k]["i"], "p0": round(pts[k]["price"], 3),
+                "i1": pts[k + 1]["i"], "p1": round(pts[k + 1]["price"], 3),
+                "dir": "up" if pts[k + 1]["price"] > pts[k]["price"] else "down"}
+               for k in range(len(pts) - 1)]
+    segs = _chan_segments(pts)
+    pivots = _chan_pivots(strokes)
+    hist = _chan_macd([float(b["close"]) for b in bars])
+    signals = _chan_signals(strokes, pivots, hist)
+
+    segs_out = [{"i0": pts[s["s"]]["i"], "p0": round(pts[s["s"]]["price"], 3),
+                 "i1": pts[s["e"]]["i"], "p1": round(pts[s["e"]]["price"], 3),
+                 "dir": s["dir"]} for s in segs if s["e"] > s["s"]]
+
+    close = float(bars[-1]["close"])
+    day = (bars[-1].get("day") or "")[:10]
+    if pivots:
+        lp = pivots[-1]
+        if close > lp["zg"]:
+            pos = f"现价 {close:.2f} 位于最后中枢上方（ZG {lp['zg']:.2f}）"
+        elif close < lp["zd"]:
+            pos = f"现价 {close:.2f} 位于最后中枢下方（ZD {lp['zd']:.2f}）"
+        else:
+            pos = f"现价 {close:.2f} 仍在最后中枢区间内 [{lp['zd']:.2f}, {lp['zg']:.2f}]"
+        struct = f"近{len(bars)}根K线共形成 {len(pivots)} 个中枢"
+    else:
+        pos = "区间内未形成有效中枢（单边或震荡不足）"
+        struct = "未形成中枢"
+    last_sig = signals[-1] if signals else None
+    return {
+        "ok": True,
+        "merged_count": len(merged),
+        "fractals": [{"i": f["i"], "type": f["type"], "price": round(f["price"], 2)} for f in fracs],
+        "strokes": strokes,
+        "segments": segs_out,
+        "pivots": pivots,
+        "signals": signals,
+        "summary": {
+            "structure": struct,
+            "position": pos,
+            "last_signal": (f"{last_sig['label']}（{last_sig['desc']}，{ (bars[last_sig['i']].get('day') or '')[:10] }）"
+                            if last_sig else "近期无明确买卖点"),
+            "stroke_count": len(strokes),
+            "segment_count": len(segs_out),
+            "pivot_count": len(pivots),
+            "as_of": day,
+        },
+    }
+
+
 @app.get("/api/stock/analyze")
 def api_stock_analyze(code: str = "", date: str = ""):
     """个股深度分析: 基本信息 + 技术指标 + 量价关系
@@ -5769,6 +6063,8 @@ def api_stock_analyze(code: str = "", date: str = ""):
     limit_pct = board_limit(code)
     # 公司简介 (主营业务等)
     profile = fetch_stock_profile(code)
+    # 缠论结构: 对前端展示的同一段K线(244根)计算, 保证下标可直接映射到 x 轴 (20260911)
+    chan = chan_analysis(bars[-244:])
 
     return {
         "code": code,
@@ -5804,6 +6100,7 @@ def api_stock_analyze(code: str = "", date: str = ""):
                   "high": b["high"], "low": b["low"], "volume": b["volume"],
                   "chg": round(c, 2) if not math.isnan(c) else 0}
                  for b, c in zip(bars[-244:], chgs[-244:])],
+        "chan": chan,   # 缠论结构: 分型/笔/线段/中枢/三类买卖点
         # ATR 多周期序列 (用于 K 线图下方 ATR 副图: ATR60/ATR30/ATR14/ATR5)
         "atr_series": (lambda H, L, C: (lambda TRs: {
             p: [round(sum(TRs[max(0,i-p+1):i+1])/min(p, i+1), 3) for i in range(len(TRs))]
