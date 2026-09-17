@@ -636,6 +636,9 @@
   .watch-add{display:flex;align-items:center;gap:6px;margin-left:auto}
   .watch-add input{width:130px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;
                    background:rgba(0,0,0,.2);color:var(--txt);font-size:12px;outline:none}
+  .watch-search{position:relative;display:inline-block}
+  .watch-search input{width:200px}
+  .watch-search .sa-dropdown{top:calc(100% + 2px);min-width:200px}
   .watch-add input:focus{border-color:var(--accent)}
   .watch-add button{padding:5px 12px;border:none;border-radius:6px;background:var(--accent);color:#06212e;
                     font-weight:700;font-size:12px;cursor:pointer}
@@ -736,7 +739,10 @@
       <span class="tt">自选盯盘</span>
       <span class="agg" id="watchAgg"></span>
       <div class="watch-add">
-        <input id="watchInput" placeholder="输入代码如 002905" maxlength="10">
+        <div class="watch-search">
+          <input id="watchInput" placeholder="输入代码/名称/拼音，如 002905、华阳、hyjt" maxlength="30" autocomplete="off">
+          <div class="sa-dropdown" id="watchDropdown"></div>
+        </div>
         <button id="watchAddBtn">添加</button>
       </div>
     </div>
@@ -4019,6 +4025,47 @@ async function delWatch(code){
 (function initWatch(){
   const inp=document.getElementById('watchInput'), btn=document.getElementById('watchAddBtn');
   if(!inp) return;
+  const dd=document.getElementById('watchDropdown');
+  let _wt=null;
+  const closeDD=()=>{ if(dd) dd.classList.remove('show'); };
+  // 联想搜索: 输入/名称/拼音 -> POST /api/stock/search, 下拉展示 (与个股分析一致)
+  const suggest=async()=>{
+    const q=inp.value.trim();
+    clearTimeout(_wt);
+    if(!q){ closeDD(); return; }
+    _wt=setTimeout(async()=>{
+      try{
+        const r=await fetch('/api/stock/search',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q})});
+        const d=await r.json();
+        const items=d.items||[];
+        if(!items.length){ closeDD(); return; }
+        dd.innerHTML=items.map(it=>`<div class="sa-item" data-code="${it.code}"><span class="nm">${esc(it.name)}</span><span class="cd">${mkt(it.code)}</span></div>`).join('');
+        dd.classList.add('show');
+        dd.querySelectorAll('.sa-item').forEach(el=>{
+          el.onclick=()=>{
+            const code=el.dataset.code;
+            inp.value=code;
+            closeDD();
+            doAdd();
+          };
+        });
+      }catch(e){}
+    },300);
+  };
+  inp.addEventListener('input',suggest);
+  inp.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){ closeDD(); inp.blur(); }
+    if(e.key==='Enter'){
+      e.preventDefault();
+      const first=dd.querySelector('.sa-item');
+      if(first){
+        const code=first.dataset.code;
+        inp.value=code; closeDD(); doAdd(); return;
+      }
+      doAdd();
+    }
+  });
+  document.addEventListener('click',e=>{ if(!e.target.closest('.watch-search')) closeDD(); });
   const doAdd=async()=>{
     const v=inp.value.trim(); if(!v) return;
     btn.disabled=true;
@@ -4029,7 +4076,6 @@ async function delWatch(code){
     }catch(e){} finally{ btn.disabled=false; }
   };
   btn.onclick=doAdd;
-  inp.addEventListener('keydown',e=>{ if(e.key==='Enter') doAdd(); });
   loadWatch();
 })();
 setInterval(loadWatch, 3000);
