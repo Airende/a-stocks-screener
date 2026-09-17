@@ -5383,6 +5383,9 @@ def _do_stock_search(q: str) -> dict:
     兜底: 正常走一次缓存后仍空, 强制重建一次再搜 (解决早上启动时抓到空缓存的问题)
     """
     _build_search_index()
+    # 防御: 索引为空说明快照源异常导致构建空/未落库 -> 强制重建一次, 防生成空索引
+    if not _stock_search_cache["items"]:
+        _build_search_index(force=True)
     q = (q or "").strip().lower()
     if not q:
         return {"items": []}
