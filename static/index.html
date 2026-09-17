@@ -653,10 +653,11 @@
               border:1px solid var(--border);border-radius:8px;background:rgba(255,255,255,.02);cursor:pointer;
               transition:.12s;user-select:none}
   .watch-card:hover{border-color:var(--accent);background:rgba(255,255,255,.05)}
+  .watch-card .chg{font-size:20px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.15}
+  .watch-card .sub{display:flex;align-items:baseline;gap:6px;font-size:11px;color:var(--sub)}
+  .watch-card .sub .px{font-size:11px;font-weight:600;color:var(--txt);font-variant-numeric:tabular-nums}
+  .watch-card .sub .chgamt{font-size:11px;font-weight:600;color:var(--sub);font-variant-numeric:tabular-nums}
   .watch-card .nm{font-size:12px;font-weight:700;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .watch-card .cd{font-size:10px;color:var(--sub)}
-  .watch-card .px{font-size:12px;font-weight:600;color:var(--sub);font-variant-numeric:tabular-nums}
-  .watch-card .chg{font-size:20px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.1}
   .watch-card .rm{position:absolute;top:2px;right:4px;color:var(--sub);opacity:0;font-size:12px;line-height:1;
                   padding:1px 4px;border-radius:4px;cursor:pointer;transition:.12s}
   .watch-card:hover .rm{opacity:.8}
@@ -4012,10 +4013,9 @@ function renderWatch(d){
     return `<div class="watch-card ${pcl} ${alarm}" title="点击查看分析${limTxt}"
         onclick="gotoStockAnalyze('${cd}','${nm}')">
       <span class="rm" title="移除" onclick="event.stopPropagation();delWatch('${cd}')">✕</span>
+      <span class="chg">${pcl==='up'?'+':(pcl==='down'?'':'')}${(+x.chg_pct||0).toFixed(2)}%</span>
+      <span class="sub"><span class="px">${(+x.price||0).toFixed(2)}</span><span class="chgamt">${sgn}${Math.abs(+x.chg||0).toFixed(2)}</span></span>
       <span class="nm">${nm}</span>
-      <span class="cd">${cd}</span>
-      <span class="px">${(+x.price||0).toFixed(2)}</span>
-      <span class="chg">${sgn}${Math.abs(+x.chg||0).toFixed(2)} · ${pcl==='up'?'+':(pcl==='down'?'':'')}${(+x.chg_pct||0).toFixed(2)}%${limTxt}</span>
     </div>`;
   }).join('');
 }
