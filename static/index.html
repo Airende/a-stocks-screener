@@ -20,6 +20,9 @@
   h1{font-size:22px;margin:0;display:flex;align-items:center;gap:10px}
   h1 .logo{width:34px;height:34px;border-radius:8px;background:linear-gradient(135deg,#4f9dff,#6f6bff);display:flex;align-items:center;justify-content:center;font-weight:800}
   .sub{color:var(--sub);font-size:13px;margin-top:2px}
+  .sub .hm-link{display:inline-flex;align-items:center;gap:4px;color:var(--sub);text-decoration:none;cursor:pointer;transition:color .15s}
+  .sub .hm-link:hover{color:var(--accent)}
+  .sub .hm-link svg{vertical-align:middle}
   .toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
   /* 个股分析头部: 不吸顶, 正常滚动 */
   /* 个股分析头部: 滚动时吸顶 (20260906 用户要求); 背景与卡片背景(--panel)一致, 避免色块差 */
@@ -705,12 +708,11 @@
   <header>
     <div>
       <h1><span class="logo">选</span> ARD选股系统 <span style="font-size:12px;color:var(--sub);font-weight:400">v1</span></h1>
-      <div class="sub">量价 · 趋势 · KDJ · 形态位置 多维叠加</div>
+      <div class="sub"><a href="https://52etf.site/" target="_blank" rel="noopener" title="大盘云图 (52ETF)" aria-label="大盘云图" class="hm-link"><svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M13 22V11h9v11a2 2 0 0 1-2 2H15a2 2 0 0 1-2-2zm0-13V3a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v6h10zm2 11h6v-9h-6v9zM8 11H3v9a2 2 0 0 0 2 2h3v-11z"/></svg></a></div>
     </div>
     <div class="toolbar">
       <span class="meta" id="cacheInfo">本地缓存: 加载中…</span>
       <span class="meta" id="updated"></span>
-      <a class="ghost" href="https://52etf.site/" target="_blank" rel="noopener" style="text-decoration:none;color:var(--sub)">大盘云图 ↗</a>
       <button class="ghost btn-danger-ghost" id="cacheRefreshBtn">刷新K线数据</button>
     </div>
   </header>
