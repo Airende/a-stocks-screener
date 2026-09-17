@@ -1,5 +1,6 @@
 # 缓存与临时文件
 cache/klines/
+cache/*.json
 __pycache__/
 *.pyc
 .uploads/
