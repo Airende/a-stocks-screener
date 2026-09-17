@@ -1636,13 +1636,13 @@ def calc_regulatory(code: str, bars: list[dict], limit_pct: float = None) -> dic
     else:
         bits = []
         if warn_10d:
-            bits.append(f"10日偏离值 {dev_10d:+.1f}% · 距100%还差 {to_trig_10d:.1f} 点")
+            bits.append(f"10日偏离值 {dev_10d:+.2f}% · 距100%还差 {to_trig_10d:.1f} 点")
         if warn_30d:
-            bits.append(f"30日偏离值 {dev_30d:+.1f}% · 距200%还差 {to_trig_30d:.1f} 点")
+            bits.append(f"30日偏离值 {dev_30d:+.2f}% · 距200%还差 {to_trig_30d:.1f} 点")
         if bits:
             parts.append("⏳ " + " / ".join(bits))
         else:
-            parts.append(f"前置门槛已过 · 暂未触发异动（10日偏离值 {dev_10d:+.1f}% / 30日偏离值 {dev_30d:+.1f}%）")
+            parts.append(f"前置门槛已过 · 暂未触发异动（10日偏离值 {dev_10d:+.2f}% / 30日偏离值 {dev_30d:+.2f}%）")
     summary = " | ".join(parts[:4])
 
     return {
@@ -1970,7 +1970,7 @@ def _trend_strength_level(c: float, ma5: list, ma10: list, ma20: list) -> dict:
         if ma5_slope >= 1.5 and bias_ma5 <= 8.0:
             return {"level": "super", "label": "超强势", "anchor_ma": m5, "anchor_label": "MA5",
                     "break_pct": 2.0,
-                    "desc": f"超强势: 多头排列 + MA5斜率{ma5_slope:+.2f}%陡峭 + 乖离MA5 {bias_ma5:+.1f}%适中 → 锚MA5, 跌破2%锁大肉离场"}
+                    "desc": f"超强势: 多头排列 + MA5斜率{ma5_slope:+.2f}%陡峭 + 乖离MA5 {bias_ma5:+.2f}%适中 → 锚MA5, 跌破2%锁大肉离场"}
         # 强势: 多头排列 + MA10斜率向上(≥0.3%)
         if ma10_slope >= 0.3:
             return {"level": "strong", "label": "强势", "anchor_ma": m10, "anchor_label": "MA10",
@@ -2105,12 +2105,12 @@ def _vp_single(bars: list, closes: list, highs: list,
     tags = {
         "mode": f"{P['zh']} · 持仓{P['hold_cycle']}",
         "vol": f"{vol_tag}（VR {vr:.2f}，阈值放≥{P['vr_high']}/缩≤{P['vr_low']}）· 态度：{P['attitude_shrink']}" if vol_qual=="缩" else f"{vol_tag}（VR {vr:.2f}，阈值放≥{P['vr_high']}/缩≤{P['vr_low']}）",
-        "price": f"{price_tag}（{pct:+.2f}%，阈值涨≥{up_thresh:+.1f}%/跌≤{down_thresh:+.1f}% · σ近20日={sigma:.2f}%，{'波段略敏感(0.9σ)' if mode=='band' else '趋势标准(0.8σ)'}）",
+        "price": f"{price_tag}（{pct:+.2f}%，阈值涨≥{up_thresh:+.2f}%/跌≤{down_thresh:+.2f}% · σ近20日={sigma:.2f}%，{'波段略敏感(0.9σ)' if mode=='band' else '趋势标准(0.8σ)'}）",
         "trend": f"{trend_tag} · 锚定均线 {P['ma_anchor_label']}={anchor_ma:.2f}" if anchor_ma else trend_tag,
-        "position": pos_tag if P["position_weakened"] else f"{pos_tag}（距底部 {gain_from_bottom:+.1f}%，近一年分位 {pos_1y:.0f}%）",
-        "pullback": f"{'回撤合规' if pullback_ok else '⚠️回撤超限'}（距高点回撤 {drawdown_from_high:.1f}%，阈值≤{P['pullback_tol']}% · {'波段弹性窗口窄' if mode=='band' else '趋势容忍洗盘'}）",
-        "support": f"{'不破' if no_break_support else '⚠️破'}{P['ma_stop_label']}支撑位 {support:.2f}（今日最低 {today_low:.2f}，止损线 {stop_loss_price:.2f} = {P['ma_stop_label']}×{100-P['stop_below_ma_pct']:.1f}%）",
-        "kline": ("小阴小阳" if small_body else "实体内含波") + f"（实体 {body_pct:.1f}%，阈值≤2%）",
+        "position": pos_tag if P["position_weakened"] else f"{pos_tag}（距底部 {gain_from_bottom:+.2f}%，近一年分位 {pos_1y:.2f}%）",
+        "pullback": f"{'回撤合规' if pullback_ok else '⚠️回撤超限'}（距高点回撤 {drawdown_from_high:.2f}%，阈值≤{P['pullback_tol']}% · {'波段弹性窗口窄' if mode=='band' else '趋势容忍洗盘'}）",
+        "support": f"{'不破' if no_break_support else '⚠️破'}{P['ma_stop_label']}支撑位 {support:.2f}（今日最低 {today_low:.2f}，止损线 {stop_loss_price:.2f} = {P['ma_stop_label']}×{100-P['stop_below_ma_pct']:.2f}%）",
+        "kline": ("小阴小阳" if small_body else "实体内含波") + f"（实体 {body_pct:.2f}%，阈值≤2%）",
         "stabilize": "✅有企稳信号（" + "、".join(filter(None,[
             "止跌阳线" if stab_sun else "",
             "阳包阴" if engulf else "",
@@ -2201,7 +2201,7 @@ def _vp_single(bars: list, closes: list, highs: list,
         stage_basis="上升趋势 + ①量增/③量缩/温和上涨沿MA20"
     elif rising and s_code == "S9" and pullback_ok and no_break_support and mode == "trend" and not stage_code:
         stage_code="D"; stage_name="D.洗盘中继期(趋势低吸)"
-        stage_note=f"上升趋势 + 缩量回调（回撤{drawdown_from_high:.1f}% ≤8%）+ 不破MA20 + 企稳{'✅有' if stab_signal else '❌无'} → 分批低吸 20~30%"
+        stage_note=f"上升趋势 + 缩量回调（回撤{drawdown_from_high:.2f}% ≤8%）+ 不破MA20 + 企稳{'✅有' if stab_signal else '❌无'} → 分批低吸 20~30%"
         stage_basis="B2 回踩不破 + 企稳"
     elif mode == "band" and s_code == "S9" and not stage_code:
         if shrink_days <= 3 and band_reverse:
@@ -2264,21 +2264,21 @@ def _vp_single(bars: list, closes: list, highs: list,
                 stop_ok = False
         if vr >= P["huge_vr"] and pct >= 5:
             signals.append({"type":"减仓","code":"S2","name":"波段·巨量长阳","strength":"≥1/2减仓",
-                            "desc":f"VR={vr:.1f}≥{P['huge_vr']} + 涨幅{pct:+.1f}%≥5% → 任何位置都先兑现一半以上"})
+                            "desc":f"VR={vr:.1f}≥{P['huge_vr']} + 涨幅{pct:+.2f}%≥5% → 任何位置都先兑现一半以上"})
         if vr >= P["vr_high"] and (pct < 0.5 or upper_shadow >= 2*body_abs or not is_bull):
             signals.append({"type":"减仓","code":"S3","name":"波段·放量滞涨","strength":"减仓",
-                            "desc":f"VR={vr:.1f}≥{P['vr_high']} 但涨幅{pct:+.1f}%<0.5% 或长上影 → 假突破/诱多"})
+                            "desc":f"VR={vr:.1f}≥{P['vr_high']} 但涨幅{pct:+.2f}%<0.5% 或长上影 → 假突破/诱多"})
         if N >= 5 and closes[-5] > 0:
             chg5 = (closes[-1] / closes[-5] - 1) * 100
             if chg5 < 3:
                 signals.append({"type":"观望","code":"S4","name":"波段·时间止损预警","strength":"若持仓5日仍<3%则离场",
-                                "desc":f"近5交易日累计涨幅={chg5:+.1f}%<3% → 资金趴在死水，考虑离场（若已持仓5天）"})
+                                "desc":f"近5交易日累计涨幅={chg5:+.2f}%<3% → 资金趴在死水，考虑离场（若已持仓5天）"})
         if len(closes)>=10 and closes[-10]>0:
             gain_proxy = (last_close / closes[-10] - 1) * 100
             lag_sign = (vr < vr_prev) or (pct < 0.8) or s_code in ("S5","S8")
             if gain_proxy >= 10 and lag_sign:
                 signals.append({"type":"减仓","code":"S5","name":"波段·浮盈达标+滞涨","strength":"分批兑现",
-                                "desc":f"近10日涨幅≈{gain_proxy:+.1f}%≥10% 且当前缩量/小涨/整理 → 分批兑现落袋"})
+                                "desc":f"近10日涨幅≈{gain_proxy:+.2f}%≥10% 且当前缩量/小涨/整理 → 分批兑现落袋"})
         if stop_ok and (vr_prev < 1.5 or vr >= 0.8) and not any(s["type"] in ("清仓","减仓") for s in signals) and stop_ma and last_close >= stop_ma:
             signals.append({"type":"持有","code":"H1","name":"波段·持有条件满足","strength":"—",
                             "desc":f"收盘≥MA10({stop_ma:.2f}) 且 量能无一日游 且 未触发卖出"})
@@ -2288,7 +2288,7 @@ def _vp_single(bars: list, closes: list, highs: list,
                             "desc":f"VR={vr:.1f}≥1.5 + 收盘{last_close:.2f}站上20日平台高点×0.98"})
         if rising and s_code == "S9" and pullback_ok and no_break_support and stab_signal:
             signals.append({"type":"建仓","code":"B2","name":"趋势·缩量回调低吸","strength":"20%~30%",
-                            "desc":f"回撤{drawdown_from_high:.1f}%≤8% + 不破MA20 + 企稳 → 分批低吸"})
+                            "desc":f"回撤{drawdown_from_high:.2f}%≤8% + 不破MA20 + 企稳 → 分批低吸"})
         low_region = (gain_from_bottom < 30) or (pos_1y < 40)
         if low_region and s_code == "S1" and vr >= 1.5:
             signals.append({"type":"建仓","code":"B3","name":"趋势·筑底后首次放量","strength":"试仓",
@@ -2305,7 +2305,7 @@ def _vp_single(bars: list, closes: list, highs: list,
                                 "desc":f"收盘跌破{P['ma_stop_label']} {P['stop_below_ma_pct']}%以上 → 用空间止损，不用时间止损"})
         if pos_bucket == "高" and vr >= 3.0 and pct >= 5:
             signals.append({"type":"清仓","code":"S2","name":"趋势·高位巨量长阳","strength":"清仓",
-                            "desc":f"位置=高位 + VR={vr:.1f}≥3.0 + 涨幅{pct:+.1f}%≥5% → 清仓"})
+                            "desc":f"位置=高位 + VR={vr:.1f}≥3.0 + 涨幅{pct:+.2f}%≥5% → 清仓"})
         if pos_bucket == "高" and last_close >= max(closes[-20:]) and vr < vr_20_max * 0.8:
             signals.append({"type":"减仓","code":"S3","name":"趋势·高位量价背离","strength":"减1/3~1/2",
                             "desc":f"股价创20日新高，但VR={vr:.1f} < 前20日最大VR {vr_20_max:.1f}×80% → 量能不支"})
@@ -2319,7 +2319,7 @@ def _vp_single(bars: list, closes: list, highs: list,
                        "desc":f"位置=高位 + VR={vr:.1f}≥{P['high_buy_fobid_vr']} → 禁止追买（{'波段阈值更严1.8' if mode=='band' else '趋势阈值2.0'}）"})
     if vr >= 1.5 and pct < 0.5:
         vetoes.append({"code":"V3","name":"放量不涨=诱多",
-                       "desc":f"VR≥1.5 且当日涨幅{pct:+.1f}%<0.5% → 撤销买入计划"})
+                       "desc":f"VR≥1.5 且当日涨幅{pct:+.2f}%<0.5% → 撤销买入计划"})
     if one_day_flash:
         if mode == "band":
             vetoes.append({"code":"V4","name":"量能一日游→波段直接离场",
@@ -2350,9 +2350,9 @@ def _vp_single(bars: list, closes: list, highs: list,
     # Step6 盘后流程
     discip = "不放量不拿，让资金周转" if mode=="band" else "不破位不走，让利润奔跑"
     post_flow = [
-        ("① 算三个数",   f"{P['name']}: VR量比={vr:.2f}（放≥{P['vr_high']}/缩≤{P['vr_low']}） | 当日涨跌幅={pct:+.2f}%（阈值±{up_thresh:+.1f}% σ={sigma:.2f}%） | 距250日低点={gain_from_bottom:+.1f}% / 近1年分位={pos_1y:.0f}%"),
+        ("① 算三个数",   f"{P['name']}: VR量比={vr:.2f}（放≥{P['vr_high']}/缩≤{P['vr_low']}） | 当日涨跌幅={pct:+.2f}%（阈值±{up_thresh:+.2f}% σ={sigma:.2f}%） | 距250日低点={gain_from_bottom:+.2f}% / 近1年分位={pos_1y:.2f}%"),
         ("② 定量价态",   f"量={vol_tag} | 价={price_tag} → {s_code} {s_name}；{s_note_mode}"),
-        ("③ 定趋势+位置", (f"趋势={trend_tag} | 位置={pos_tag} | 回撤={drawdown_from_high:.1f}%（阈值≤{P['pullback_tol']}%）| 锚定{P['ma_anchor_label']}={anchor_ma:.2f}") if anchor_ma else f"趋势={trend_tag} | 位置={pos_tag}"),
+        ("③ 定趋势+位置", (f"趋势={trend_tag} | 位置={pos_tag} | 回撤={drawdown_from_high:.2f}%（阈值≤{P['pullback_tol']}%）| 锚定{P['ma_anchor_label']}={anchor_ma:.2f}") if anchor_ma else f"趋势={trend_tag} | 位置={pos_tag}"),
         ("④ 定阶段",     f"{stage_name} — {stage_note}（依据：{stage_basis}）"),
         ("⑤ 过风控§六",   (("全过 ✓" if not vetoes else "；".join(v["code"]+v["name"] for v in vetoes[:2])) + f" · 共{len(vetoes)}条") + f"；纪律：'{discip}'"),
         ("⑥ 出指令("+P["name"]+")",  ", ".join(f"{s['type']}{s['code']} {s['name']} ({s['strength']})" for s in signals[:3]) if signals else "无操作信号 · "+("换股/等放量" if mode=="band" else "观望持股")),
@@ -2365,23 +2365,23 @@ def _vp_single(bars: list, closes: list, highs: list,
     if mode == "band":
         if sigma >= 3.0:
             dyn_hold = "3~8 个交易日"; dyn_size = "15%~25%"
-            dyn_reason = f"高波动(σ={sigma:.1f}%)→缩短持仓+降仓位控风险"
+            dyn_reason = f"高波动(σ={sigma:.2f}%)→缩短持仓+降仓位控风险"
         elif sigma >= 1.5:
             dyn_hold = "3~15 个交易日"; dyn_size = "20%~30%"
-            dyn_reason = f"中波动(σ={sigma:.1f}%)→标准波段周期"
+            dyn_reason = f"中波动(σ={sigma:.2f}%)→标准波段周期"
         else:
             dyn_hold = "5~15 个交易日"; dyn_size = "25%~35%"
-            dyn_reason = f"低波动(σ={sigma:.1f}%)→弹性不足，延长等脉冲"
+            dyn_reason = f"低波动(σ={sigma:.2f}%)→弹性不足，延长等脉冲"
     else:
         if ma20_slope >= 2.0:
             dyn_hold = "2~6 个月"; dyn_size = "35%~50%"
-            dyn_reason = f"强趋势(MA20斜率{ma20_slope:+.1f}%)→可拿久+加仓"
+            dyn_reason = f"强趋势(MA20斜率{ma20_slope:+.2f}%)→可拿久+加仓"
         elif ma20_slope >= 0:
             dyn_hold = "1~6 个月"; dyn_size = "30%~50%"
-            dyn_reason = f"中趋势(MA20斜率{ma20_slope:+.1f}%)→标准趋势持仓"
+            dyn_reason = f"中趋势(MA20斜率{ma20_slope:+.2f}%)→标准趋势持仓"
         else:
             dyn_hold = "1~3 个月"; dyn_size = "25%~40%"
-            dyn_reason = f"弱趋势(MA20斜率{ma20_slope:+.1f}%)→缩短持仓+降仓位"
+            dyn_reason = f"弱趋势(MA20斜率{ma20_slope:+.2f}%)→缩短持仓+降仓位"
 
     return {
         "mode": mode,
@@ -2715,7 +2715,7 @@ def calc_kdj_system(bars: list, closes: list, highs: list, lows: list,
         chg5 = (last_close / closes[-5] - 1) * 100
         if chg5 < 3 and not death_cross:
             band_signals.append({"type":"清仓","code":"S6","name":"波段·时间止损","strength":"离场",
-                "desc":f"买入5日涨幅{chg5:+.1f}%<3%，KDJ未死叉也离场"})
+                "desc":f"买入5日涨幅{chg5:+.2f}%<3%，KDJ未死叉也离场"})
     # 量能矛盾降级标记
     vol_conflict = golden_cross and vr < 1.2
     band_note = ""
@@ -3289,7 +3289,7 @@ def analyze_buy_sell(bars: list[dict]) -> dict:
         stop_loss = round(ma5[-1] * 1.02, 2) if not math.isnan(ma5[-1]) else round(c * 1.03, 2)
         target_price = round(c * 0.95, 2)
         r4_val = (c / closes[-5] - 1) * 100 if len(closes) >= 5 else 0
-        reason_parts.append(f"趋势票连续4天累计涨幅仅{r4_val:.1f}%≤3%, 趋势停滞")
+        reason_parts.append(f"趋势票连续4天累计涨幅仅{r4_val:.2f}%≤3%, 趋势停滞")
         reason_parts.append("排除: 低量涨停/尾盘涨停不算滞涨, 当天不卖")
         actions.append("趋势停滞, 减仓或离场")
 
@@ -3297,7 +3297,7 @@ def analyze_buy_sell(bars: list[dict]) -> dict:
     if overbought and signal != "sell":
         if signal == "buy":
             signal_type += " ⚠过热"
-            reason_parts.append(f"乖离率{bias:.1f}%>10%, 已过热")
+            reason_parts.append(f"乖离率{bias:.2f}%>10%, 已过热")
             reason_parts.append("出现放量滞涨/长上影, 建议分批止盈")
             actions.append("至少减掉1/3仓位")
         elif signal == "wait":
@@ -3306,7 +3306,7 @@ def analyze_buy_sell(bars: list[dict]) -> dict:
             entry_price = round(c, 2)                              # 建议止盈价(当前价)
             stop_loss = round(c * 1.03, 2)                         # 取消位: 再涨3%则取消止盈(可能进入加速段)
             target_price = round(ma10[-1], 2) if not math.isnan(ma10[-1]) else round(c * 0.90, 2)  # 回踩目标 (MA10)
-            reason_parts.append(f"乖离率{bias:.1f}%>10%")
+            reason_parts.append(f"乖离率{bias:.2f}%>10%")
             reason_parts.append("出现放量滞涨/长上影线")
             actions.append("分批止盈, 至少减掉1/3")
 
@@ -3324,7 +3324,7 @@ def analyze_buy_sell(bars: list[dict]) -> dict:
     # --- 默认wait给原因 ---
     if signal == "wait" and not reason_parts:
         if trend == "多头趋势" and above_ma20 and dist_ma20_pct > 5:
-            reason_parts.append(f"多头趋势但股价偏离MA20达{dist_ma20_pct:.1f}%, 等回踩")
+            reason_parts.append(f"多头趋势但股价偏离MA20达{dist_ma20_pct:.2f}%, 等回踩")
             actions.append("等待回踩MA20±2%区域再考虑")
         elif trend == "空头趋势":
             reason_parts.append("空头趋势, 不做多")
@@ -3390,7 +3390,7 @@ def analyze_buy_sell(bars: list[dict]) -> dict:
         warnings.append("空头排列中不抄底, 每次反弹至均线压制位都是卖点")
     # ⑤ 乖离过大追高风险
     if bias > 8 and signal != "sell":
-        warnings.append(f"乖离率{bias:.1f}%, 距MA20过远, 追高风险增大")
+        warnings.append(f"乖离率{bias:.2f}%, 距MA20过远, 追高风险增大")
 
     # ===== 交易箴言 =====
     motto = "趋势不变仓位不乱, 均线不破格局不散, 控制风险活得久"
@@ -3453,10 +3453,10 @@ def analyze_buy_sell(bars: list[dict]) -> dict:
     elif is_overheat:
         # 新增分支: 过热止盈(卖点5) → 减1/3 不是全走
         hold_action = "乖离过大, 先减至少1/3 (卖点5 过热止盈)"
-        hold_action_tip = f"现价高于MA5已达 +{bias_to_ma5:.1f}%, 近5日累计 +{r5:.1f}%, 短期获利盘太丰厚; 但多头趋势不坏, 先止盈1/3锁定利润, 剩余用MA10({ma10_today:.2f})做移动止盈拿趋势, 若再涨3%才会进入加速段."
+        hold_action_tip = f"现价高于MA5已达 +{bias_to_ma5:.2f}%, 近5日累计 +{r5:.2f}%, 短期获利盘太丰厚; 但多头趋势不坏, 先止盈1/3锁定利润, 剩余用MA10({ma10_today:.2f})做移动止盈拿趋势, 若再涨3%才会进入加速段."
     elif is_false_death_cross or is_super_strong:
         # 新增分支: 假死叉 / V型刚反转走强 → 持有观察, 不是离场信号
-        extra = " (假死叉: 均线滞后, 实际股价已站回MA20上方)" if is_false_death_cross else f" (V反: 近5日 +{r5:.1f}%, 高于MA20 +{bias_to_ma20:.1f}%)"
+        extra = " (假死叉: 均线滞后, 实际股价已站回MA20上方)" if is_false_death_cross else f" (V反: 近5日 +{r5:.2f}%, 高于MA20 +{bias_to_ma20:.2f}%)"
         hold_action = f"强势持有观察{extra}"
         hold_action_tip = f"短期进入强势区间, 不是真的向下破位, 不建议急着卖; 到上方止盈位(前高≈{hi20:.2f}附近或风格止盈)再分批落袋, 严格止损仍用MA20×0.98={round(ma20_today*0.98,2) if ma20_today>0 else '—'}做最后防线."
     elif signal == "wait" and trend == "多头趋势":
@@ -3525,19 +3525,19 @@ def analyze_buy_sell(bars: list[dict]) -> dict:
 
     # ===== 每档原因描述 =====
     if signal == "buy":
-        t1_desc = f"当前{signal_type or '买入信号'}, 信号确认可直接入场; 近半年ATR={atr_pct:.1f}%({vol_level}), 跌破止损位一律离场"
+        t1_desc = f"当前{signal_type or '买入信号'}, 信号确认可直接入场; 近半年ATR={atr_pct:.2f}%({vol_level}), 跌破止损位一律离场"
     else:
         s1 = (1 - t1_price / c) * 100 if c > 0 else 0
-        t1_desc = f"靠近MA20({ma20_ref:.2f})挂单位, 与现价价差≈{s1:.1f}%; 若之后出现买入信号可直接按此位入场, 否则建议等t2/t3"
+        t1_desc = f"靠近MA20({ma20_ref:.2f})挂单位, 与现价价差≈{s1:.2f}%; 若之后出现买入信号可直接按此位入场, 否则建议等t2/t3"
 
     t2_spread_pct = (1 - t2_price / c) * 100 if c > 0 else 0
     if len(dip_depths) >= 3:
-        t2_desc = f"典型回调位: 近半年负收益q50={q50_ret:.1f}%, 跌破MA20平均幅度={ma20_dip_avg:.1f}%; 此位企稳买入胜率较优, 与现价价差≈{t2_spread_pct:.1f}%"
+        t2_desc = f"典型回调位: 近半年负收益q50={q50_ret:.2f}%, 跌破MA20平均幅度={ma20_dip_avg:.2f}%; 此位企稳买入胜率较优, 与现价价差≈{t2_spread_pct:.2f}%"
     else:
-        t2_desc = f"典型回调位: q50{q50_ret:.1f}% + ATR{atr_pct:.1f}% 组合锚定的稳健挂单, 与现价价差≈{t2_spread_pct:.1f}%"
+        t2_desc = f"典型回调位: q50{q50_ret:.2f}% + ATR{atr_pct:.2f}% 组合锚定的稳健挂单, 与现价价差≈{t2_spread_pct:.2f}%"
 
     t3_spread_pct = (1 - t3_price / c) * 100 if c > 0 else 0
-    t3_desc = f"保守挂单: 近半年强支撑≈{support_level:.2f}, 深幅回调q75={q75_ret:.1f}%; 赔率优先策略, 与现价价差≈{t3_spread_pct:.1f}%, 跌破止损严格执行"
+    t3_desc = f"保守挂单: 近半年强支撑≈{support_level:.2f}, 深幅回调q75={q75_ret:.2f}%; 赔率优先策略, 与现价价差≈{t3_spread_pct:.2f}%, 跌破止损严格执行"
 
     # ===== 股性摘要 =====
     parts = []
@@ -3546,13 +3546,13 @@ def analyze_buy_sell(bars: list[dict]) -> dict:
         warn_prefix = "⚠当前【卖出信号 / 多单离场】，以下为计划挂单买点，条件未触发前切勿提前入场；空头趋势中宁错过勿抄底。"
     elif signal == "wait" and trend != "多头趋势":
         warn_prefix = "⚠当前无明确买入信号，以下为基于近半年股性测算的计划挂单买点，不代表建议立即买入。"
-    parts.append(f"近半年波动：ATR14={atr_pct:.1f}%（{vol_level}）")
+    parts.append(f"近半年波动：ATR14={atr_pct:.2f}%（{vol_level}）")
     if n_use >= 40 and not math.isnan(ma20[-1]):
         parts.append(f"MA20±2.5%区间共回踩{total_touch}次，其中反弹≥3%有{rebound_count}次")
     total_spread = (1 - t3_price / (t1_price if t1_price else c)) * 100
-    parts.append(f"3档买点总价差（买1→买3）≈{total_spread:.1f}%")
+    parts.append(f"3档买点总价差（买1→买3）≈{total_spread:.2f}%")
     sl_dist = (1 - sl_price / t3_price) * 100
-    parts.append(f"统一止损：{sl_price:.2f}（买3下方≈{sl_dist:.1f}%）")
+    parts.append(f"统一止损：{sl_price:.2f}（买3下方≈{sl_dist:.2f}%）")
     if n_use < 60:
         parts.append("K线不足半年，档位间距采用均线近似算法")
     reason_summary = warn_prefix + "；".join(parts)
@@ -3680,7 +3680,7 @@ def analyze_buy_sell(bars: list[dict]) -> dict:
 
     _style_extra["zz_pivot_count"] = len(_zz_pivots)
     # 实际阈值 = 1.5×ATR% (动态百分比, 适应不同价格水平)
-    _style_extra["zz_threshold"] = f"1.5×ATR%({_zz_pct_threshold:.1f}%)"
+    _style_extra["zz_threshold"] = f"1.5×ATR%({_zz_pct_threshold:.2f}%)"
     _style_extra["zz_period"] = "近一年(244交易日)"
     # 距最后一个转折点的天数
     if _zz_pivots:
@@ -3908,7 +3908,7 @@ def analyze_buy_sell(bars: list[dict]) -> dict:
         # 短期粘合(<1.5%) 或 三线高度粘合(<3.0%) → 视为横盘, 豁免空头排列避坑
         if _short_spread < 1.5 or _ma_spread < 3.0:
             ma_converged = True
-            ma_converge_note = f"均线粘合(短期发散{_short_spread:.1f}%/三线发散{_ma_spread:.1f}%), 虽排列上空头但实为横盘筑底"
+            ma_converge_note = f"均线粘合(短期发散{_short_spread:.2f}%/三线发散{_ma_spread:.2f}%), 虽排列上空头但实为横盘筑底"
 
     # MA衍生卖出信号(卖点3空头排列/卖点4死叉)在均线粘合时为噪音, 同步豁免
     _ma_derived_sell = signal_type.startswith("卖点3") or signal_type.startswith("卖点4")
@@ -3923,7 +3923,7 @@ def analyze_buy_sell(bars: list[dict]) -> dict:
         avoid_reason = f"当前处于{trend},且已触发{signal_type},每一次反弹都是离场窗口,不宜新入"
     elif atr_pct >= 7 and alignment == "交叉纠缠":
         avoid_flag = True
-        avoid_reason = f"ATR={atr_pct:.1f}%极高波动+均线缠绕,短线情绪博弈强烈,非职业选手勿参与"
+        avoid_reason = f"ATR={atr_pct:.2f}%极高波动+均线缠绕,短线情绪博弈强烈,非职业选手勿参与"
 
     if ma_converged and not avoid_flag:
         # 粘合豁免时记录原因(供前端展示)
@@ -4225,12 +4225,12 @@ def analyze_buy_sell(bars: list[dict]) -> dict:
         stop_loss_plan = "若不幸持有,任何反弹至均线(MA5/MA10)附近都应减仓或清仓"
     elif "趋势" in style_type:
         # 趋势票: 2 档止盈 + 宽止损防被洗
-        op_tip = f"✅ 趋势票 · 看趋势不坏持股, 不强制天数; 趋势延续性{trend_score}分, 近60日上涨q75={q75_pos:.1f}%"
+        op_tip = f"✅ 趋势票 · 看趋势不坏持股, 不强制天数; 趋势延续性{trend_score}分, 近60日上涨q75={q75_pos:.2f}%"
         # 20260904 同步 ATR 新档位: <4%=稳波动, ≥4%=高波动
         if atr_pct >= 4.0:
             op_tip += " 🔥 高波动趋势(ATR≥4%), 止盈目标上抬一档, 吃整段"
         else:
-            op_tip += f" ✔ 稳波动票(ATR={atr_pct:.1f}%<4%), 趋势平滑好拿, 适合长持"
+            op_tip += f" ✔ 稳波动票(ATR={atr_pct:.2f}%<4%), 趋势平滑好拿, 适合长持"
         # 仓位阈值和 buy_plan 里仍然沿用 ≥4% 控仓(逻辑一致, 无需改)
         if days_max - days_min >= 4:
             hold_range_cn = f"{days_min}～{days_max} 个交易日"
@@ -4241,23 +4241,23 @@ def analyze_buy_sell(bars: list[dict]) -> dict:
                     f"建仓 1/2, 回踩 MA20({ma20_ref:.2f})附近确认有效后再补剩余半仓;"
                     f"单笔总仓位 ≤ 总仓 {'20%' if atr_pct >= 4 else '35%'}, "
                     f"{'高波动票仓位不超过2成, 否则震幅受不了' if atr_pct >= 4 else '趋势票仓位可以稍重但不一把梭'}")
-        take_profit_plan = (f"趋势票 2 档兑现: ① 主兑现位 {tp_main} (现价上方≈+{tp_upside_main:.1f}%, "
-                            f"到价先止盈 1/2 仓位落袋为安); ② 延伸看位 {tp_extra} (≈+{tp_upside_extra:.1f}%, "
+        take_profit_plan = (f"趋势票 2 档兑现: ① 主兑现位 {tp_main} (现价上方≈+{tp_upside_main:.2f}%, "
+                            f"到价先止盈 1/2 仓位落袋为安); ② 延伸看位 {tp_extra} (≈+{tp_upside_extra:.2f}%, "
                             f"剩余 1/2 仓位用 MA20 做移动止盈: MA20不破就拿, 跌破2根K线收不回立即走; 不强制必须到延伸位)")
-        stop_loss_plan = (f"最终止损 {sl_style} (现价下方≈{sl_style_pct:.1f}%)。"
+        stop_loss_plan = (f"最终止损 {sl_style} (现价下方≈{sl_style_pct:.2f}%)。"
                           f"触发条件二选一: ① 收盘价跌破 {stop_loss_anchor_name.split('(')[0].strip()}{round(stop_loss_anchor,2)}×0.98={sl_style}；"
                           f"② 连续2个交易日收在 MA20({round(stop_loss_anchor,2) if 'MA20' in stop_loss_anchor_name else ma20_ref:.2f}) 下方。"
                           f"趋势票容忍稍宽, 避免正常回踩被洗出")
     else:  # 波段票: 1 档止盈 + 紧止损 (到价位/到时间任一走)
-        op_tip = f"🎯 波段票 · 吃到一段立即走, 不恋战; 波段性{swing_score}分, ATR={atr_pct:.1f}%"
+        op_tip = f"🎯 波段票 · 吃到一段立即走, 不恋战; 波段性{swing_score}分, ATR={atr_pct:.2f}%"
         # ZigZag 波段周期提示
         if _zz_up_days:
-            op_tip += f"; 该股典型波段≈{_zz_median(_zz_up_days):.0f}天/{_zz_median(_zz_up_pct):.0f}%"
+            op_tip += f"; 该股典型波段≈{_zz_median(_zz_up_days):.0f}天/{_zz_median(_zz_up_pct):.2f}%"
         # 20260904 同步 ATR 新档位: <4%=稳波动, ≥4%=高波动
         if atr_pct >= 4.0:
             op_tip += " 🔥 高波动波段(ATR≥4%), 波段止盈目标上抬一档, 目标肉=ATR×1.2"
         else:
-            op_tip += f" ⚠ 稳波动票(ATR={atr_pct:.1f}%<4%), 波段弹性偏小, 注意别贪到了不走"
+            op_tip += f" ⚠ 稳波动票(ATR={atr_pct:.2f}%<4%), 波段弹性偏小, 注意别贪到了不走"
         # 动态持仓周期描述: 使用 hold_days 数组真实天数(长周期波段 max>5 天 → 标注"长周期"
         swing_long_marker = "（长周期波段, 允许走完一轮筑底反弹）" if days_max >= 6 else ""
         if days_max - days_min >= 4:
@@ -4276,35 +4276,35 @@ def analyze_buy_sell(bars: list[dict]) -> dict:
         if tp_single:
             tgt1 = (tp_single / c - 1) * 100 if c > 0 else 0
             _zz_up_med_pct = _zz_median(_zz_up_pct) if _zz_up_pct else 0
-            take_profit_plan = (f"波段票 1 档止盈: 主兑现位 {tp_single} (现价上方≈+{tgt1:.1f}%, 对应近60日正收益中位数≈{q50_pos:.1f}%)。"
+            take_profit_plan = (f"波段票 1 档止盈: 主兑现位 {tp_single} (现价上方≈+{tgt1:.2f}%, 对应近60日正收益中位数≈{q50_pos:.2f}%)。"
                                 f"到价**一次性清仓**，留小尾巴容易从赚到亏；如果第二天跳空高开越过止盈 3% 以上再留 1/3 看惯性，其余全走。"
-                                + (f" 参考: 该股ZigZag上涨中位数≈{_zz_up_med_pct:.0f}%(1.5×ATR), 吃其中约1/3, 20日区间上沿{_h20:.0f}附近也应减仓。" if _zz_up_med_pct else ""))
+                                + (f" 参考: 该股ZigZag上涨中位数≈{_zz_up_med_pct:.2f}%(1.5×ATR), 吃其中约1/3, 20日区间上沿{_h20:.0f}附近也应减仓。" if _zz_up_med_pct else ""))
         else:
             take_profit_plan = "波段票到止盈位一次性兑现，不拖。"
-        stop_loss_plan = (f"严格止损 {sl_style} (现价下方≈{sl_style_pct:.1f}%)。"
+        stop_loss_plan = (f"严格止损 {sl_style} (现价下方≈{sl_style_pct:.2f}%)。"
                           f"锚定逻辑: {stop_loss_anchor_name}，"
                           f"一旦破位说明「前期低点/踩均线」这个波段买点失败，立即割肉不犹豫；"
                           f"第 {days_max} 天若没到止盈、且收盘仍没站上 MA5，**时间止损也走**（不把短线做成长线）。")
 
     # ===== 风格判定理由 =====
     feat_parts = []
-    feat_parts.append(f"MA20 4日斜率{'+' if ma20_slope_pct>=0 else ''}{ma20_slope_pct:.1f}%（{'向上' if ma20_slope_pct>=0 else '向下'}）")
-    feat_parts.append(f"近60日涨跌{'+' if chg60_pct>=0 else ''}{chg60_pct:.1f}%")
-    feat_parts.append(f"ATR={atr_pct:.1f}%（{vol_level}）")
+    feat_parts.append(f"MA20 4日斜率{'+' if ma20_slope_pct>=0 else ''}{ma20_slope_pct:.2f}%（{'向上' if ma20_slope_pct>=0 else '向下'}）")
+    feat_parts.append(f"近60日涨跌{'+' if chg60_pct>=0 else ''}{chg60_pct:.2f}%")
+    feat_parts.append(f"ATR={atr_pct:.2f}%（{vol_level}）")
     feat_parts.append(f"均线：{alignment} / {trend}")
     if run_lens_pos:
         feat_parts.append(f"平均单边上涨波段{avg_run_pos:.1f}天")
     # ZigZag 波段统计 (1.5×ATR%阈值, 真实波峰波谷)
     if _zz_up_days:
-        feat_parts.append(f"ZigZag上涨: {_zz_median(_zz_up_days):.0f}天/{_zz_median(_zz_up_pct):.0f}%")
+        feat_parts.append(f"ZigZag上涨: {_zz_median(_zz_up_days):.0f}天/{_zz_median(_zz_up_pct):.2f}%")
     if _zz_dn_days:
-        feat_parts.append(f"ZigZag下跌: {_zz_median(_zz_dn_days):.0f}天/{_zz_median(_zz_dn_pct):.0f}%")
+        feat_parts.append(f"ZigZag下跌: {_zz_median(_zz_dn_days):.0f}天/{_zz_median(_zz_dn_pct):.2f}%")
     if not avoid_flag and pos_rets_60:
-        feat_parts.append(f"上涨中位数q50={q50_pos:.1f}% q75={q75_pos:.1f}%")
+        feat_parts.append(f"上涨中位数q50={q50_pos:.2f}% q75={q75_pos:.2f}%")
     # 横盘区间
     if _h20 > _l20:
         _rp = (c - _l20) / (_h20 - _l20) * 100
-        feat_parts.append(f"20日区间{_l20:.0f}~{_h20:.0f}(现处{_rp:.0f}%)")
+        feat_parts.append(f"20日区间{_l20:.0f}~{_h20:.0f}(现处{_rp:.2f}%)")
     judge_reason = f"{style_type}。判定依据：{'；'.join(feat_parts)}。"
     if avoid_flag:
         judge_reason += "⚠" + avoid_reason
@@ -4361,11 +4361,11 @@ def analyze_buy_sell(bars: list[dict]) -> dict:
         signal = "sell"
         signal_type = "卖点5: 过热止盈"
         if "过热" not in (reason_parts or []):
-            reason_parts.append(f"乖离过大(高于MA5 +{bias_to_ma5:.1f}%, 近5日 +{r5:.1f}%)→先落袋1/3")
+            reason_parts.append(f"乖离过大(高于MA5 +{bias_to_ma5:.2f}%, 近5日 +{r5:.2f}%)→先落袋1/3")
     elif is_false_death_cross:
         signal = "wait"
         signal_type = "假死叉 · 转为观望"
-        reason_parts.append(f"短期均线死叉但股价已站回MA20(+{bias_to_ma20:.1f}%), 是均线滞后的假信号, 先观察不出场")
+        reason_parts.append(f"短期均线死叉但股价已站回MA20(+{bias_to_ma20:.2f}%), 是均线滞后的假信号, 先观察不出场")
 
     # ---- 买点4/卖点2/卖点6/卖点7 仅趋势票触发: style_type确认后, 非趋势票降级为wait ----
     _st_for_check = (my_style or {}).get("style_type", "") or ""
@@ -4407,7 +4407,7 @@ def analyze_buy_sell(bars: list[dict]) -> dict:
             # 波段票 + 站上MA20 ≥1% → 均线死叉直接失效
             if signal == "sell" and (signal_type and "死叉" in signal_type):
                 swing_immune_activated = True
-                swing_immune_reason = f"波段票均线豁免：股价站上MA20 +{bias_to_ma20:.1f}%，均线比重降低（看支撑/量能），死叉不触发离场"
+                swing_immune_reason = f"波段票均线豁免：股价站上MA20 +{bias_to_ma20:.2f}%，均线比重降低（看支撑/量能），死叉不触发离场"
                 signal = "wait"
                 signal_type = "波段票 · 均线假死叉豁免（看支撑/量能）"
                 reason_parts.append(swing_immune_reason)
@@ -5982,11 +5982,11 @@ def api_stock_analyze(code: str = "", date: str = ""):
         ma20_flat = abs(ma20_slope_pct) < 0.1  # MA20近3日走平
         if ma_spread < 3.0:
             # 三线高度粘合 → 横盘
-            analysis.append({"item": "均线趋势", "desc": f"5/10/20日均线粘合(发散度{ma_spread:.1f}%)，横盘震荡，等待方向选择", "status": "中性"})
+            analysis.append({"item": "均线趋势", "desc": f"5/10/20日均线粘合(发散度{ma_spread:.2f}%)，横盘震荡，等待方向选择", "status": "中性"})
         elif short_spread < 1.5:
             # 短期均线粘合, 看MA20方向
             if ma20_flat:
-                analysis.append({"item": "均线趋势", "desc": f"短期均线粘合(MA5/MA10差{short_spread:.1f}%)，MA20走平，横盘震荡", "status": "中性"})
+                analysis.append({"item": "均线趋势", "desc": f"短期均线粘合(MA5/MA10差{short_spread:.2f}%)，MA20走平，横盘震荡", "status": "中性"})
             elif ma20_slope_pct < 0:
                 analysis.append({"item": "均线趋势", "desc": f"短期均线粘合，受MA20({m20:.1f})压制，MA20斜率{ma20_slope_pct:+.2f}%偏弱，震荡偏弱", "status": "偏空"})
             else:
@@ -6109,7 +6109,7 @@ def api_stock_analyze(code: str = "", date: str = ""):
     analysis.append({
         "item": "区间位置",
         "status": pos_status,
-        "desc": f"当前价位处于近20日区间的{pos_20d:.0f}%位置(0%=最低,100%=最高) → {pos_note}",
+        "desc": f"当前价位处于近20日区间的{pos_20d:.2f}%位置(0%=最低,100%=最高) → {pos_note}",
     })
     # 周线分析
     if not math.isnan(ma5w[-1]) and not math.isnan(ma10w[-1]):

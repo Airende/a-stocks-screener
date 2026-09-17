@@ -1220,9 +1220,9 @@ function rowHTML(s,i,near){
     <td>${s.price}</td>
     <td class="col-opt">${s.float_mv_yi}</td>
     <td class="col-opt">${s.amount_yi}</td>
-    <td class="col-opt"><span style="color:${bcol};font-weight:600">${s.bias}%</span></td>
+    <td class="col-opt"><span style="color:${bcol};font-weight:600">${(+s.bias||0).toFixed(2)}%</span></td>
     ${extra}
-    <td><span style="color:${s.atr_pct>=8?'var(--up)':(s.atr_pct<4?'var(--sub)':'var(--gold)')};font-weight:600">${s.atr_pct}%</span></td>
+    <td><span style="color:${s.atr_pct>=8?'var(--up)':(s.atr_pct<4?'var(--sub)':'var(--gold)')};font-weight:600">${(+s.atr_pct||0).toFixed(2)}%</span></td>
     <td class="l">${bsHtml}</td>
     <td class="l col-opt">${tags}</td>
   </tr>`;
@@ -1475,7 +1475,7 @@ function evalCostPosition(cost, cur, hv, st, bs){
   // 规则1: 触及/跌破止损线 → 必须清仓 (纪律第一, 无论盈亏)
   if(stopLoss && cur<=stopLoss){
     action='清仓'; tag='🔴';
-    reason=`现价 ${cur} 已触及/跌破风格止损线 ${stopLoss} (止损幅度 ${stopLossPct}%), 按纪律必须离场, 不等反弹不抱侥幸`;
+    reason=`现价 ${cur} 已触及/跌破风格止损线 ${stopLoss} (止损幅度 ${(+stopLossPct||0).toFixed(2)}%), 按纪律必须离场, 不等反弹不抱侥幸`;
   }
   // 规则2: 后端综合建议清仓 (空头排列+卖出信号, 趋势已坏)
   else if(suggest==='清仓'){
@@ -1485,7 +1485,7 @@ function evalCostPosition(cost, cur, hv, st, bs){
   // 规则3: 空头排列 + 浮亏 (被套在空头趋势里) → 清仓止损
   else if(isShortAlign && !isProfit){
     action='清仓'; tag='🔴';
-    reason=`空头排列中浮亏 ${profitPct.toFixed(1)}%, 趋势已转空, 反弹至均线压力位即离场, 不等回本`;
+    reason=`空头排列中浮亏 ${profitPct.toFixed(2)}%, 趋势已转空, 反弹至均线压力位即离场, 不等回本`;
   }
   // 规则4: 到止盈位 → 减仓落袋 (波段一次性清, 趋势分批)
   else if(tp && cur>=tp){
@@ -1501,27 +1501,27 @@ function evalCostPosition(cost, cur, hv, st, bs){
   // 规则6: 浮盈过热 (动态阈值: 波段≥2×ATR, 趋势≥3×ATR) + 未到止盈位 → 减仓1/3锁利润
   else if(isProfit && profitPct>=overheatPct && (!tp || cur<tp)){
     action='减仓'; tag='🟡';
-    reason=`浮盈 ${profitPct.toFixed(1)}% 已超动态过热阈值 ${overheatPct.toFixed(1)}% (=${isTrend?'3':'2'}×ATR${atrPct}%), 短期获利盘丰厚, 先减1/3锁利润, 剩余用止损线 ${stopLoss||'—'} 拿趋势, 到止盈位 ${tp||'—'} 再落袋`;
+    reason=`浮盈 ${profitPct.toFixed(2)}% 已超动态过热阈值 ${overheatPct.toFixed(2)}% (=${isTrend?'3':'2'}×ATR${(+atrPct||0).toFixed(2)}%), 短期获利盘丰厚, 先减1/3锁利润, 剩余用止损线 ${stopLoss||'—'} 拿趋势, 到止盈位 ${tp||'—'} 再落袋`;
   }
   // 规则7: 加仓机会 (多头趋势+买入信号+浮亏在容忍范围内+非避坑) → 分批加仓摊低成本
   else if(isBull && (signal==='buy'||suggest==='持有') && !isProfit && Math.abs(profitPct)<=addPosTolerancePct){
     action='加仓'; tag='🔵';
-    reason=`浮亏 ${profitPct.toFixed(1)}% 在加仓容忍范围 ${addPosTolerancePct.toFixed(1)}% 内 (=${isTrend?'1.5':'0.5'}×ATR), 多头趋势未破, 现价回调至支撑/MA20附近企稳可分批补仓摊低成本; 加仓后总仓位止损仍用 ${stopLoss||'—'}, 破止损立即走`;
+    reason=`浮亏 ${profitPct.toFixed(2)}% 在加仓容忍范围 ${addPosTolerancePct.toFixed(2)}% 内 (=${isTrend?'1.5':'0.5'}×ATR), 多头趋势未破, 现价回调至支撑/MA20附近企稳可分批补仓摊低成本; 加仓后总仓位止损仍用 ${stopLoss||'—'}, 破止损立即走`;
   }
   // 规则8: 浮亏较深但趋势未破 (动态警戒阈值, 不硬性离场, 按止损线持有)
   else if(!isProfit && Math.abs(profitPct)>=warnPct && (isBull||suggest==='持有')){
     action='持有'; tag='🟡';
-    reason=`浮亏 ${profitPct.toFixed(1)}% 已超警戒阈值 ${warnPct.toFixed(1)}% (=${isTrend?'2.5':'1.5'}×ATR), 但趋势未破, 严格按止损线 ${stopLoss||'—'} 持有观察; 破止损立即走, 不加仓摊平`;
+    reason=`浮亏 ${profitPct.toFixed(2)}% 已超警戒阈值 ${warnPct.toFixed(2)}% (=${isTrend?'2.5':'1.5'}×ATR), 但趋势未破, 严格按止损线 ${stopLoss||'—'} 持有观察; 破止损立即走, 不加仓摊平`;
   }
   // 规则9: 空头趋势 + 浮盈 (反弹中) → 减仓兑现, 不恋战
   else if(isBear && isProfit){
     action='减仓'; tag='🟡';
-    reason=`空头趋势中反弹产生浮盈 ${profitPct.toFixed(1)}%, 反弹不是反转, 趁有利润分批减仓兑现, 不等回前高`;
+    reason=`空头趋势中反弹产生浮盈 ${profitPct.toFixed(2)}%, 反弹不是反转, 趁有利润分批减仓兑现, 不等回前高`;
   }
   // 规则10: 默认持有 (趋势未破, 按止损线持有, 到止盈位再落袋)
   else{
     action='持有'; tag='🟢';
-    reason = `${trend||'趋势未破'}, 按止损线 ${stopLoss||'—'} 持有, 到止盈位 ${tp||'—'} 再分批落袋; 浮动盈亏 ${profitPct>=0?'+':''}${profitPct.toFixed(1)}% 在正常波动范围`;
+    reason = `${trend||'趋势未破'}, 按止损线 ${stopLoss||'—'} 持有, 到止盈位 ${tp||'—'} 再分批落袋; 浮动盈亏 ${profitPct>=0?'+':''}${profitPct.toFixed(2)}% 在正常波动范围`;
   }
   return {profitAbs, profitPct, isProfit, action, reason, tag, stopLoss, tp, tpExtra, atrPct, styleType, trend, signal, alignment};
 }
@@ -1949,10 +1949,10 @@ function renderAnalysis(d){
   const chgSign=d.change_pct>=0?'+':'';
   const cells=[
     ['现价', d.price, chgCls],
-    ['今日涨跌', `${chgSign}${d.change_pct}%`, chgCls],
-    ['近5日', `${d.change_5d>=0?'+':''}${d.change_5d}%`, d.change_5d>=0?'up':'down'],
-    ['近10日', `${d.change_10d>=0?'+':''}${d.change_10d}%`, d.change_10d>=0?'up':'down'],
-    ['近20日', `${d.change_20d>=0?'+':''}${d.change_20d}%`, d.change_20d>=0?'up':'down'],
+    ['今日涨跌', `${chgSign}${(+d.change_pct||0).toFixed(2)}%`, chgCls],
+    ['近5日', `${d.change_5d>=0?'+':''}${(+d.change_5d||0).toFixed(2)}%`, d.change_5d>=0?'up':'down'],
+    ['近10日', `${d.change_10d>=0?'+':''}${(+d.change_10d||0).toFixed(2)}%`, d.change_10d>=0?'up':'down'],
+    ['近20日', `${d.change_20d>=0?'+':''}${(+d.change_20d||0).toFixed(2)}%`, d.change_20d>=0?'up':'down'],
     ['成交额', `${d.amount_yi}亿`, ''],
   ];
   const gridHtml=cells.map(c=>`<div class="sa-cell"><div class="l">${c[0]}</div><div class="v ${c[2]||''}">${c[1]}</div></div>`).join('');
@@ -2019,7 +2019,7 @@ function renderAnalysis(d){
         const typCls = isH ? 'hh' : 'll';
         const typName = isH ? '波峰' : '波谷';
         const swing = p.swing_days>0
-          ? `${isH?'↑':'↓'} ${p.swing_days}天 / ${p.swing_pct>=0?'+':''}${p.swing_pct}%`
+          ? `${isH?'↑':'↓'} ${p.swing_days}天 / ${p.swing_pct>=0?'+':''}${(+p.swing_pct||0).toFixed(2)}%`
           : '起点';
         return `<div class="zz-pivot zz-${isH?'h':'l'}">
           <span class="zz-arrow">${arrow}</span>
@@ -2042,7 +2042,7 @@ function renderAnalysis(d){
           <span class="zz-p-date">至今</span>
           <span class="zz-p-type" style="color:var(--sub)">当前</span>
           <span class="zz-p-price">${curPrice}</span>
-          <span class="zz-p-swing" style="color:${isUp?'#dc3545':'#26a69a'}">${isUp?'↑':'↓'} ${daysFromLast}天 / ${pctFromLast>=0?'+':''}${pctFromLast.toFixed(1)}%</span>
+          <span class="zz-p-swing" style="color:${isUp?'#dc3545':'#26a69a'}">${isUp?'↑':'↓'} ${daysFromLast}天 / ${pctFromLast>=0?'+':''}${pctFromLast.toFixed(2)}%</span>
         </div>`;
       }
       const tlShown = curStatus + shownPivots.map(renderPiv).join('');
@@ -2064,12 +2064,12 @@ function renderAnalysis(d){
         <div class="zz-stats">
           <div class="zz-stat zz-up">
             <div class="zz-st-label">📈 上涨波段(中位) <span class="zz-st-period">${period}</span></div>
-            <div class="zz-st-val">${upDays}天 / +${upPct}%</div>
+            <div class="zz-st-val">${upDays}天 / +${(+upPct||0).toFixed(2)}%</div>
             <div class="zz-st-sub">持仓周期参考 / 止盈目标参考</div>
           </div>
           <div class="zz-stat zz-dn">
             <div class="zz-st-label">📉 下跌波段(中位) <span class="zz-st-period">${period}</span></div>
-            <div class="zz-st-val">${dnDays}天 / ${dnPct}%</div>
+            <div class="zz-st-val">${dnDays}天 / ${(+dnPct||0).toFixed(2)}%</div>
             <div class="zz-st-sub">止损 / 抄底参考</div>
           </div>
         </div>`;
@@ -2081,7 +2081,7 @@ function renderAnalysis(d){
       if(rHi && rLo){
         rangeHtml = `<div class="zz-range">
           <b>📊 20日横盘区间：</b><b class="dn">${rLo}</b> ~ <b class="up">${rHi}</b>
-          （振幅 ${ex.range_20d_amp_pct||0}%），现价处区间 <b>${rPos}%</b> 位置<br>
+          （振幅 ${(+ex.range_20d_amp_pct||0).toFixed(2)}%），现价处区间 <b>${(+rPos||0).toFixed(2)}%</b> 位置<br>
           <b>突破方向：</b>向上突破看 <b class="up">${tUp}</b>（+2×ATR）｜跌破下沿看 <b class="dn">${tDn}</b>（-2×ATR）
         </div>`;
       }
@@ -2100,17 +2100,17 @@ function renderAnalysis(d){
             <div class="zz-price-item zz-buy">
               <div class="zz-pi-label">买入价</div>
               <div class="zz-pi-val">${zzBuy}</div>
-              <div class="zz-pi-pct" style="color:${pctColor(zzBuyPct)}">${pctSign(zzBuyPct)}${zzBuyPct}%</div>
+              <div class="zz-pi-pct" style="color:${pctColor(zzBuyPct)}">${pctSign(zzBuyPct)}${(+zzBuyPct||0).toFixed(2)}%</div>
             </div>
             <div class="zz-price-item zz-tp">
               <div class="zz-pi-label">止盈价</div>
               <div class="zz-pi-val">${zzTp}</div>
-              <div class="zz-pi-pct" style="color:${pctColor(zzTpPct)}">${pctSign(zzTpPct)}${zzTpPct}%</div>
+              <div class="zz-pi-pct" style="color:${pctColor(zzTpPct)}">${pctSign(zzTpPct)}${(+zzTpPct||0).toFixed(2)}%</div>
             </div>
             <div class="zz-price-item zz-sl">
               <div class="zz-pi-label">止损价</div>
               <div class="zz-pi-val">${zzSl}</div>
-              <div class="zz-pi-pct" style="color:${pctColor(zzSlPct)}">${pctSign(zzSlPct)}${zzSlPct}%</div>
+              <div class="zz-pi-pct" style="color:${pctColor(zzSlPct)}">${pctSign(zzSlPct)}${(+zzSlPct||0).toFixed(2)}%</div>
             </div>
             <div class="zz-price-item zz-rr">
               <div class="zz-pi-label">盈亏比</div>
@@ -2236,7 +2236,7 @@ function renderAnalysis(d){
           <div class="vp-stage-name">${esc(sg.name||'—')} <span style="font-size:11px;color:var(--sub);font-weight:400">依据：${esc(sg.basis||'')}</span></div>
           <div class="vp-stage-note">${esc(sg.note||'')}</div>
         </div>`;
-      const adaptLine = `σ=${pms.sigma}% (波段0.9σ/趋势0.8σ · 价涨阈值±${pms.up_thresh}% · 缩量≤${pms.vr_low_thresh} · 放量≥${pms.vr_high_thresh} · 破位止损：跌破${m.ma_stop_label||'—'} ${pms.stop_below_ma_pct}%)`;
+      const adaptLine = `σ=${(+pms.sigma||0).toFixed(2)}% (波段0.9σ/趋势0.8σ · 价涨阈值±${(+pms.up_thresh||0).toFixed(2)}% · 缩量≤${pms.vr_low_thresh} · 放量≥${pms.vr_high_thresh} · 破位止损：跌破${m.ma_stop_label||'—'} ${(+pms.stop_below_ma_pct||0).toFixed(2)}%)`;
       const sigHtml = signals.length
         ? `<div class="vp-signals">${signals.map(s=>`
             <div class="vp-signal ${esc(s.type)}" title="${esc(s.desc||'')}">
@@ -2668,12 +2668,12 @@ function renderAnalysis(d){
       if(isSwing){
         cells.push({l:'止盈位(唯一兑现)', v:st.tp_single, c:'var(--up)', tip:'股性算1档止盈,到价一次性清仓,不拖不恋战'});
         const anc=(st.stop_loss_anchor?`锚=买点前低/MA20≈${st.stop_loss_anchor}`:'');
-        cells.push({l:`风格止损 ${st.stop_loss_pct?`(${st.stop_loss_pct}%)`:''}`, v:st.stop_loss, c:'var(--down)', tip:(st.stop_loss_anchor_name||'跌破买点失败立即离场')+(anc?'；'+anc:'')});
+        cells.push({l:`风格止损 ${st.stop_loss_pct?`(${(+st.stop_loss_pct||0).toFixed(2)}%)`:''}`, v:st.stop_loss, c:'var(--down)', tip:(st.stop_loss_anchor_name||'跌破买点失败立即离场')+(anc?'；'+anc:'')});
       }else{
         cells.push({l:'止盈1(主兑现·止盈1/2仓)', v:st.tp_main, c:'var(--gold)', tip:'趋势票主止盈位,到价先止盈一半仓位落袋为安'});
         cells.push({l:'止盈2(延伸看·剩余1/2仓)', v:st.tp_extra, c:'var(--up)', tip:'剩余半仓用MA20移动止盈:MA20不破就拿,跌破2日收不回立即走,不强制必须到'});
         const anc=(st.stop_loss_anchor?`锚=MA20≈${st.stop_loss_anchor}`:'');
-        cells.push({l:`MA20保护止损 ${st.stop_loss_pct?`(${st.stop_loss_pct}%)`:''}`, v:st.stop_loss, c:'var(--down)', tip:(st.stop_loss_anchor_name||'MA20跌破2%触发')+(anc?'；'+anc:'')});
+        cells.push({l:`MA20保护止损 ${st.stop_loss_pct?`(${(+st.stop_loss_pct||0).toFixed(2)}%)`:''}`, v:st.stop_loss, c:'var(--down)', tip:(st.stop_loss_anchor_name||'MA20跌破2%触发')+(anc?'；'+anc:'')});
       }
     }else{
       // 避坑 or 无风格数据: fallback to hold_view
@@ -2880,7 +2880,7 @@ function renderAnalysis(d){
         });
         const anc = (st.stop_loss_anchor ? `锚=买点前低/MA20≈${st.stop_loss_anchor}` : '');
         cells.push({
-          l:`风格止损 ${st.stop_loss_pct?`(${st.stop_loss_pct}%)`:''}`,
+          l:`风格止损 ${st.stop_loss_pct?`(${(+st.stop_loss_pct||0).toFixed(2)}%)`:''}`,
           v:st.stop_loss,
           c:'var(--down)',
           tip:(st.stop_loss_anchor_name || '跌破买点失败立即离场') + (anc ? '；'+anc : '')
@@ -2891,7 +2891,7 @@ function renderAnalysis(d){
         cells.push({l:'止盈2(延伸看)', v:st.tp_extra, c:'var(--up)', tip:'趋势票剩余仓位移动止盈位,MA20不破就继续拿,不强制必须到'});
         const anc = (st.stop_loss_anchor ? `锚=MA20≈${st.stop_loss_anchor}` : '');
         cells.push({
-          l:`MA20保护止损 ${st.stop_loss_pct?`(${st.stop_loss_pct}%)`:''}`,
+          l:`MA20保护止损 ${st.stop_loss_pct?`(${(+st.stop_loss_pct||0).toFixed(2)}%)`:''}`,
           v:st.stop_loss,
           c:'var(--down)',
           tip:(st.stop_loss_anchor_name || 'MA20跌破2%触发减仓/清仓') + (anc ? '；'+anc : '')
@@ -3354,7 +3354,7 @@ function buildMiniChartWithMarkers(bars, buyMarkers, sellMarkers, prewarmDays){
     // 价格+日期标签 (卖点显示在箭头下方), 盈亏标注
     const lblY=yy+18;
     const dayLbl=(m.day||'').slice(5);
-    const pnlTxt=`${pnl>=0?'+':''}${pnl.toFixed(1)}%`;
+    const pnlTxt=`${pnl>=0?'+':''}${pnl.toFixed(2)}%`;
     markersArr.push(`<text x="${x.toFixed(1)}" y="${lblY.toFixed(1)}" fill="${col}" font-size="9" font-weight="700" text-anchor="middle">${pnlTxt}</text>`);
     markersArr.push(`<text x="${x.toFixed(1)}" y="${(lblY+10).toFixed(1)}" fill="${col}" font-size="9" text-anchor="middle">${m.price}</text>`);
     markersArr.push(`<text x="${x.toFixed(1)}" y="${(lblY+20).toFixed(1)}" fill="${col}" font-size="8" opacity="0.8" text-anchor="middle">${dayLbl}</text>`);
@@ -3419,7 +3419,7 @@ function buildEquityCurve(curve){
   const gridPct=[0,0.25,0.5,0.75,1].map(f=>{
     const v=hi-f*rng;
     return `<line x1="${padL}" y1="${y(v).toFixed(1)}" x2="${w-padR}" y2="${y(v).toFixed(1)}" stroke="rgba(255,255,255,0.06)"/>`+
-           `<text x="${w-padR-2}" y="${(y(v)-3).toFixed(1)}" fill="#5a6a82" font-size="10" text-anchor="end">${v>=0?'+':''}${v.toFixed(1)}%</text>`;
+           `<text x="${w-padR-2}" y="${(y(v)-3).toFixed(2)}" fill="#5a6a82" font-size="10" text-anchor="end">${v>=0?'+':''}${v.toFixed(2)}%</text>`;
   }).join('');
   const dateTxt=[0,Math.floor(n/2),n-1].filter((v,i,a)=>a.indexOf(v)===i).map(i=>{
     const x=padL+i*xStep, d=(curve[i].day||'').slice(5);
@@ -3739,13 +3739,13 @@ function sspRowHtml(s, i, pool){
       <br>📉收盘 < ${s.invalidate_price||'?'} → 信号作废</div>`;
   } else if(pool==='watch_pool'){
     const diff = (s.price && s.break_price) ? ((+s.price)/(+s.break_price)-1)*100 : null;
-    const distTag = diff!=null ? `<span style="color:${diff<0?'var(--gold)':'var(--up)'};font-weight:700;margin-left:4px">${diff>=0?'已突破':'还差'+diff.toFixed(1)+'%'}</span>` : '';
+    const distTag = diff!=null ? `<span style="color:${diff<0?'var(--gold)':'var(--up)'};font-weight:700;margin-left:4px">${diff>=0?'已突破':'还差'+diff.toFixed(2)+'%'}</span>` : '';
     extra = `<td>${s.sig_day||'—'} (${s.days_since!=null?s.days_since+'天前':'—'})</td>
              <td style="${(s.remain_days||0)<=3?'color:var(--down);font-weight:700':''}">${s.remain_days!=null?s.remain_days+' 天':'—'}</td>
              <td style="color:var(--up);font-weight:700">${s.break_price||'—'}${distTag}</td>
              <td style="color:var(--down)">${s.invalidate_price||'—'}</td>`;
     bsBrief = `<span class="sig-badge wait">👁观察</span> 确认窗口内未破位
-      <div class="sig-prices">突破 ${s.break_price||'?'} 且量比≥2 可买<br>距离突破: ${diff!=null? (diff.toFixed(1)+'%') : '—'}</div>`;
+      <div class="sig-prices">突破 ${s.break_price||'?'} 且量比≥2 可买<br>距离突破: ${diff!=null? (diff.toFixed(2)+'%') : '—'}</div>`;
   } else {
     // 已确认 C 池
     extra = `<td>${s.sig_day||'—'}</td>
@@ -3794,7 +3794,7 @@ function maRowHtml(s,i){
   if(showWeekly && s.w_ma30){
     const posColor = (s.w_pos52||0) >= 0.6 ? 'var(--up)' : ((s.w_pos52||0) < 0.3 ? 'var(--down)' : 'var(--gold)');
     const boostTag = s.w_vol_boost ? ' <span style="color:var(--gold)">🔥放量</span>' : '';
-    weeklyLine = `<div class="code" style="color:var(--sub);font-size:11px">周MA30:${s.w_ma30} · 52周位:<span style="color:${posColor}">${((s.w_pos52||0)*100).toFixed(0)}%</span>${boostTag}</div>`;
+    weeklyLine = `<div class="code" style="color:var(--sub);font-size:11px">周MA30:${s.w_ma30} · 52周位:<span style="color:${posColor}">${((s.w_pos52||0)*100).toFixed(2)}%</span>${boostTag}</div>`;
   }
   return `<tr>
     <td class="l">${i+1}</td>
@@ -3926,7 +3926,7 @@ function renderMarketSnap(d){
     return `<div class="idx-card">
       <span class="idx-card-name" title="${esc(idx.name)}">${esc(idx.name)}</span>
       <span class="idx-card-price ${up?'up':'down'}" style="color:${clr}">${idx.price.toFixed(2)}</span>
-      <span class="idx-card-chg" style="color:${clr}">${sign}${idx.chg_pct}%</span>
+      <span class="idx-card-chg" style="color:${clr}">${sign}${(+idx.chg_pct||0).toFixed(2)}%</span>
     </div>`;
   }).join('');
 }
@@ -3982,8 +3982,8 @@ function renderHeatmapAnalysis(d){
     const upPct=total? Math.round(b.up/total*100):0;
     const downPct=total? Math.round(b.down/total*100):0;
     breadthEl.innerHTML=`
-      <div class="hm-stat"><span class="hm-stat-label">上涨</span><span class="hm-stat-val" style="color:var(--up)">${b.up||0}</span><span class="hm-stat-sub">${upPct}%</span></div>
-      <div class="hm-stat"><span class="hm-stat-label">下跌</span><span class="hm-stat-val" style="color:var(--down)">${b.down||0}</span><span class="hm-stat-sub">${downPct}%</span></div>
+      <div class="hm-stat"><span class="hm-stat-label">上涨</span><span class="hm-stat-val" style="color:var(--up)">${b.up||0}</span><span class="hm-stat-sub">${(+upPct||0).toFixed(2)}%</span></div>
+      <div class="hm-stat"><span class="hm-stat-label">下跌</span><span class="hm-stat-val" style="color:var(--down)">${b.down||0}</span><span class="hm-stat-sub">${(+downPct||0).toFixed(2)}%</span></div>
       <div class="hm-stat"><span class="hm-stat-label">平盘</span><span class="hm-stat-val">${b.flat||0}</span></div>
       <div class="hm-stat"><span class="hm-stat-label">涨停</span><span class="hm-stat-val" style="color:var(--up)">${b.limit_up||0}</span></div>
       <div class="hm-stat"><span class="hm-stat-label">跌停</span><span class="hm-stat-val" style="color:var(--down)">${b.limit_down||0}</span></div>
@@ -4001,7 +4001,7 @@ function renderHeatmapAnalysis(d){
       return `<div class="hm-idx-card">
         <div class="hm-idx-name">${esc(idx.name)}</div>
         <div class="hm-idx-price" style="color:${clr}">${idx.price.toFixed(2)}</div>
-        <div style="color:${clr};font-size:12px;font-weight:600">${sign}${idx.chg_pct}% (${sign}${idx.chg})</div>
+        <div style="color:${clr};font-size:12px;font-weight:600">${sign}${(+idx.chg_pct||0).toFixed(2)}% (${sign}${idx.chg})</div>
       </div>`;
     }).join('');
   }
@@ -4111,7 +4111,7 @@ function markNameHtml(code, name, price){
       const pnlPct = avg > 0 ? ((cur - avg) / avg * 100) : 0;
       const sign = pnl > 0 ? '+' : (pnl < 0 ? '' : '');
       const color = pnl > 0 ? 'var(--up)' : (pnl < 0 ? 'var(--down)' : 'var(--sub)');
-      posInfo = `<div class="pos-info" style="color:${color}">${mktVal.toLocaleString()}[${sign}${pnlPct.toFixed(1)}%]</div>`;
+      posInfo = `<div class="pos-info" style="color:${color}">${mktVal.toLocaleString()}[${sign}${pnlPct.toFixed(2)}%]</div>`;
     } else {
       posInfo = `<div class="pos-info" style="color:var(--sub)">${costVal.toLocaleString()}</div>`;
     }
@@ -4501,7 +4501,7 @@ async function renderMkTable(){
       _MARKS[s.code] = s;
       const mk = s.mark? MARK_META[markKey(s.mark)] : null;
       const chgClr = (s.change_pct||0)>=0?'var(--up)':'var(--down)';
-      const chg = s.change_pct!=null? `${s.change_pct>=0?'+':''}${s.change_pct}%` : '—';
+      const chg = s.change_pct!=null? `${s.change_pct>=0?'+':''}${(+s.change_pct||0).toFixed(2)}%` : '—';
       return `<tr>
         <td>${i+1}</td>
         <td class="l">
@@ -5002,7 +5002,7 @@ async function showKlinePreview(code, anchor){
     const d = _kdCache[code];
     const bars = d.bars;
     const last = bars[bars.length-1];
-    const chgTxt = `<span style="color:${(last.chg||0)>=0?'var(--up)':'var(--down)'}">${(last.chg||0)>=0?'+':''}${last.chg}%</span>`;
+    const chgTxt = `<span style="color:${(last.chg||0)>=0?'var(--up)':'var(--down)'}">${(last.chg||0)>=0?'+':''}${(+last.chg||0).toFixed(2)}%</span>`;
     // 右上角标记符号按钮 (20260907): " 留意 / * 关注 / ! 特别关注, 点击切换
     const mkAttr = s => String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');
     const mkName = mkAttr(d.name||code);
