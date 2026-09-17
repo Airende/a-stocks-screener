@@ -635,6 +635,40 @@
   .status-strip .ss-k{font-weight:700;color:var(--accent)}
   .status-strip .dot-live{display:inline-block;width:7px;height:7px;border-radius:50%;background:#26a69a;flex-shrink:0}
   .status-strip .dot-live.busy{background:var(--gold);animation:sp .9s linear infinite}
+  /* ===== 自选股盯盘栏 (statusStrip 下方) ===== */
+  .watch-bar{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:12px}
+  .watch-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+  .watch-head .tt{font-weight:800;font-size:13px;color:var(--txt)}
+  .watch-head .agg{font-size:11px;color:var(--sub);font-variant-numeric:tabular-nums}
+  .watch-head .agg b.up{color:var(--up)} .watch-head .agg b.down{color:var(--down)}
+  .watch-add{display:flex;align-items:center;gap:6px;margin-left:auto}
+  .watch-add input{width:130px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;
+                   background:rgba(0,0,0,.2);color:var(--txt);font-size:12px;outline:none}
+  .watch-add input:focus{border-color:var(--accent)}
+  .watch-add button{padding:5px 12px;border:none;border-radius:6px;background:var(--accent);color:#06212e;
+                    font-weight:700;font-size:12px;cursor:pointer}
+  .watch-add button:disabled{opacity:.5;cursor:not-allowed}
+  .watch-wrap{overflow-x:auto;padding-bottom:2px}
+  .watch-cards{display:flex;gap:8px;min-width:min-content}
+  .watch-card{position:relative;display:flex;flex-direction:column;gap:2px;min-width:118px;padding:8px 10px;
+              border:1px solid var(--border);border-radius:8px;background:rgba(255,255,255,.02);cursor:pointer;
+              transition:.12s;user-select:none}
+  .watch-card:hover{border-color:var(--accent);background:rgba(255,255,255,.05)}
+  .watch-card .nm{font-size:12px;font-weight:700;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .watch-card .cd{font-size:10px;color:var(--sub)}
+  .watch-card .px{font-size:16px;font-weight:800;font-variant-numeric:tabular-nums}
+  .watch-card .chg{font-size:11px;font-weight:600;font-variant-numeric:tabular-nums}
+  .watch-card .rm{position:absolute;top:2px;right:4px;color:var(--sub);opacity:0;font-size:12px;line-height:1;
+                  padding:1px 4px;border-radius:4px;cursor:pointer;transition:.12s}
+  .watch-card:hover .rm{opacity:.8}
+  .watch-card .rm:hover{opacity:1;color:var(--down);background:rgba(239,68,68,.12)}
+  .watch-card.up{color:var(--up)}
+  .watch-card.down{color:var(--down)}
+  .watch-card.flat{color:var(--sub)}
+  .watch-card.alarm-limit-up{border-color:var(--up);box-shadow:0 0 0 1px var(--up) inset}
+  .watch-card.alarm-limit-down{border-color:var(--down);box-shadow:0 0 0 1px var(--down) inset}
+  .watch-card.alarm-spike{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset}
+  .watch-empty{font-size:11px;color:var(--sub);padding:6px 2px}
   /* 危险操作按钮: 红色 ghost 样式, 与普通按钮区分 */
   button.btn-danger-ghost{background:transparent;border:1px solid rgba(239,68,68,.45);color:var(--down)}
   button.btn-danger-ghost:hover{background:rgba(239,68,68,.08)}
@@ -701,6 +735,19 @@
     <span class="ss-item"><span class="dot-live" id="ssScreenDot"></span><span class="ss-k">选股</span><span id="ssScreen">—</span></span>
     <span class="ss-item"><span class="dot-live" id="ssMaDot"></span><span class="ss-k">均线</span><span id="ssMa">—</span></span>
     <span class="ss-item"><span class="dot-live" id="ssSspDot"></span><span class="ss-k">上试盘</span><span id="ssSsp">—</span></span>
+  </div>
+
+  <!-- ===== 自选股盯盘: 添加自选 + 实时涨跌幅 + 预警高亮 (20260918) ===== -->
+  <div id="watchBar" class="watch-bar">
+    <div class="watch-head">
+      <span class="tt">自选盯盘</span>
+      <span class="agg" id="watchAgg"></span>
+      <div class="watch-add">
+        <input id="watchInput" placeholder="输入代码如 002905" maxlength="10">
+        <button id="watchAddBtn">添加</button>
+      </div>
+    </div>
+    <div class="watch-wrap"><div class="watch-cards" id="watchCards"></div></div>
   </div>
 
   <div class="main-tabs" id="mainTabs">
@@ -3966,6 +4013,59 @@ async function loadIndicesRealtime(){
     }
   }catch(e){}
 }
+// ===== 自选股盯盘栏 (statusStrip 下方) · 后端持久化 (20260918) =====
+async function loadWatch(){
+  try{
+    const r=await fetch('/api/watchlist'); const d=await r.json();
+    renderWatch(d);
+  }catch(e){}
+}
+function renderWatch(d){
+  const cards=document.getElementById('watchCards'); const agg=document.getElementById('watchAgg');
+  if(!cards) return;
+  const q=d.quotes||[]; const s=d.sum||{up:0,down:0,flat:0};
+  if(agg) agg.innerHTML=`今日 涨 <b class="up">${s.up}</b> · 跌 <b class="down">${s.down}</b> · 平 ${s.flat}`;
+  if(!q.length){ cards.innerHTML='<div class="watch-empty">还没有自选，输入股票代码后点「添加」开始盯盘</div>'; return; }
+  cards.innerHTML=q.map(x=>{
+    const pcl=x.chg_pct>0?'up':(x.chg_pct<0?'down':'flat');
+    const alarm = x.limit==='up' ? 'alarm-limit-up' : (x.limit==='down' ? 'alarm-limit-down'
+              : (x.spike==='spike' ? 'alarm-spike' : ''));
+    const sgn=x.chg>0?'+':(x.chg<0?'-':'');
+    const nm=esc(x.name||x.code), cd=esc(x.code);
+    const limTxt = x.limit==='up' ? ' ·涨停' : (x.limit==='down' ? ' ·跌停' : (x.spike==='spike' ? ' ·拉升' : ''));
+    return `<div class="watch-card ${pcl} ${alarm}" title="点击查看分析${limTxt}"
+        onclick="gotoStockAnalyze('${cd}','${nm}')">
+      <span class="rm" title="移除" onclick="event.stopPropagation();delWatch('${cd}')">✕</span>
+      <span class="nm">${nm}</span>
+      <span class="cd">${cd}</span>
+      <span class="px">${(+x.price||0).toFixed(2)}</span>
+      <span class="chg">${sgn}${Math.abs(+x.chg||0).toFixed(2)} · ${pcl==='up'?'+':(pcl==='down'?'':'')}${(+x.chg_pct||0).toFixed(2)}%${limTxt}</span>
+    </div>`;
+  }).join('');
+}
+async function delWatch(code){
+  try{
+    const r=await fetch('/api/watchlist?code='+encodeURIComponent(code),{method:'DELETE'});
+    renderWatch(await r.json());
+  }catch(e){}
+}
+(function initWatch(){
+  const inp=document.getElementById('watchInput'), btn=document.getElementById('watchAddBtn');
+  if(!inp) return;
+  const doAdd=async()=>{
+    const v=inp.value.trim(); if(!v) return;
+    btn.disabled=true;
+    try{
+      const r=await fetch('/api/watchlist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:v})});
+      const d=await r.json();
+      if(d.error){ alert(d.error); } else { renderWatch(d); inp.value=''; }
+    }catch(e){} finally{ btn.disabled=false; }
+  };
+  btn.onclick=doAdd;
+  inp.addEventListener('keydown',e=>{ if(e.key==='Enter') doAdd(); });
+  loadWatch();
+})();
+setInterval(loadWatch, 3000);
 loadMarketSnap();
 setInterval(loadMarketSnap, 3000);
 function _tickIndices(){

@@ -9479,6 +9479,149 @@ def index():
     return r
 
 
+# ============================================================
+# 自选股盯盘 (statusStrip 下方卡片条) · 后端文件持久化 (20260918)
+# ============================================================
+_WATCHLIST_FILE = os.path.join(CACHE_DIR, "watchlist.json")
+_WATCH_LOCK = threading.Lock()
+# code -> (上次快照时间, 上次现价); 用于盘中 5 分钟快速拉升(spike)预警
+_WATCH_PREV: dict[str, tuple[float, float]] = {}
+_SPIKE_WINDOW = 310      # 秒: 5 分钟窗口
+_SPIKE_THRESHOLD = 1.2   # %: 窗口内涨幅达到即触发"快速拉升"
+
+
+def _load_watchlist() -> list[str]:
+    try:
+        with open(_WATCHLIST_FILE, "r", encoding="utf-8") as f:
+            d = json.load(f)
+        codes = d.get("codes") or []
+        return [str(c) for c in codes]
+    except Exception:
+        return []
+
+
+def _save_watchlist(codes: list[str]) -> None:
+    try:
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        with open(_WATCHLIST_FILE, "w", encoding="utf-8") as f:
+            json.dump({"codes": codes, "updated_at": time.strftime("%Y-%m-%d %H:%M:%S")},
+                      f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+
+def _normalize_wcode(raw: str) -> str:
+    s = str(raw or "").strip().lower()
+    for p in ("sh", "sz", "bj"):
+        if s.startswith(p):
+            s = s[len(p):]
+    s = s.strip()
+    return s if (s.isdigit() and len(s) == 6) else ""
+
+
+def _watch_quote(codes: list[str]) -> dict:
+    """从全市场实时快照中提取自选行情 + 涨停/跌停/快速拉升预警 + 涨跌家数聚合。"""
+    spot = fetch_spot_all()
+    by_code = {}
+    for r in spot:
+        c = str(r.get("code") or "")
+        if c:
+            by_code.setdefault(c, r)
+    quotes = []
+    now = time.time()
+    trading = _is_trading_time()
+    for code in codes:
+        row = by_code.get(code)
+        if not row:
+            continue
+        try:
+            price = float(row.get("trade") or 0)
+            chg_pct = float(row.get("changepercent") or 0)
+            name = str(row.get("name") or code)
+        except (TypeError, ValueError):
+            continue
+        prev_close = round(price / (1 + chg_pct / 100), 2) if price and chg_pct != 0 else 0.0
+        chg = round(price - prev_close, 2)
+        limit = ""
+        if _spot_is_limit_up(code, name, chg_pct):
+            limit = "up"
+        elif _spot_is_limit_down(code, name, chg_pct):
+            limit = "down"
+        spike = ""
+        if trading and price > 0:
+            prev = _WATCH_PREV.get(code)
+            if prev and 0 < now - prev[0] <= _SPIKE_WINDOW:
+                dt = (price - prev[1]) / prev[1] * 100 if prev[1] else 0
+                if dt >= _SPIKE_THRESHOLD:
+                    spike = "spike"
+            _WATCH_PREV[code] = (now, price)
+        else:
+            _WATCH_PREV.pop(code, None)
+        quotes.append({
+            "code": code,
+            "symbol": _to_symbol(code),
+            "name": name,
+            "price": price,
+            "prev_close": prev_close,
+            "chg": chg,
+            "chg_pct": round(chg_pct, 2),
+            "limit": limit,
+            "spike": spike,
+        })
+    up = sum(1 for q in quotes if q["chg_pct"] > 0)
+    down = sum(1 for q in quotes if q["chg_pct"] < 0)
+    flat = len(quotes) - up - down
+    return {
+        "updated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "quotes": quotes,
+        "sum": {"up": up, "down": down, "flat": flat},
+    }
+
+
+@app.get("/api/watchlist")
+def api_watchlist():
+    with _WATCH_LOCK:
+        codes = _load_watchlist()
+        data = _watch_quote(codes)
+    return JSONResponse(data)
+
+
+@app.post("/api/watchlist")
+def api_watchlist_add(payload: dict):
+    code = _normalize_wcode(payload.get("code", ""))
+    if not code:
+        return JSONResponse({"error": "无效股票代码"}, status_code=400)
+    # 校验该代码存在于实时快照(取名称)
+    name = ""
+    try:
+        for r in fetch_spot_all():
+            if str(r.get("code") or "") == code:
+                name = str(r.get("name") or "")
+                break
+    except Exception:
+        pass
+    if not name:
+        return JSONResponse({"error": f"未在行情池中找到代码 {code}"}, status_code=404)
+    with _WATCH_LOCK:
+        codes = _load_watchlist()
+        if code not in codes:
+            codes.append(code)
+            _save_watchlist(codes)
+    return JSONResponse(_watch_quote(codes))
+
+
+@app.delete("/api/watchlist")
+def api_watchlist_del(code: str = ""):
+    c = _normalize_wcode(code)
+    with _WATCH_LOCK:
+        codes = _load_watchlist()
+        if c in codes:
+            codes.remove(c)
+            _save_watchlist(codes)
+        _WATCH_PREV.pop(c, None)
+    return JSONResponse(_watch_quote(codes))
+
+
 if __name__ == "__main__":
     import uvicorn
     # 云平台(Render/Railway)通过 PORT 环境变量指定端口, 默认 8000
