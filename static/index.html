@@ -40,7 +40,7 @@
   .stat{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:10px 14px;min-width:110px}
   .stat .n{font-size:20px;font-weight:700}
   .stat .l{font-size:12px;color:var(--sub);margin-top:2px}
-  .up{color:var(--up)} .down{color:var(--down)}
+  .up{color:var(--up)} .down{color:var(--down)} .flat{color:var(--sub)}
   .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;margin-bottom:18px}
   .card-h{padding:12px 16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer}
   .card-h h2{margin:0;font-size:14px}
@@ -980,7 +980,9 @@ document.querySelectorAll('.main-tab').forEach(t=>{
 });
 const fmtPct = v=>{
   if(v==null||isNaN(v)) return '—';
-  return `<span class="${v>=0?'up':'down'}">${v>=0?'+':''}${v.toFixed(2)}%</span>`;
+  const x=+v||0;
+  const cls=x>0?'up':(x<0?'down':'flat');
+  return `<span class="${cls}">${x>0?'+':''}${x.toFixed(2)}%</span>`;
 };
 const bar = (v,max=40)=>{
   const w=Math.min(100,Math.abs(v)/max*100);
@@ -1945,14 +1947,14 @@ $('#saHistClr').onclick=async()=>{
 };
 function renderAnalysis(d){
   const isHold = getHoldState(d.code);
-  const chgCls=d.change_pct>=0?'up':'down';
-  const chgSign=d.change_pct>=0?'+':'';
+  const chgCls=d.change_pct>0?'up':(d.change_pct<0?'down':'flat');
+  const chgSign=d.change_pct>0?'+':'';
   const cells=[
     ['现价', d.price, chgCls],
     ['今日涨跌', `${chgSign}${(+d.change_pct||0).toFixed(2)}%`, chgCls],
-    ['近5日', `${d.change_5d>=0?'+':''}${(+d.change_5d||0).toFixed(2)}%`, d.change_5d>=0?'up':'down'],
-    ['近10日', `${d.change_10d>=0?'+':''}${(+d.change_10d||0).toFixed(2)}%`, d.change_10d>=0?'up':'down'],
-    ['近20日', `${d.change_20d>=0?'+':''}${(+d.change_20d||0).toFixed(2)}%`, d.change_20d>=0?'up':'down'],
+    ['近5日', `${(+d.change_5d||0)>0?'+':''}${(+d.change_5d||0).toFixed(2)}%`, (+d.change_5d||0)>0?'up':((+d.change_5d||0)<0?'down':'flat')],
+    ['近10日', `${(+d.change_10d||0)>0?'+':''}${(+d.change_10d||0).toFixed(2)}%`, (+d.change_10d||0)>0?'up':((+d.change_10d||0)<0?'down':'flat')],
+    ['近20日', `${(+d.change_20d||0)>0?'+':''}${(+d.change_20d||0).toFixed(2)}%`, (+d.change_20d||0)>0?'up':((+d.change_20d||0)<0?'down':'flat')],
     ['成交额', `${d.amount_yi}亿`, ''],
   ];
   const gridHtml=cells.map(c=>`<div class="sa-cell"><div class="l">${c[0]}</div><div class="v ${c[2]||''}">${c[1]}</div></div>`).join('');
@@ -3920,13 +3922,14 @@ function renderMarketSnap(d){
   const box=$('#idxCards'); if(!box) return;
   if(!cards.length){ box.innerHTML='<div class="empty">暂无指数数据</div>'; return; }
   box.innerHTML=cards.map(idx=>{
-    const up=idx.chg_pct>=0;
-    const clr=up?'var(--up)':'var(--down)';
+    const c=+idx.chg_pct||0;
+    const up=c>0, dn=c<0;
+    const clr=up?'var(--up)':(dn?'var(--down)':'var(--sub)');
     const sign=up?'+':'';
     return `<div class="idx-card">
       <span class="idx-card-name" title="${esc(idx.name)}">${esc(idx.name)}</span>
-      <span class="idx-card-price ${up?'up':'down'}" style="color:${clr}">${idx.price.toFixed(2)}</span>
-      <span class="idx-card-chg" style="color:${clr}">${sign}${(+idx.chg_pct||0).toFixed(2)}%</span>
+      <span class="idx-card-price ${up?'up':(dn?'down':'flat')}" style="color:${clr}">${idx.price.toFixed(2)}</span>
+      <span class="idx-card-chg" style="color:${clr}">${sign}${c.toFixed(2)}%</span>
     </div>`;
   }).join('');
 }
