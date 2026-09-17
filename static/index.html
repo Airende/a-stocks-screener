@@ -737,10 +737,10 @@
         <div class="tbl-wrap" id="maTblWrap" style="border:none;border-radius:0;max-height:520px;overflow-y:auto">
           <table id="tblMA">
             <thead><tr>
-              <th class="l ma-th" data-sort="default" title="点击恢复默认排序(综合分)">#</th>
-              <th class="l ma-th" data-sort="default" title="点击恢复默认排序(综合分)">股票</th>
-              <th class="l ma-th col-opt" data-sort="industry" title="点击按行业股票数排序, 再点切换升降序">行业 <span class="sort-arrow"></span></th>
-              <th class="l ma-th col-opt" data-sort="concept" title="点击按板块股票数排序(子概念拆分), 再点切换升降序">所属板块 <span class="sort-arrow"></span></th>
+              <th class="l ma-th" data-sort="default" >#</th>
+              <th class="l ma-th" data-sort="default" >股票</th>
+              <th class="l ma-th col-opt" data-sort="industry" >行业 <span class="sort-arrow"></span></th>
+              <th class="l ma-th col-opt" data-sort="concept" >所属板块 <span class="sort-arrow"></span></th>
               <th>今日涨跌</th><th>现价</th>
               <th class="col-opt">成交额(亿)</th><th class="l">买卖点</th>
             </tr></thead>
@@ -829,7 +829,7 @@
           <span class="meta">⏱ 历史时点复盘:</span>
           <input type="date" id="saDate" style="padding:6px 10px;font-size:13px;border:1px solid var(--border);border-radius:8px;background:var(--panel2);color:var(--txt);outline:none">
           <button class="ghost" id="saDateBtn" style="padding:6px 14px;font-size:13px">按此日分析</button>
-          <button class="ghost" id="saTodayBtn" style="padding:6px 14px;font-size:13px;border-color:var(--accent);color:var(--accent)" title="清空基准日, 恢复为最新数据分析">回到今天</button>
+          <button class="ghost" id="saTodayBtn" style="padding:6px 14px;font-size:13px;border-color:var(--accent);color:var(--accent)">回到今天</button>
           <span class="meta" id="saDateHint">以选定日期为最后一天, 回看当天的买卖点/量价/风格判定</span>
         </div>
         <div class="sa-hist" id="saHist">
@@ -1213,7 +1213,7 @@ function rowHTML(s,i,near){
   bsHtml = `<div ${sigTipAttr(s)} style="cursor:help">${bsHtml}</div>`;
   return `<tr>
     <td class="l">${i+1}</td>
-    <td class="l">${markNameHtml(s.code,s.name,s.price)}<div class="code"><a class="cd-link" title="点击打开同花顺" href="https://stockpage.10jqka.com.cn/${s.code}/" target="_blank" rel="noopener" onclick="openStock('${s.code}','${s.name}',event)">${mkt(s.code)}</a></div></td>
+    <td class="l">${markNameHtml(s.code,s.name,s.price)}<div class="code"><a class="cd-link"  href="https://stockpage.10jqka.com.cn/${s.code}/" target="_blank" rel="noopener" onclick="openStock('${s.code}','${s.name}',event)">${mkt(s.code)}</a></div></td>
     <td class="l col-opt">${s.industry}</td>
     <td class="l col-opt">${s.concept}</td>
     <td>${fmtPct(s.change_pct)}</td>
@@ -1902,7 +1902,7 @@ async function loadHistory(){
     const overflow=items.length>OVERFLOW_N;
     // 渲染历史项(带删除按钮)
     saHistList.innerHTML=items.map(it=>
-      `<div class="sa-hist-item" data-code="${it.code}"><span class="sa-hist-name">${it.name}</span><span class="sa-hist-del" title="删除" data-code="${it.code}">×</span></div>`
+      `<div class="sa-hist-item" data-code="${it.code}"><span class="sa-hist-name">${it.name}</span><span class="sa-hist-del" data-code="${it.code}">×</span></div>`
     ).join('');
     // 展开/收起按钮
     let moreBtn=saHistList.querySelector('.sa-hist-more');
@@ -2951,7 +2951,7 @@ function renderAnalysis(d){
   const bsHtml=`
     <div class="sec-h" style="margin-top:16px;font-size:14px">
       <span>${isHold?'持仓管理':'买卖点分析'}</span>
-      <button class="hold-btn ${isHold?'is-hold':'not-hold'}" onclick="toggleHold()" title="点击切换持有状态(自动保存)" style="margin-left:auto;padding:4px 14px;font-size:12px;border-radius:20px;border:1.5px solid var(--border);cursor:pointer;font-weight:700;background:var(--panel2);color:var(--txt);transition:all .15s;${isHold?'border-color:var(--up)!important;color:var(--up)!important;background:rgba(255,77,79,.08)':'border-color:var(--border)!important'}">
+      <button class="hold-btn ${isHold?'is-hold':'not-hold'}" onclick="toggleHold()" style="margin-left:auto;padding:4px 14px;font-size:12px;border-radius:20px;border:1.5px solid var(--border);cursor:pointer;font-weight:700;background:var(--panel2);color:var(--txt);transition:all .15s;${isHold?'border-color:var(--up)!important;color:var(--up)!important;background:rgba(255,77,79,.08)':'border-color:var(--border)!important'}">
         ${isHold?'📌 已持有':'○ 未持有'}
       </button>
     </div>
@@ -2985,13 +2985,13 @@ function renderAnalysis(d){
     if(mk){ saTriggerCh=mk.char; saTriggerColor=mk.color; saTriggerCls='mk-trigger '+mk.cls+(saMark.removed?' removed':''); saTriggerTitle=`${mk.label} · 点击修改`; }
   }
   const saNmSafe=(d.name||'').replace(/'/g,"\\'").replace(/"/g,'&quot;');
-  const saPlusBtn=`<span class="mk-trigger empty pos-plus" title="买卖操作" onclick="event.stopPropagation();openTradeMenu('${d.code}','${saNmSafe}',${d.price||'null'},event)" oncontextmenu="event.stopPropagation();openTradeMenu('${d.code}','${saNmSafe}',${d.price||'null'},event);return false">+</span>`;
-  const saMarkBtn=`<span class="${saTriggerCls}" title="${saTriggerTitle}" style="color:${saTriggerColor};font-weight:800;cursor:pointer;margin:0;padding:0;display:inline;font-size:18px" onclick="event.stopPropagation();openMarkMenu('${d.code}','${saNmSafe}',event)" oncontextmenu="event.stopPropagation();openMarkMenu('${d.code}','${saNmSafe}',event);return false">${saTriggerCh}</span>`;
+  const saPlusBtn=`<span class="mk-trigger empty pos-plus"  onclick="event.stopPropagation();openTradeMenu('${d.code}','${saNmSafe}',${d.price||'null'},event)" oncontextmenu="event.stopPropagation();openTradeMenu('${d.code}','${saNmSafe}',${d.price||'null'},event);return false">+</span>`;
+  const saMarkBtn=`<span class="${saTriggerCls}" style="color:${saTriggerColor};font-weight:800;cursor:pointer;margin:0;padding:0;display:inline;font-size:18px" onclick="event.stopPropagation();openMarkMenu('${d.code}','${saNmSafe}',event)" oncontextmenu="event.stopPropagation();openMarkMenu('${d.code}','${saNmSafe}',event);return false">${saTriggerCh}</span>`;
   saPanel.innerHTML=`
     <div class="sa-head-sticky">
     <div class="sa-head">
       ${saPlusBtn}
-      <a class="nm" data-code="${d.code}" title="点击跳转个股分析" href="javascript:void(0)" style="text-decoration:none;cursor:pointer" onclick="gotoStockAnalyze('${d.code}','${d.name}')">${d.name}${saMarkBtn}</a>
+      <a class="nm" data-code="${d.code}"  href="javascript:void(0)" style="text-decoration:none;cursor:pointer" onclick="gotoStockAnalyze('${d.code}','${d.name}')">${d.name}${saMarkBtn}</a>
       <span class="cd">${mkt(d.code)}</span>
       ${d.is_historical ? `<span class="sig-badge wait" style="font-size:12px" title="历史时点复盘: 全部指标按 ${d.as_of_date} 收盘计算">⏱ 基准日 ${d.as_of_date}${d.requested_date && d.requested_date!==d.as_of_date ? ` (请求${d.requested_date}, 非交易日已取最近)` : ''} <b style="cursor:pointer;text-decoration:underline" onclick="analyzeStock('${d.code}')">回到最新</b></span>` : ''}
     </div>
@@ -3519,10 +3519,10 @@ function renderMAHeaders(){
       <th class="l">买卖点</th>`;
   } else {
     el.innerHTML = `
-      <th class="l ma-th" data-sort="default" title="点击恢复默认排序(综合分)">#</th>
-      <th class="l ma-th" data-sort="default" title="点击恢复默认排序(综合分)">股票</th>
-      <th class="l ma-th col-opt" data-sort="industry" title="点击按行业股票数排序, 再点切换升降序">行业 <span class="sort-arrow"></span></th>
-      <th class="l ma-th col-opt" data-sort="concept" title="点击按板块股票数排序(子概念拆分), 再点切换升降序">所属板块 <span class="sort-arrow"></span></th>
+      <th class="l ma-th" data-sort="default" >#</th>
+      <th class="l ma-th" data-sort="default" >股票</th>
+      <th class="l ma-th col-opt" data-sort="industry" >行业 <span class="sort-arrow"></span></th>
+      <th class="l ma-th col-opt" data-sort="concept" >所属板块 <span class="sort-arrow"></span></th>
       <th>今日涨跌</th><th>现价</th><th>ATR%</th><th class="col-opt">成交额(亿)</th><th class="l">买卖点</th>`;
   }
 }
@@ -3587,7 +3587,7 @@ function renderMADist(stocks){
   const conArr=Object.entries(conCnt).sort((a,b)=>b[1]-a[1]).slice(0,40); // 最多显示40个子概念
   const conHtml=conArr.map(([k,v])=>{
     const active = maFilterConcept===k ? ' active' : '';
-    return `<span class="ma-dist-tag${active}" data-concept="${esc(k)}" title="${k} ${v}只 · 点击筛选">${k}<b>${v}</b></span>`;
+    return `<span class="ma-dist-tag${active}" data-concept="${esc(k)}">${k}<b>${v}</b></span>`;
   }).join('');
   const toggleHtml = conArr.length > 0
     ? `<span class="ma-dist-toggle" onclick="const p=this.closest('.ma-dist');p.classList.toggle('expanded');this.textContent=p.classList.contains('expanded')?'收起 ▲':'展开 ▼'">展开 ▼</span>`
@@ -3725,7 +3725,7 @@ function maSplitConcept(c){
 // SSP 单行渲染（不同池子扩展列）
 function sspRowHtml(s, i, pool){
   const amt = (s.amount_y!==undefined? s.amount_y : (s.amount_yi!==undefined? s.amount_yi : null));
-  const nmLink = `${markNameHtml(s.code,s.name,s.price)}<div class="code"><a class="cd-link" title="点击打开同花顺" href="https://stockpage.10jqka.com.cn/${s.code}/" target="_blank" rel="noopener" onclick="openStock('${s.code}','${s.name}',event)">${mkt(s.code)}</a></div>`;
+  const nmLink = `${markNameHtml(s.code,s.name,s.price)}<div class="code"><a class="cd-link"  href="https://stockpage.10jqka.com.cn/${s.code}/" target="_blank" rel="noopener" onclick="openStock('${s.code}','${s.name}',event)">${mkt(s.code)}</a></div>`;
   let extra = '';
   let bsBrief = '';
   if(pool==='new_signals'){
@@ -3798,7 +3798,7 @@ function maRowHtml(s,i){
   }
   return `<tr>
     <td class="l">${i+1}</td>
-    <td class="l">${markNameHtml(s.code,s.name,s.price)}<div class="code"><a class="cd-link" title="点击打开同花顺" href="https://stockpage.10jqka.com.cn/${s.code}/" target="_blank" rel="noopener" onclick="openStock('${s.code}','${s.name}',event)">${mkt(s.code)}</a></div>${weeklyLine}</td>
+    <td class="l">${markNameHtml(s.code,s.name,s.price)}<div class="code"><a class="cd-link"  href="https://stockpage.10jqka.com.cn/${s.code}/" target="_blank" rel="noopener" onclick="openStock('${s.code}','${s.name}',event)">${mkt(s.code)}</a></div>${weeklyLine}</td>
     <td class="l col-opt">${indHtml}</td>
     <td class="l col-opt">${conHtml}</td>
     <td>${fmtPct(s.change_pct)}</td>
@@ -4095,7 +4095,7 @@ function markNameHtml(code, name, price){
   }
   const nmSafe = (name||'').replace(/'/g,"\\'").replace(/"/g,'&quot;');
   // 忽略/已删除: 绿色小叉叉, 点击交互与 * 等标记字符一致(弹出标记菜单) (20260906)
-  if(m && m.removed) removedX = `<span class="removed-x" title="已忽略此股 · 点击修改" onclick="event.stopPropagation();openMarkMenu('${code}','${nmSafe}',event)" oncontextmenu="event.stopPropagation();openMarkMenu('${code}','${nmSafe}',event);return false">×</span>`;
+  if(m && m.removed) removedX = `<span class="removed-x" onclick="event.stopPropagation();openMarkMenu('${code}','${nmSafe}',event)" oncontextmenu="event.stopPropagation();openMarkMenu('${code}','${nmSafe}',event);return false">×</span>`;
   const trigStyle = `color:${triggerColor};font-weight:800;cursor:pointer;margin:0;padding:0;display:inline`;
   // 持仓角标: bN (左上角, 无底色小字号) + 持仓金额[收益率] (左下角, 小字号)
   let posBadge = '';
@@ -4118,10 +4118,10 @@ function markNameHtml(code, name, price){
     posBadge = `<span class="pos-badge" title="当前持仓 ${lots} 手 · 成本 ${avg.toFixed(2)}">b${lots}</span>`;
   }
   // 左侧买卖 + : 与右侧标记 + 共用 mk-trigger.empty 样式 (默认隐藏, hover 名称时显现)
-  const plusBtn = `<span class="mk-trigger empty pos-plus" title="买卖操作" onclick="event.stopPropagation();openTradeMenu('${code}','${nmSafe}',${price||'null'},event)" oncontextmenu="event.stopPropagation();openTradeMenu('${code}','${nmSafe}',${price||'null'},event);return false">+</span>`;
+  const plusBtn = `<span class="mk-trigger empty pos-plus"  onclick="event.stopPropagation();openTradeMenu('${code}','${nmSafe}',${price||'null'},event)" oncontextmenu="event.stopPropagation();openTradeMenu('${code}','${nmSafe}',${price||'null'},event);return false">+</span>`;
   // 持仓信息 (bN + 金额) 放在名称上方
   const posTop = (posBadge||posInfo) ? `<div class="pos-top">${posBadge}${posInfo}</div>` : '';
-  return `<div class="nm-cell">${posTop}<a class="nm" data-code="${code}" title="点击跳转个股分析" onclick="gotoStockAnalyze('${code}','${nmSafe}')" style="cursor:pointer;${nameStyle?' '+nameStyle:''}">${plusBtn}${nm}${removedX}<span class="${triggerCls}" title="${triggerTitle}" style="${trigStyle}" onclick="event.stopPropagation();openMarkMenu('${code}','${nmSafe}',event)" oncontextmenu="event.stopPropagation();openMarkMenu('${code}','${nmSafe}',event);return false">${triggerCh}</span></a></div>`;
+  return `<div class="nm-cell">${posTop}<a class="nm" data-code="${code}"  onclick="gotoStockAnalyze('${code}','${nmSafe}')" style="cursor:pointer;${nameStyle?' '+nameStyle:''}">${plusBtn}${nm}${removedX}<span class="${triggerCls}" style="${trigStyle}" onclick="event.stopPropagation();openMarkMenu('${code}','${nmSafe}',event)" oncontextmenu="event.stopPropagation();openMarkMenu('${code}','${nmSafe}',event);return false">${triggerCh}</span></a></div>`;
 }
 
 // ===== 买卖操作菜单 =====
@@ -4506,7 +4506,7 @@ async function renderMkTable(){
         <td>${i+1}</td>
         <td class="l">
           ${markNameHtml(s.code, s.name, s.price)}
-          <div class="code"><a class="cd-link" title="点击打开同花顺" href="https://stockpage.10jqka.com.cn/${s.code}/" target="_blank" rel="noopener" onclick="openStock('${s.code}','${s.name}',event)">${mkt(s.code)}</a></div>
+          <div class="code"><a class="cd-link"  href="https://stockpage.10jqka.com.cn/${s.code}/" target="_blank" rel="noopener" onclick="openStock('${s.code}','${s.name}',event)">${mkt(s.code)}</a></div>
         </td>
         <td class="l">${s.industry||'—'}</td>
         <td>${s.price||'—'}</td>
@@ -4562,7 +4562,7 @@ async function renderHoldingTable(){
         <td>${i+1}</td>
         <td class="l">
           ${markNameHtml(s.code, s.name, price)}
-          <div class="code"><a class="cd-link" title="点击打开同花顺" href="https://stockpage.10jqka.com.cn/${s.code}/" target="_blank" rel="noopener" onclick="openStock('${s.code}','${s.name}',event)">${mkt(s.code)}</a></div>
+          <div class="code"><a class="cd-link"  href="https://stockpage.10jqka.com.cn/${s.code}/" target="_blank" rel="noopener" onclick="openStock('${s.code}','${s.name}',event)">${mkt(s.code)}</a></div>
         </td>
         <td><b style="color:var(--accent)">${lots}</b></td>
         <td>${avg>0?avg.toFixed(2):'—'}</td>
@@ -4572,7 +4572,7 @@ async function renderHoldingTable(){
         <td style="color:${pnlPctClr};font-weight:600">${pnlPct!=null?(pnlPct>=0?'+':'')+pnlPct.toFixed(2)+'%':'—'}</td>
         <td class="mk-time">${firstDate}</td>
         <td>
-          <span class="pos-plus" title="买卖操作" onclick="event.stopPropagation();openTradeMenu('${s.code}','${(s.name||'').replace(/'/g,"\\'")}',${price||'null'},event)">+</span>
+          <span class="pos-plus"  onclick="event.stopPropagation();openTradeMenu('${s.code}','${(s.name||'').replace(/'/g,"\\'")}',${price||'null'},event)">+</span>
         </td>
       </tr>`;
     }).join('');
@@ -4622,7 +4622,7 @@ async function renderClosedTable(){
         <td>${i+1}</td>
         <td class="l">
           ${markNameHtml(s.code, s.name, s.price)}
-          <div class="code"><a class="cd-link" title="点击打开同花顺" href="https://stockpage.10jqka.com.cn/${s.code}/" target="_blank" rel="noopener" onclick="openStock('${s.code}','${s.name}',event)">${mkt(s.code)}</a></div>
+          <div class="code"><a class="cd-link"  href="https://stockpage.10jqka.com.cn/${s.code}/" target="_blank" rel="noopener" onclick="openStock('${s.code}','${s.name}',event)">${mkt(s.code)}</a></div>
         </td>
         <td class="mk-time">${firstBuy}</td>
         <td class="mk-time">${lastSell}</td>
@@ -4631,8 +4631,8 @@ async function renderClosedTable(){
         <td style="color:${pnlClr};font-weight:600">${realized>=0?'+':''}${realized.toLocaleString()}</td>
         <td style="color:${retClr};font-weight:600">${retPct>=0?'+':''}${retPct.toFixed(2)}%</td>
         <td>
-          <span class="del-btn" title="再次买入" onclick="event.stopPropagation();openTradeMenu('${s.code}','${(s.name||'').replace(/'/g,"\\'")}',${s.price||'null'},event)">+</span>
-          <span class="del-btn" title="删除记录" onclick="deletePosition('${s.code}')">🗑</span>
+          <span class="del-btn" onclick="event.stopPropagation();openTradeMenu('${s.code}','${(s.name||'').replace(/'/g,"\\'")}',${s.price||'null'},event)">+</span>
+          <span class="del-btn" onclick="deletePosition('${s.code}')">🗑</span>
         </td>
       </tr>`;
     }).join('');
@@ -4691,8 +4691,8 @@ async function renderTodayOpsTable(){
       return `<tr>
         <td>${i+1}</td>
         <td class="l">
-          <a class="nm" data-code="${o.code}" title="点击跳转个股分析" onclick="gotoStockAnalyze('${o.code}','${(o.name||'').replace(/'/g,"\\'")}')" style="cursor:pointer">${esc(o.name||'—')}</a>
-          <div class="code"><a class="cd-link" title="点击打开同花顺" href="https://stockpage.10jqka.com.cn/${o.code}/" target="_blank" rel="noopener" onclick="openStock('${o.code}','${o.name}',event)">${mkt(o.code)}</a></div>
+          <a class="nm" data-code="${o.code}"  onclick="gotoStockAnalyze('${o.code}','${(o.name||'').replace(/'/g,"\\'")}')" style="cursor:pointer">${esc(o.name||'—')}</a>
+          <div class="code"><a class="cd-link"  href="https://stockpage.10jqka.com.cn/${o.code}/" target="_blank" rel="noopener" onclick="openStock('${o.code}','${o.name}',event)">${mkt(o.code)}</a></div>
         </td>
         <td style="color:${dirClr};font-weight:600">${dirTxt}</td>
         <td><b>${o.lots}</b></td>
@@ -4701,7 +4701,7 @@ async function renderTodayOpsTable(){
         <td style="color:${rpnlClr};font-weight:600">${rpnlTxt}</td>
         <td class="mk-time">${o.time||'—'}</td>
         <td>
-          <span class="del-btn" title="删除该条操作 (将重新计算持仓)" onclick="deleteOperation('${o.code}',${o.id})">🗑</span>
+          <span class="del-btn" onclick="deleteOperation('${o.code}',${o.id})">🗑</span>
         </td>
       </tr>`;
     }).join('');
@@ -5009,12 +5009,12 @@ async function showKlinePreview(code, anchor){
     const curMk = (_MARKS[code]||{});
     const mkBtns = Object.entries(MARK_META).map(([k,v]) => {
       const active = (curMk.mark === v.char && !curMk.removed) ? ' active' : '';
-      return `<span class="kd-mk-btn${active}" style="color:${v.color}" title="${v.label}" onclick="popupToggleMark('${code}','${mkName}','${mkAttr(v.char)}')">${v.char}</span>`;
+      return `<span class="kd-mk-btn${active}" style="color:${v.color}" onclick="popupToggleMark('${code}','${mkName}','${mkAttr(v.char)}')">${v.char}</span>`;
     }).join('');
     const ignoreActive = curMk.removed ? ' active' : '';
-    const ignoreBtn = `<span class="kd-mk-btn kd-mk-ignore${ignoreActive}" style="color:#4ade80" title="忽略此股" onclick="popupToggleIgnore('${code}','${mkName}')">×</span>`;
+    const ignoreBtn = `<span class="kd-mk-btn kd-mk-ignore${ignoreActive}" style="color:#4ade80" onclick="popupToggleIgnore('${code}','${mkName}')">×</span>`;
     pop.innerHTML = `<div style="padding:6px 10px 2px;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:space-between">
-        <div>${d.name ? esc(d.name)+' ' : ''}<span class="meta cp-code" title="点击打开同花顺" onclick="openTHS('${code}')">${code}</span> ${chgTxt}
+        <div>${d.name ? esc(d.name)+' ' : ''}<span class="meta cp-code"  onclick="openTHS('${code}')">${code}</span> ${chgTxt}
         <span class="meta" style="margin-left:6px">近半年日K · 三均线 · 量 · KDJ</span></div>
         <div class="kd-mk-bar">${mkBtns}${ignoreBtn}</div>
       </div>` + kdMultiChart(bars);
