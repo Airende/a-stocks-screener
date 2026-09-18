@@ -912,13 +912,6 @@
           <label style="display:inline-flex;align-items:center;gap:5px;margin-right:8px;font-size:13px;cursor:pointer"><input type="checkbox" data-atr="e2" checked> ATR%3~8%（波段弹性）</label>
           <label style="display:inline-flex;align-items:center;gap:5px;margin-right:8px;font-size:13px;cursor:pointer"><input type="checkbox" data-atr="e3" checked> ATR收缩（蓄势）</label>
         </div>
-        <!-- 52周位下限 (20260918): 单选, 默认 >50% (对应原PASS4), 可放宽 >30%/>20% -->
-        <div class="ckbar" style="margin-bottom:10px">
-          <span class="meta" style="font-weight:700;color:var(--txt)">52周位可选:</span>
-          <label style="display:inline-flex;align-items:center;gap:5px;margin-right:8px;font-size:13px;cursor:pointer"><input type="radio" name="pos52" value="gt20"> 52周位&gt;20%</label>
-          <label style="display:inline-flex;align-items:center;gap:5px;margin-right:8px;font-size:13px;cursor:pointer"><input type="radio" name="pos52" value="gt30"> 52周位&gt;30%</label>
-          <label style="display:inline-flex;align-items:center;gap:5px;margin-right:8px;font-size:13px;cursor:pointer"><input type="radio" name="pos52" value="gt50" checked> 52周位&gt;50%(默认)</label>
-        </div>
         <div class="ma-tabs" id="maTabs"></div>
         <div class="ma-tab-desc" id="maDesc"></div>
         <!-- 均线/上试盘 扫描进度条 (20260906) -->
@@ -3650,23 +3643,6 @@ document.querySelectorAll('#maBody input[data-atr]').forEach(cb => {
     renderMATable();  // 立即按当前勾选过滤已扫描结果
   });
 });
-// 52周位下限 (20260918): 单选挡位, 默认 >50% (=原PASS4的否决口径), 可放宽到 >30%/>20%.
-// 仅作用于周线形态tab(原PASS4所在); 日线均线/背离tab不受此限制.
-let maPos52Min = 0.5;
-function passMaPos52(s){
-  const curPat = MA_PATS[maCurrentTab][0];
-  if(!curPat.startsWith('周线')) return true;   // 非周线tab不限制
-  if(s.w_pos52 == null) return false;           // 无52周位数据 → 不通过
-  return s.w_pos52 > maPos52Min;
-}
-document.querySelectorAll('#maBody input[name="pos52"]').forEach(rb => {
-  rb.addEventListener('change', () => {
-    const v = document.querySelector('#maBody input[name="pos52"]:checked');
-    if(!v) return;
-    maPos52Min = v.value==='gt20' ? 0.2 : (v.value==='gt30' ? 0.3 : 0.5);
-    renderMATable();  // 立即按当前单选挡位过滤已扫描结果
-  });
-});
 
 // 判断当前 tab 是否上试盘子 tab
 function _isSspTab(i){ return (i===undefined?maCurrentTab:i) >= SSP_KIND_TAB_OFFSET; }
@@ -3831,8 +3807,8 @@ function renderMATable(){
   const rawStocks=(maData.patterns[pat]||[]);
   $('#maDesc').textContent=MA_PATS[maCurrentTab][1];
   updateMASortArrows();
-  // --- ATR过滤(20260906, 多选满足其一) + 52周位可选过滤(20260918) + 板块筛选(单选) ---
-  let stocks = rawStocks.slice().filter(passMaAtr).filter(passMaPos52);
+  // --- ATR过滤(20260906, 多选满足其一) + 板块筛选(单选) ---
+  let stocks = rawStocks.slice().filter(passMaAtr);
   if(maFilterConcept){
     stocks = stocks.filter(s=> maSplitConcept(s.concept).includes(maFilterConcept));
   }

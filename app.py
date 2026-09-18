@@ -6378,8 +6378,8 @@ def _weekly_veto_check(bars: list[dict]) -> tuple[bool, dict]:
     # PASS3: 非空头排列
     if m5 < m10 < m20:
         return False, {}
-    # 原PASS4"52周位>=0.5"否决已移到前端, 改为可选单选下限(默认>50%, 可放宽>30%/>20%),
-    # 仅作用于周线形态tab。后端不再硬性否决低位股, w_pos52 照常计算并随快照返回。
+    # (20260918) PASS4"52周位>=0.5"否决已彻底移除, 不再对低位股做任何过滤;
+    # w_pos52 仍照常计算并随快照返回, 仅作展示用。
 
     snapshot = {
         "w_ma5": round(m5, 2), "w_ma10": round(m10, 2), "w_ma20": round(m20, 2),
