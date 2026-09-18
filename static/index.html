@@ -622,14 +622,8 @@
   .sig-badge.sell{background:rgba(38,166,154,.12);color:var(--down);border:1px solid rgba(38,166,154,.4)}
   .sig-badge.wait{background:rgba(108,117,125,.1);color:#9fb0c6;border:1px solid var(--border)}
   .sig-prices{font-size:11px;color:var(--sub);margin-top:3px}
-  /* 统一状态条: 三个后台模块各自的更新时间/状态, 一眼可见数据新鲜度 */
-  .status-strip{display:flex;gap:6px 16px;flex-wrap:wrap;align-items:center;padding:6px 12px;border-radius:8px;
-                background:var(--panel);border:1px solid var(--border);font-size:11px;color:var(--sub);
-                margin-bottom:12px;font-variant-numeric:tabular-nums}
-  .status-strip .ss-item{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
-  .status-strip .ss-k{font-weight:700;color:var(--accent)}
-  .status-strip .dot-live{display:inline-block;width:7px;height:7px;border-radius:50%;background:#26a69a;flex-shrink:0}
-  .status-strip .dot-live.busy{background:var(--gold);animation:sp .9s linear infinite}
+  /* 分组内模块状态文本: 运行中高亮提示 (代替原顶部统一状态条 20260918) */
+  .meta.busy{color:var(--accent);font-weight:700}
   /* ===== 自选股盯盘栏 (statusStrip 下方) ===== */
   .watch-bar{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:12px}
   .watch-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
@@ -840,17 +834,9 @@
 
     <div class="toolbar">
       <span class="meta" id="cacheInfo">加载中…</span>
-      <span class="meta" id="updated"></span>
       <button class="ghost btn-danger-ghost" id="cacheRefreshBtn">刷新</button>
     </div>
   </header>
-
-  <!-- ===== 统一状态条: 各后台模块更新时间/状态 (20260906) ===== -->
-  <div id="statusStrip" class="status-strip">
-    <span class="ss-item"><span class="dot-live" id="ssScreenDot"></span><span class="ss-k">选股</span><span id="ssScreen">—</span></span>
-    <span class="ss-item"><span class="dot-live" id="ssMaDot"></span><span class="ss-k">均线</span><span id="ssMa">—</span></span>
-    <span class="ss-item"><span class="dot-live" id="ssSspDot"></span><span class="ss-k">上试盘</span><span id="ssSsp">—</span></span>
-  </div>
 
   <!-- ===== 自选股盯盘: 添加自选 + 实时涨跌幅 + 预警高亮 (20260918) ===== -->
   <div id="watchBar" class="watch-bar">
@@ -922,6 +908,7 @@
       <div class="card-b" id="condBody" style="display:block;padding-top:14px">
         <div class="cond" id="condGrid"></div>
         <div class="ckbar">
+          <span class="meta" id="condStatus">尚未筛选</span>
           <span class="meta" id="condCnt">已勾选 0 项</span>
           <button class="ghost" id="allBtn">全选</button>
           <button class="ghost" id="noneBtn">全不选</button>
@@ -1204,19 +1191,20 @@ function updateProgLine(sel, txt, running){
     tip.textContent = txt || '处理中…';
   }
 }
-// ---- 统一状态条: 三个后台模块的更新时间/运行状态 ----
+// ---- 模块状态: 写入各自分组内元素 (不再用顶部统一状态条 20260918) ----
 function setStripItem(key, text, busy){
-  const t = document.getElementById('ss'+key), d = document.getElementById('ss'+key+'Dot');
-  if(t) t.textContent = text || '—';
-  if(d) d.classList.toggle('busy', !!busy);
+  const map={Screen:'condStatus', Ma:'maUpdated', Ssp:'maUpdated'};
+  const t = document.getElementById(map[key]);
+  if(t){ t.textContent = text || '—'; t.classList.toggle('busy', !!busy); }
 }
 function syncStatusStrip(){
   const sm = _lastScreenMeta || {};
   setStripItem('Screen', sm.updated ? (sm.updated + (sm.cached?' (缓存)':'')) : '尚未筛选', sm.running);
-  const ma = maData || {};
-  setStripItem('Ma', ma.updated ? (ma.updated + (ma.elapsed_sec?` · ${ma.elapsed_sec}s`:'')) : '尚未筛选', ma.running);
-  const sp = sspData || {};
-  setStripItem('Ssp', sp.updated ? ('更新 '+sp.updated) : '尚未扫描', sp.running);
+  // 均线 + 上试盘 合并显示在均线分组头部 (原顶部状态条已移除 20260918)
+  const ma = maData || {}, sp = sspData || {};
+  const maTxt = ma.updated ? (ma.updated + (ma.elapsed_sec?` · ${ma.elapsed_sec}s`:'')) : '尚未筛选';
+  const spTxt = sp.updated ? ('上试盘 · 更新 '+sp.updated) : '';
+  setStripItem('Ma', spTxt ? (maTxt+' ｜ '+spTxt) : maTxt, !!(ma.running||sp.running));
 }
 // ---- 表格分页 (均线表/主筛选表, 首屏50行, 加载更多) ----
 const PAGE_SIZE = 50;
@@ -1325,8 +1313,8 @@ function connectEvents(){
       // 状态条实时刷新 (仅运行中覆盖文本; 空闲时由下方 ts 变化触发的数据渲染回填,
       // 避免把 syncStatusStrip 已写入的更新时间清成"—" —— 20260906 修复)
       if(d.screen && d.screen.running) setStripItem('Screen', '筛选中…', true);
-      if(d.ma && d.ma.running) setStripItem('Ma', '扫描中…', true);
-      if(d.ssp && d.ssp.running) setStripItem('Ssp', '扫描中…', true);
+      if((d.ma && d.ma.running) || (d.ssp && d.ssp.running)) setStripItem('Ma', '扫描中…', true);
+      if(d.ssp && d.ssp.running) setStripItem('Ssp', '上试盘·扫描中…', true);
       // ts 变化 → 拉取全量数据刷新表格 (比固定轮询更精准)
       if(d.screen && d.screen.ts>0 && d.screen.ts!==_lastEvtTs.screen){
         _lastEvtTs.screen = d.screen.ts;
@@ -1374,8 +1362,6 @@ function render(d, syncConds=true){
   const act=d.active||{gA:1,gB:1,gC:1,gD:1};
   const lgHtml=G_ORDER.filter(([k])=>act[k]).map(([k,l])=>`<span class="lg" title="${l}">${l}</span>`).join('');
   _lastScreenMeta = {updated: d.updated, cached: d.cached, running: d.running};
-  const _updT=String(d.updated||'').match(/\d{1,2}:\d{2}/g);
-  $('#updated').textContent = (_updT&&_updT.length? _updT[_updT.length-1] : (d.updated||'')) + (d.cached?' (缓存)':'');
   syncStatusStrip();
   $('#stats').innerHTML=[
     ['总样本',d.universe],['预筛候选',d.candidates],
