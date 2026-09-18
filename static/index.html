@@ -912,12 +912,12 @@
           <label style="display:inline-flex;align-items:center;gap:5px;margin-right:8px;font-size:13px;cursor:pointer"><input type="checkbox" data-atr="e2" checked> ATR%3~8%（波段弹性）</label>
           <label style="display:inline-flex;align-items:center;gap:5px;margin-right:8px;font-size:13px;cursor:pointer"><input type="checkbox" data-atr="e3" checked> ATR收缩（蓄势）</label>
         </div>
-        <!-- 52周位可选过滤 (20260918): 独立一行, 与ATR过滤分开 -->
+        <!-- 52周位下限 (20260918): 单选, 默认 >50% (对应原PASS4), 可放宽 >30%/>20% -->
         <div class="ckbar" style="margin-bottom:10px">
-          <span class="meta" style="font-weight:700;color:var(--txt)">52周位可选:</span>
-          <label style="display:inline-flex;align-items:center;gap:5px;margin-right:8px;font-size:13px;cursor:pointer"><input type="checkbox" data-pos52="lt20"> 52周位&lt;20%</label>
-          <label style="display:inline-flex;align-items:center;gap:5px;margin-right:8px;font-size:13px;cursor:pointer"><input type="checkbox" data-pos52="lt30"> 52周位&lt;30%</label>
-          <label style="display:inline-flex;align-items:center;gap:5px;margin-right:8px;font-size:13px;cursor:pointer"><input type="checkbox" data-pos52="lt50" checked> 52周位&lt;50%</label>
+          <span class="meta" style="font-weight:700;color:var(--txt)">52周位:</span>
+          <label style="display:inline-flex;align-items:center;gap:5px;margin-right:8px;font-size:13px;cursor:pointer"><input type="radio" name="pos52" value="gt20"> 52周位&gt;20%</label>
+          <label style="display:inline-flex;align-items:center;gap:5px;margin-right:8px;font-size:13px;cursor:pointer"><input type="radio" name="pos52" value="gt30"> 52周位&gt;30%</label>
+          <label style="display:inline-flex;align-items:center;gap:5px;margin-right:8px;font-size:13px;cursor:pointer"><input type="radio" name="pos52" value="gt50" checked> 52周位&gt;50%</label>
         </div>
         <div class="ma-tabs" id="maTabs"></div>
         <div class="ma-tab-desc" id="maDesc"></div>
@@ -3650,20 +3650,21 @@ document.querySelectorAll('#maBody input[data-atr]').forEach(cb => {
     renderMATable();  // 立即按当前勾选过滤已扫描结果
   });
 });
-// 52周位可选过滤 (20260918): 置于ATR过滤区, 多选满足其一, 默认勾选 <50%
-let maPos52Conds = ['lt50'];
+// 52周位下限 (20260918): 单选挡位, 默认 >50% (=原PASS4的否决口径), 可放宽到 >30%/>20%.
+// 仅作用于周线形态tab(原PASS4所在); 日线均线/背离tab不受此限制.
+let maPos52Min = 0.5;
 function passMaPos52(s){
-  if(!maPos52Conds.length) return true;          // 未勾选 → 不过滤
-  if(s.w_pos52 == null) return false;            // 无52周位数据(如旧扫描) → 不通过
-  if(maPos52Conds.includes('lt20') && s.w_pos52 < 0.20) return true;
-  if(maPos52Conds.includes('lt30') && s.w_pos52 < 0.30) return true;
-  if(maPos52Conds.includes('lt50') && s.w_pos52 < 0.50) return true;
-  return false;
+  const curPat = MA_PATS[maCurrentTab][0];
+  if(!curPat.startsWith('周线')) return true;   // 非周线tab不限制
+  if(s.w_pos52 == null) return false;           // 无52周位数据 → 不通过
+  return s.w_pos52 > maPos52Min;
 }
-document.querySelectorAll('#maBody input[data-pos52]').forEach(cb => {
-  cb.addEventListener('change', () => {
-    maPos52Conds = [...document.querySelectorAll('#maBody input[data-pos52]:checked')].map(c => c.dataset.pos52);
-    renderMATable();  // 立即按当前勾选过滤已扫描结果
+document.querySelectorAll('#maBody input[name="pos52"]').forEach(rb => {
+  rb.addEventListener('change', () => {
+    const v = document.querySelector('#maBody input[name="pos52"]:checked');
+    if(!v) return;
+    maPos52Min = v.value==='gt20' ? 0.2 : (v.value==='gt30' ? 0.3 : 0.5);
+    renderMATable();  // 立即按当前单选挡位过滤已扫描结果
   });
 });
 
