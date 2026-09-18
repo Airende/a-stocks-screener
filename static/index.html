@@ -4221,6 +4221,10 @@ function buildWatchPanelSkeleton(panel, code, x){
       <div class="wp-cell" style="flex:1;min-width:150px"><div class="k">承接真伪</div><div class="v" data-f="accept"></div><div class="s" data-f="areason"></div></div>
       <div class="wp-cell" style="flex:1;min-width:150px"><div class="k">做T成本</div><div class="v">~1‰</div><div class="s">差价需≥0.3%, 目标≥1%</div></div>
     </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+      <div class="wp-cell" style="flex:1;min-width:150px"><div class="k">做T卖点(ATR)</div><div class="v" data-f="tsell"></div><div class="s" data-f="tsellnote"></div></div>
+      <div class="wp-cell" style="flex:1;min-width:150px"><div class="k">买点质检 ≥80%</div><div class="v" data-f="tbuyhit"></div><div class="s" data-f="tbuynote"></div></div>
+    </div>
     <div class="wp-note" style="margin-bottom:6px"><b>做T五大门槛</b></div>
     <div class="wp-items" data-f="gate"></div>
     <div class="wp-note" data-f="fundamental"></div>
@@ -4277,6 +4281,12 @@ function updateWatchPanelValues(panel, d, x){
   F('mreason').textContent=x.t_mode_reason||'';
   const accEl=F('accept'); accEl.textContent=x.t_accept||'—'; accEl.className='v '+accCls;
   F('areason').textContent=x.t_accept_note||'';
+  // 做T卖点(ATR) / 买点质检
+  const tsEl=F('tsell'); tsEl.textContent=x.t_sell_point!=null?('≧'+(+x.t_sell_point).toFixed(2)):'—';
+  tsEl.className='v '+(x.op==='买入'?'up':(x.op==='减仓'?'sell':'gold'));
+  F('tsellnote').textContent=x.t_sell_note||'';
+  const tbEl=F('tbuyhit'); tbEl.textContent=x.t_buy_hit||''; tbEl.className='v '+(x.t_buy_ok?'up':'down');
+  F('tbuynote').textContent=x.t_buy_note||'';
   // 门槛 / 基本面 / 一票否决
   F('gate').innerHTML=gateHtml;
   F('fundamental').innerHTML='<b>基本面</b>：'+esc(x.strength_note)+'；量价：'+esc(x.vp_note)+'。';

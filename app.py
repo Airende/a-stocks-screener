@@ -9518,6 +9518,38 @@ _WATCH_PREV: dict[str, tuple[float, float, float]] = {}  # code -> (ts, price, v
 _SPIKE_WINDOW = 310      # 秒: 5 分钟窗口
 _SPIKE_THRESHOLD = 1.2   # %: 窗口内涨幅达到即触发"快速拉升"
 
+# 盯盘做T · ATR(平均真实波幅)内存缓存。日线ATR日内几乎不变, 每10分钟刷新一次即可,
+# 避免每2s对每只自选反复拉历史K线(日K本地有fetch_kline缓存, 本就轻量, 这里再兜一层)。
+_ATR_CACHE: dict[str, tuple[float, float, float]] = {}  # symbol -> (ts, atr_abs, atr_pct)
+_ATR_TTL = 600  # 秒
+
+
+def _get_atr(symbol: str) -> tuple[float, float]:
+    """取近14日日线ATR → (atr_abs绝对价, atr_pct相对%). 失败回退 (0,0) 由调用方用振幅兜底。"""
+    now = time.time()
+    c = _ATR_CACHE.get(symbol)
+    if c and now - c[0] < _ATR_TTL:
+        return c[1], c[2]
+    atr_abs = atr_pct = 0.0
+    try:
+        bars = fetch_kline(symbol, 20)
+        if len(bars) >= 2:
+            trs = []
+            for i in range(1, len(bars)):
+                h, l = float(bars[i].get("high") or 0), float(bars[i].get("low") or 0)
+                pc = float(bars[i - 1].get("close") or bars[i - 1].get("open") or 0)
+                trs.append(max(h - l, abs(h - pc), abs(l - pc)))
+            trs = [t for t in trs if t > 0]
+            if trs:
+                sel = trs[-14:] if len(trs) >= 14 else trs
+                atr_abs = sum(sel) / len(sel)
+                last = float(bars[-1].get("close") or bars[-1].get("open") or 0)
+                atr_pct = atr_abs / last * 100 if last > 0 else 0.0
+    except Exception:
+        atr_abs = atr_pct = 0.0
+    _ATR_CACHE[symbol] = (now, atr_abs, atr_pct)
+    return atr_abs, atr_pct
+
 
 def _load_watchlist() -> list[str]:
     try:
@@ -9677,6 +9709,11 @@ def _watch_quote(codes: list[str]) -> dict:
         if turnover <= 0 and prev_close > 0:
             # 无换手数据时近似: 换手无法从快照推算, 置 0 表示缺失
             turnover = 0.0
+        # ---- ATR(近14日真实波幅): 用于做T卖出参考价的锚定(带缓存, 日线级别日内稳定) ----
+        atr_abs, atr_pct = _get_atr(_to_symbol(code))
+        if atr_abs <= 0:                       # 取数失败 → 用当日振幅近似兜底
+            _a = prev_close * max(amp, 0.5) / 100 if prev_close > 0 else 0.0
+            atr_abs, atr_pct = _a, (amp if _a > 0 else 0.0)
         # ---- 量价配合 (涨放量/跌缩量为健康): 用量比>1 且方向判断 ----
         vp_score = "healthy"  # 默认
         vp_note = "涨放量" if chg_pct >= 0 and vol_ratio >= 1.2 else (
@@ -9820,6 +9857,10 @@ def _watch_quote(codes: list[str]) -> dict:
         chg_high = chg_pct >= 5            # 当日已累积大涨, 属相对高位区
         op = "观望"
         op_reason = "信号未确认, 再等等"
+        # 买点质检结果(默认未达标; 仅回踩低位分支会更新, 供前端展示)
+        buy_ok = False
+        hit_n = 0
+        total_qc = 0
         # 一票否决: 系统性风险 / 深破位 / 明确否决
         if mkt_chg <= -1:
             op, op_reason = "规避", f"大盘跌{mkt_chg:.2f}%>1%, 系统性风险, 暂停买入; 持仓设好止损"
@@ -9839,14 +9880,51 @@ def _watch_quote(codes: list[str]) -> dict:
         elif dev > -3:
             if vp_score == "danger":
                 op, op_reason = "观望", f"下跌放量({vp_note}), 抛压重, 勿接"
-            elif dev >= -2 and vwap_dir != "down" and vp_score in ("healthy", "good"):
-                op, op_reason = "买入", f"回踩均价线下方{dev:+.1f}%企稳、均价线上行, 相对低位, 正T低吸点"
-            elif vwap_dir == "down":
-                op, op_reason = "观望", f"回踩({dev:+.1f}%)但均价线下压, 破位风险, 不接"
             else:
-                op, op_reason = "观望", f"回踩{dev:+.1f}%较深或量能不足, 继续观察, 勿急接"
+                # ---- 买点质检(20260918 收紧): 达标率≥80%且4项硬条件全过 才给"买入" ----
+                # 硬条件(缺一不可): 轻度回踩低位 / 均价线明确向上 / 量价健康 / 大盘稳定
+                buy_qc = [
+                    ("轻度回踩均价线下方",        -2.5 <= dev <= -0.2,    True),
+                    ("均价线明确向上",            vwap_dir == "up",       True),
+                    ("量价健康(非跌放量/背离)",    vp_score in ("healthy", "good"), True),
+                    ("大盘稳定(≥-0.5%)",         mkt_chg >= -0.5,        True),
+                    ("未过热未深破(dev>中位)",     dev > -2.5,             False),
+                    ("振幅有空间(≥2.5%)",        amp >= 2.5,             False),
+                    ("量比活跃(≥1.2)",           vol_ratio >= 1.2,       False),
+                    ("换手适中(1.5~20%)",        turnover <= 0 or 1.5 <= turnover <= 20, False),
+                    ("当日未大涨(<4%)",          chg_pct < 4,            False),
+                    ("做T打分≥3/6",             t_score >= 3,           False),
+                ]
+                hard_ok = all(p for _, p, _h in buy_qc if _h)
+                hit_n = sum(1 for _, p, _ in buy_qc if p)
+                total_qc = len(buy_qc)
+                buy_ok = hard_ok and hit_n / total_qc >= 0.8
+                if buy_ok:
+                    op, op_reason = "买入", (f"回踩均价线下方{dev:+.1f}%企稳、均价线上行、量价健康, "
+                                            f"买点质检{hit_n}/{total_qc}(≥80%), 相对低位正T低吸点")
+                else:
+                    if vwap_dir == "down":
+                        op, op_reason = "观望", f"回踩({dev:+.1f}%)但均价线下压, 破位风险, 不接"
+                    else:
+                        miss = "、".join(k for k, p, _ in buy_qc if not p)
+                        op, op_reason = "观望", f"低吸条件未全达标(质检{hit_n}/{total_qc}), 缺: {miss}"
         else:
             op, op_reason = "观望", "信号不明, 继续观察"
+        # ---- 做T卖出参考价(20260918 按ATR给合理值) ----
+        # 主力参照: 均价线(VWAP)。正T低吸买在均价线下, 止盈目标给到均价线上方约0.5×ATR
+        # (ATR为近14日日波幅, 日内吃到一半已有可观空间且兼顾覆盖交易成本); 同时给分批上限。
+        if above_vwap:
+            # 现价已在均价线上(高位/减仓/反T): 本次高抛点≈现价, 回接参考=均价线-0.5ATR
+            sell_ref = round(price, 2)
+            sell_lo = round(vwap - atr_abs * 0.5, 2)
+            sell_note = (f"高抛≈{sell_ref}, 回接参考{sell_lo} "
+                         f"(均价线-0.5ATR, ATR={atr_pct:.2f}%)" if atr_abs > 0 else "ATR未取到")
+        else:
+            # 现价在均价线下(低吸/正T): 止盈目标=均价线+0.5ATR, 分批上限=均价线+0.8ATR
+            sell_ref = round(vwap + atr_abs * 0.5, 2)
+            sell_hi = round(vwap + atr_abs * 0.8, 2)
+            sell_note = (f"止盈≧{sell_ref}(均价线+0.5ATR), 分批上限{sell_hi}(+0.8ATR), "
+                         f"ATR={atr_pct:.2f}%" if atr_abs > 0 else "ATR未取到")
         # ---- 尾盘持仓决策(清仓/减仓/持仓): 每日最后15分钟完整分析 ----
         tail_act, tail_head, tail_reasons = _tail_position_decision(
             dev, chg_pct, above_vwap, vwap_dir, vp_score, vp_note, strength, mkt_chg)
@@ -9882,6 +9960,14 @@ def _watch_quote(codes: list[str]) -> dict:
             "t_mode_reason": t_mode_reason,
             "t_accept": t_accept,
             "t_accept_note": t_accept_note,
+            # ---- 做T买卖点位 (买点质检收紧 + ATR卖出参考) ----
+            "t_buy_hit": f"{hit_n}/{total_qc}",
+            "t_buy_ok": buy_ok,
+            "t_buy_note": (op_reason if (buy_ok or (dev > -3 and vp_score != "danger" and not above_vwap)) else ""),
+            "t_atr_pct": round(atr_pct, 2),
+            "t_atr_abs": round(atr_abs, 2),
+            "t_sell_point": round(sell_ref, 2),
+            "t_sell_note": sell_note,
             # ---- 实时操作指令(买/卖/观望/规避) ----
             "op": op,
             "op_reason": op_reason,
