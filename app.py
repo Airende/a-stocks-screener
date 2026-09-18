@@ -10078,6 +10078,9 @@ def api_minute_data(symbol: str = ""):
         r.raise_for_status()
         payload = r.json()
         node = payload.get("data", {}).get(symbol, {}) or {}
+        # 指数不绘制 VWAP 均价线: 腾讯指数分时的成交额/量为累计值, 且其单位与点位不匹配,
+        # 强行累加求均价会得到 ~20 的伪均价, 反而把价格线上下区间撑大、整图趋平(见 trade plan)。
+        is_index = symbol.startswith(("sh000", "sz399"))
         raw = (node.get("data") or {}).get("data") or []
         parsed = []
         cum_amt = 0.0
@@ -10095,10 +10098,13 @@ def api_minute_data(symbol: str = ""):
                 continue
             if price <= 0:
                 continue
-            cum_amt += max(amt, 0.0)
-            cum_vol += max(vol, 0.0)
-            # 腾讯分时 volume 单位为手(100股), amount 为元 → 均价=金额/股数=金额/(手*100)
-            avg = round(cum_amt / (cum_vol * 100), 3) if cum_vol > 0 else price
+            if not is_index:
+                cum_amt += max(amt, 0.0)
+                cum_vol += max(vol, 0.0)
+                # 腾讯分时 volume 单位为手(100股), amount 为元 → 均价=金额/股数=金额/(手*100)
+                avg = round(cum_amt / (cum_vol * 100), 3) if cum_vol > 0 else price
+            else:
+                avg = None
             parsed.append({
                 "time": t,
                 "price": round(price, 3),
@@ -10117,6 +10123,7 @@ def api_minute_data(symbol: str = ""):
             prev_close = None
         return JSONResponse({
             "symbol": symbol,
+            "is_index": is_index,
             "prev_close": prev_close,
             "count": len(parsed),
             "data": parsed,
