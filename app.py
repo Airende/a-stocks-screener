@@ -9850,6 +9850,10 @@ def _watch_quote(codes: list[str]) -> dict:
         if atr_abs <= 0:                       # 取数失败 → 用当日振幅近似兜底
             _a = prev_close * max(amp, 0.5) / 100 if prev_close > 0 else 0.0
             atr_abs, atr_pct = _a, (amp if _a > 0 else 0.0)
+        # ---- 按个股股性(ATR%)动态化"健康偏离区间" ----
+        # 原固定 0~+3% 对所有票一刀切: 低波动票(银行 ATR≈0.8%)偏离1%已很热,
+        # 高波动题材票(ATR≈6%)3%只是正常波动。改为 健康上限=0.5×ATR%, 随股性缩放。
+        dev_hi = round(max(atr_pct * 0.5, 0.5), 2)
         # ---- 量价配合 (涨放量/跌缩量为健康): 用量比>1 且方向判断 ----
         vp_score = "healthy"  # 默认
         vp_note = "涨放量" if chg_pct >= 0 and vol_ratio >= 1.2 else (
@@ -9866,13 +9870,13 @@ def _watch_quote(codes: list[str]) -> dict:
                 vp_note = "跌缩量" if chg_pct < 0 else vp_note
         # ---- 强弱标签 (价格 vs 均价线 + 偏离度) ----
         above_vwap = price >= vwap
-        if above_vwap and -3 <= dev <= 3:
+        if above_vwap and -dev_hi <= dev <= dev_hi:
             strength = "强"
-            strength_note = f"站上均价线({dev:+.2f}%), 健康区间"
-        elif above_vwap and dev > 3:
+            strength_note = f"站上均价线({dev:+.2f}%), 健康区间(≤{dev_hi:+.1f}%)"
+        elif above_vwap and dev > dev_hi:
             strength = "过热"
-            strength_note = f"偏离均价线{dev:+.2f}% 过度, 防冲高回落"
-        elif not above_vwap and dev >= -3:
+            strength_note = f"偏离均价线{dev:+.2f}% 过度(超{dev_hi:+.1f}%), 防冲高回落"
+        elif not above_vwap and dev >= -dev_hi:
             strength = "弱"
             strength_note = f"均价线下方({dev:+.2f}%), 反弹看38.2%"
         else:
@@ -9937,7 +9941,7 @@ def _watch_quote(codes: list[str]) -> dict:
         if price < vwap: veto = "均价线下方"
         elif vol_ratio > 0 and chg_pct >= 5 and vol_ratio < 1.0: veto = "缩量涨"
         elif mkt_chg <= -1: veto = f"大盘跌{mkt_chg:.2f}%"
-        elif dev > 3: veto = f"偏离度过热{dev:.2f}%"
+        elif dev > dev_hi: veto = f"偏离度过热{dev:.2f}%(超{dev_hi:+.1f}%)"
         # ---- 做T门槛(五大量化门槛: 振幅/换手/趋势/量价/消息面) ----
         t_gate = []
         t_gate.append({
@@ -10000,12 +10004,12 @@ def _watch_quote(codes: list[str]) -> dict:
         # 一票否决: 系统性风险 / 深破位 / 明确否决
         if mkt_chg <= -1:
             op, op_reason = "规避", f"大盘跌{mkt_chg:.2f}%>1%, 系统性风险, 暂停买入; 持仓设好止损"
-        elif dev <= -3 and not above_vwap:
+        elif dev <= -dev_hi and not above_vwap:
             op, op_reason = "规避", f"深跌破均价线({dev:+.1f}%), 勿接飞刀, 空仓/减仓观望"
         elif veto and dev >= 0:
             op, op_reason = "观望", f"一票否决: {veto}"
         # 逢高卖: 偏离均线偏大, 或 涨幅已大且仍在均价线上 = 日内高位, 不追、偏向减持/高抛
-        elif dev >= 3 or (chg_high and dev >= 1.0):
+        elif dev >= dev_hi or (chg_high and dev >= 1.0):
             op, op_reason = "减仓", f"日内已处高位(偏离均价线{dev:+.1f}%/涨幅{chg_pct:.1f}%), 逢高减/反T卖点, 回落后再接"
         elif dev >= 1.5:
             op, op_reason = "减仓", f"冲高偏离均价线{dev:+.1f}%, 当前位置偏高, 高抛锁利, 不追高"
@@ -10013,7 +10017,7 @@ def _watch_quote(codes: list[str]) -> dict:
         elif above_vwap:
             op, op_reason = "观望", f"股价在均价线上({dev:+.1f}%), 位置偏高别追; 等回踩均价线企稳再正T低吸"
         # 回踩均价线下方(相对低位): 逢低买或观望, 仅轻度回踩企稳才低吸
-        elif dev > -3:
+        elif dev > -dev_hi:
             if vp_score == "danger":
                 op, op_reason = "观望", f"下跌放量({vp_note}), 抛压重, 勿接"
             else:
@@ -10077,6 +10081,7 @@ def _watch_quote(codes: list[str]) -> dict:
             # ---- 研判字段 ----
             "vwap": vwap,
             "dev": dev,
+            "dev_hi": dev_hi,
             "amp": amp,
             "vol_ratio": vol_ratio,
             "turnover": turnover,

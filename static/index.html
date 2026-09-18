@@ -4407,7 +4407,7 @@ function buildWatchPanelSkeleton(panel, code, x){
     <div class="wp-grid">
       <div class="wp-cell"><div class="k">现价</div><div class="v" data-f="price"></div><div class="s" data-f="vpnote"></div></div>
       <div class="wp-cell"><div class="k">均价线 VWAP</div><div class="v" data-f="vwap"></div><div class="s" data-f="vwdir"></div></div>
-      <div class="wp-cell"><div class="k">偏离度</div><div class="v" data-f="dev"></div><div class="s">0~+3%健康</div></div>
+      <div class="wp-cell"><div class="k">偏离度</div><div class="v" data-f="dev"></div><div class="s" data-f="devnote"></div></div>
       <div class="wp-cell"><div class="k">量比</div><div class="v" data-f="volratio"></div><div class="s">≥1.5活跃</div></div>
       <div class="wp-cell"><div class="k">振幅</div><div class="v" data-f="amp"></div><div class="s">≥3%适合做T</div></div>
       <div class="wp-cell"><div class="k">换手率</div><div class="v" data-f="turnover"></div><div class="s">资金活跃度</div></div>
@@ -4470,6 +4470,7 @@ function updateWatchPanelValues(panel, d, x){
   F('vwap').textContent=(+x.vwap||0).toFixed(3);
   F('vwdir').textContent='较上次'+vwdirTxt;
   const devEl=F('dev'); devEl.textContent=(+x.dev||0).toFixed(2)+'%'; devEl.className='v '+devCls;
+  const dn=F('devnote'); if(dn) dn.textContent='0~+'+((+x.dev_hi||0).toFixed(1))+'%健康(0.5×ATR股性)';
   const volEl=F('volratio'); volEl.textContent=(+x.vol_ratio||0).toFixed(2); volEl.className='v '+(x.vol_ratio>=1.5?'up':'gold');
   F('amp').textContent=(+x.amp||0).toFixed(2)+'%';
   F('turnover').textContent=(+x.turnover||0).toFixed(2)+'%';
