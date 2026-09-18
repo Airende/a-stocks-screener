@@ -4614,8 +4614,9 @@ function paintMin(canvas, pts, prevClose, mini, ewPct, stock){
   if(pts.every(p=>p.avg!=null)) drawLine(pts.map(p=>p.avg), AVG, mini?1:1.4);
   drawLine(pts.map(p=>p.price), PRICE, stock? (mini?1.1:1.8):(mini?0.8:1.2));
   if(!mini) paintMinAxes(ctx,w,h,lx,rx,spanX,prevClose,lo,hi,Y);
-  // 记录坐标映射, 供悬停十字线反推价格/涨跌幅
-  canvas.__geo={top,bot,lx,rx,spanX,lo,hi,prevClose,mini,h};
+  // 记录坐标映射 + 每个数据点的横坐标/时间/真实价格, 供悬停吸附到真实数据点
+  canvas.__geo={top,bot,lx,rx,spanX,lo,hi,prevClose,mini,h,
+    pts:xArr.map((xloc,i)=>({x:xloc, t:pts[i]&&pts[i].time, price:pts[i]&&pts[i].price}))};
 }
 
 // 展开面板分时图的底部时间轴 + 价格阶梯
@@ -4709,34 +4710,36 @@ function bindMinFollow(canvas, code){
     const x=ev.clientX-rect.left, y=ev.clientY-rect.top;
     // 仅绘图区内响应
     if(x<g.lx || x>g.rx || y<g.top || y>g.h-g.bot){ mf.style.display='none'; return; }
-    // y -> 价格
+    // 吸附到横坐标最近的真实数据点: 显示该分钟的时间/真实价格/真实涨跌幅(而非鼠标y轴反推)
+    let best=null, bd=Infinity;
+    const pts=g.pts||[];
+    for(const p of pts){ const d=Math.abs(p.x-x); if(d<bd){ bd=d; best=p; } }
+    if(!best || best.price==null){ mf.style.display='none'; return; }
+    const v=best.price;
+    // 该真实价格对应的 y (Y 映射)
     const drawH=g.h-g.top-g.bot;
-    const v = g.hi - (y-g.top)/drawH*(g.hi-g.lo);
+    const py = g.h - (v-g.lo)/(g.hi-g.lo)*drawH;
     const pct = g.prevClose>0 ? (v-g.prevClose)/g.prevClose*100 : 0;
     mf.style.display='block';
-    line.style.left=(x)+'px';
-    bar.style.top=(y)+'px';
+    line.style.left=(best.x)+'px';
+    bar.style.top=(py)+'px';
     const fmt=v>=1000? v.toFixed(1) : v.toFixed(2);
     const pcol = pct>0.001?'#ff5d5d':(pct<-0.001?'#3ec98f':'var(--sub)');
     tipP.textContent=fmt;
     tipP.style.color=pcol;
-    tipPC.textContent=(pct>=0?'+':'')+pct.toFixed(2)+'%  '+timeAt(x,g);
+    tipPC.textContent=(pct>=0?'+':'')+pct.toFixed(2)+'%  '+mmMin(best.t);
     tipPC.style.color=pcol;
     // 避免遮挡绘图: 靠右时提示左移
     const tip=mf.querySelector('.mf-tip');
-    tip.style.left = (x>g.rx-150? g.rx-(tipP.textContent.length+tipPC.textContent.length)*6-160 : x)+'px';
+    tip.style.left=(best.x>g.rx-150 ? g.rx-150 : best.x)+'px';
   });
   mc.addEventListener('mouseleave', ()=>{ mf.style.display='none'; });
 }
-// 由像素 x 反推交易时间 "HH:MM"
-function timeAt(x,g){
-  const f=Math.max(0,Math.min(1,(x-g.lx)/g.spanX));
-  return minClock(f);
-}
-function minClock(f){
-  const m=Math.round(f*240);
-  const clock=m<=120?570+m:660+m;
-  return ('0'+Math.floor(clock/60)).slice(-2)+':'+('0'+(clock%60)).slice(-2);
+// 分时时间 "HHMM" -> "HH:MM" (直接展示数据点的真实分钟时间)
+function mmMin(t){
+  const s=String(t||'').replace(':','').slice(0,4);
+  if(s.length<4) return '';
+  return s.slice(0,2)+':'+s.slice(2,4);
 }
 
 function drawMiniSparks(){
