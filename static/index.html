@@ -756,6 +756,15 @@
   .legend .l-pc .sq{background:rgba(159,176,198,.5)}
   .minchart .nodata{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
                     font-size:12px;color:var(--sub);z-index:2;pointer-events:none}
+  /* 分时图悬停十字线 + 价格/涨跌幅提示 (DOM 叠加, 避免被 canvas 重绘清掉) */
+  .minchart .mf{position:absolute;inset:0;z-index:3;pointer-events:none;display:none}
+  .minchart .mf .mf-line{position:absolute;top:0;bottom:0;width:0;border-left:1px dashed rgba(159,176,198,.6)}
+  .minchart .mf .mf-bar{position:absolute;left:0;right:0;height:0;border-top:1px dashed rgba(159,176,198,.4)}
+  .minchart .mf .mf-tip{position:absolute;top:8px;transform:translateX(10px);padding:3px 8px;border:1px solid var(--border);
+                        border-radius:6px;background:rgba(10,12,20,.92);font:600 11px/1.5 monospace;white-space:nowrap;
+                        box-shadow:0 2px 10px rgba(0,0,0,.35)}
+  .minchart .mf .mf-tip .p{color:var(--accent)}
+  .minchart .mf .mf-tip .pc{color:var(--sub)}
   /* 盯盘卡片迷你分时图 */
   .mini-spark{width:calc(100% - 2px);height:30px;margin:2px 0 0;display:block;opacity:.95}
   /* 危险操作按钮: 红色 ghost 样式, 与普通按钮区分 */
@@ -4204,6 +4213,7 @@ function buildWatchPanelSkeleton(panel, code, x){
         <i class="l-pc"><span class="sq"></span>昨收</i>
       </div>
       <canvas id="minChart${cd}"></canvas>
+      <div class="mf" id="minFollow${cd}"><div class="mf-line"></div><div class="mf-bar"></div><div class="mf-tip"><span class="p"></span> <span class="pc"></span></div></div>
       <div class="nodata" id="minNoData${cd}">分时加载中…</div>
     </div>
     <div class="wp-grid">
@@ -4391,6 +4401,8 @@ function paintMin(canvas, pts, prevClose, mini){
   drawLine(pts.map(p=>p.avg), '#f5c842', mini?1:1.6);    // 均价线(金)
   drawLine(pts.map(p=>p.price), '#4f9dff', mini?1.1:1.8); // 价格线(蓝)
   if(!mini) paintMinAxes(ctx,w,h,lx,rx,spanX,prevClose,lo,hi,Y);
+  // 记录坐标映射, 供悬停十字线反推价格/涨跌幅
+  canvas.__geo={top,bot,lx,rx,spanX,lo,hi,prevClose,mini,h};
 }
 
 // 展开面板分时图的底部时间轴 + 价格阶梯
@@ -4453,9 +4465,58 @@ function loadMinChart(code, symbol, prevClose){
     const pc = resp.prev_close!=null ? resp.prev_close : prevClose;
     try{ paintMin(canvas, pts, pc, false); }
     catch(err){ if(nodata){ nodata.style.display='flex'; nodata.textContent='绘制错误: '+(err&&err.message); window.__pterr=err; } }
+    bindMinFollow(canvas, code);
   }).catch((e)=>{
     if(nodata){ nodata.style.display='flex'; nodata.textContent='分时数据加载失败: '+(e&&e.message); }
   });
+}
+
+// 分时图悬停: 十字线 + 显示鼠标所在位置的价格/涨跌幅 (DOM 叠加, 不随 canvas 重绘清除)
+function bindMinFollow(canvas, code){
+  if(!canvas || canvas.__minBound) return;
+  canvas.__minBound=true;
+  const mc=canvas.closest('.minchart');
+  if(!mc) return;
+  const mf=mc.querySelector('.mf'); if(!mf) return;
+  const line=mf.querySelector('.mf-line');
+  const bar=mf.querySelector('.mf-bar');
+  const tipP=mf.querySelector('.mf-tip .p');
+  const tipPC=mf.querySelector('.mf-tip .pc');
+  mc.addEventListener('mousemove', ev=>{
+    const g=canvas.__geo;
+    if(!g || g.mini){ mf.style.display='none'; return; }
+    const rect=mc.getBoundingClientRect();
+    const x=ev.clientX-rect.left, y=ev.clientY-rect.top;
+    // 仅绘图区内响应
+    if(x<g.lx || x>g.rx || y<g.top || y>g.h-g.bot){ mf.style.display='none'; return; }
+    // y -> 价格
+    const drawH=g.h-g.top-g.bot;
+    const v = g.hi - (y-g.top)/drawH*(g.hi-g.lo);
+    const pct = g.prevClose>0 ? (v-g.prevClose)/g.prevClose*100 : 0;
+    mf.style.display='block';
+    line.style.left=(x)+'px';
+    bar.style.top=(y)+'px';
+    const fmt=v>=1000? v.toFixed(1) : v.toFixed(2);
+    const pcol = pct>0.001?'#ff5d5d':(pct<-0.001?'#3ec98f':'var(--sub)');
+    tipP.textContent=fmt;
+    tipP.style.color=pcol;
+    tipPC.textContent=(pct>=0?'+':'')+pct.toFixed(2)+'%  '+timeAt(x,g);
+    tipPC.style.color=pcol;
+    // 避免遮挡绘图: 靠右时提示左移
+    const tip=mf.querySelector('.mf-tip');
+    tip.style.left = (x>g.rx-150? g.rx-(tipP.textContent.length+tipPC.textContent.length)*6-160 : x)+'px';
+  });
+  mc.addEventListener('mouseleave', ()=>{ mf.style.display='none'; });
+}
+// 由像素 x 反推交易时间 "HH:MM"
+function timeAt(x,g){
+  const f=Math.max(0,Math.min(1,(x-g.lx)/g.spanX));
+  return minClock(f);
+}
+function minClock(f){
+  const m=Math.round(f*240);
+  const clock=m<=120?570+m:660+m;
+  return ('0'+Math.floor(clock/60)).slice(-2)+':'+('0'+(clock%60)).slice(-2);
 }
 
 function drawMiniSparks(){
