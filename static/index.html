@@ -692,6 +692,12 @@
   .watch-card.alarm-limit-up{border-color:var(--up);box-shadow:0 0 0 1px var(--up) inset}
   .watch-card.alarm-limit-down{border-color:var(--down);box-shadow:0 0 0 1px var(--down) inset}
   .watch-card.alarm-spike{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset}
+  /* 选中(展开)态提示: 高亮 + 按操作建议着色边框 */
+  .watch-card.selected{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset, 0 0 12px rgba(120,120,255,.25);background:rgba(120,120,255,.08)}
+  .watch-card.selected.sel-buy{border-color:var(--up);box-shadow:0 0 0 1px var(--up) inset, 0 0 12px rgba(239,68,68,.35);background:rgba(239,68,68,.10)}
+  .watch-card.selected.sel-sell{border-color:var(--down);box-shadow:0 0 0 1px var(--down) inset, 0 0 12px rgba(52,211,153,.28);background:rgba(52,211,153,.08)}
+  .watch-card.selected.sel-avoid{border-color:#94a3b8;box-shadow:0 0 0 1px #94a3b8 inset;background:rgba(148,163,184,.06)}
+  .watch-card.selected.sel-watch{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset, 0 0 10px rgba(251,191,36,.25);background:rgba(251,191,36,.06)}
   .watch-empty{font-size:11px;color:var(--sub);padding:6px 2px}
   /* ---- 盯盘实时研判面板 ---- */
   .watch-panel{margin-top:10px;border:1px solid var(--border);border-radius:8px;
@@ -4123,8 +4129,8 @@ function renderWatch(d){
     // 就地更新 class 与文本 (canvas 不销毁, 由 drawMiniSparks 持续重绘)
     const pcl=x.chg_pct>0?'up':(x.chg_pct<0?'down':'flat');
     const alarm = x.limit==='up' ? 'alarm-limit-up' : (x.limit==='down' ? 'alarm-limit-down' : (x.spike==='spike' ? 'alarm-spike' : ''));
-    const sel = cd===_activeWatchCode ? ' selected' : '';
-    el.className='watch-card '+pcl+' '+alarm+sel;
+    const sel = cd===_activeWatchCode ? (' selected sel-'+((x.op==='买入')?'buy':(x.op==='减仓'?'sell':(x.op==='规避'?'avoid':'watch')))) : '';
+    el.className='watch-card '+pcl+' '+alarm+' '+sel;
     const symEl=el.querySelector('.mini-spark');
     symEl.setAttribute('data-symbol', x.symbol||'');
     el.querySelector('.chg').textContent=(pcl==='up'?'+':(pcl==='down'?'':''))+(+x.chg_pct||0).toFixed(2)+'%';
