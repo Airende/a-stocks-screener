@@ -5319,6 +5319,26 @@ def _to_symbol(code: str) -> str:
     return "sz" + code
 
 
+def _sym_candidates(code: str) -> list[str]:
+    """按代码推导可能的交易所前缀候选(去重, 默认前缀置前)。
+    用于快照缺失时的腾讯单测兜底, 避免前缀推导错误导致漏判。"""
+    syms = [_to_symbol(code)]
+
+    bare = code.strip()
+    if bare.lower().startswith(("sh", "sz", "bj")):
+        bare = bare[2:]
+    if syms[0][:2] == "bj":
+        others = ["sz" + bare, "sh" + bare]
+    elif syms[0][:2] == "sh":
+        others = ["sz" + bare, "bj" + bare]
+    else:
+        others = ["sh" + bare, "bj" + bare]
+    for o in others:
+        if o not in syms:
+            syms.append(o)
+    return syms
+
+
 def fetch_stock_profile(code: str) -> dict:
     """从新浪公司简介页获取主营业务等信息"""
     import re as _re
@@ -9536,6 +9556,16 @@ def _watch_quote(codes: list[str]) -> dict:
     for code in codes:
         row = by_code.get(code)
         if not row:
+            # 快照(备源仅覆盖本地股票池)可能漏掉个别自选, 用腾讯按前缀单测兜底
+            try:
+                for sym_try in _sym_candidates(code):
+                    hits = _fetch_spot_tencent([sym_try])
+                    if hits and hits[0].get("code") == code:
+                        row = hits[0]
+                        break
+            except Exception:
+                row = None
+        if not row:
             continue
         try:
             price = float(row.get("trade") or 0)
@@ -9594,7 +9624,8 @@ def api_watchlist_add(payload: dict):
     code = _normalize_wcode(payload.get("code", ""))
     if not code:
         return JSONResponse({"error": "无效股票代码"}, status_code=400)
-    # 校验该代码存在于实时快照(取名称)
+    # 校验该代码有效并取名称: 先查实时快照; 快照不全(备源只覆盖本地股票池)时
+    # 用腾讯按前缀单测兜底, 避免 002080 等合法个股因快照缺失被误判为不存在
     name = ""
     try:
         for r in fetch_spot_all():
@@ -9603,6 +9634,20 @@ def api_watchlist_add(payload: dict):
                 break
     except Exception:
         pass
+    if not name:
+        try:
+            sym = _to_symbol(code)  # 默认按代码规则推导前缀
+            hits = _fetch_spot_tencent([sym])
+            if not hits:
+                # 前缀可能推导错, 尝试另一个常见前缀
+                prefix = "sh" if sym.startswith("sz") else "sz"
+                hits = _fetch_spot_tencent([prefix + code])
+                if not hits and not sym.startswith("bj"):
+                    hits = _fetch_spot_tencent(["bj" + code])
+            if hits and hits[0].get("code") == code:
+                name = str(hits[0].get("name") or "")
+        except Exception:
+            pass
     if not name:
         return JSONResponse({"error": f"未在行情池中找到代码 {code}"}, status_code=404)
     with _WATCH_LOCK:
