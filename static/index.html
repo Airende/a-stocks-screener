@@ -4344,12 +4344,11 @@ function paintMin(canvas, pts, prevClose, mini){
   // X 轴定位: 优先按真实交易时间(09:30~15:00)排布; 时间解析失败时回退等距
   const xf=pts.map(_minFrac);
   const useTime=xf.every(f=>f>=0);
-  // 展开图左侧预留价格刻度、右侧预留涨跌刻度
-  const pad=mini?2:6, padL=mini?2:38, padR=mini?2:46, top=mini?2:8, bot=mini?2:20;
-  const spanX=w-padL-padR;
+  const pad=mini?2:6, top=mini?2:8, bot=mini?2:20;
+  const spanX=w-pad*2;
   const xArr = useTime
-    ? pts.map((_,i)=> padL+xf[i]*spanX)
-    : pts.map((_,i)=> pts.length>1 ? padL+i/(pts.length-1)*spanX : (padL+padR)/2+w/2);
+    ? pts.map((_,i)=> pad+xf[i]*spanX)
+    : pts.map((_,i)=> pts.length>1 ? pad+i/(pts.length-1)*spanX : w/2);
   let lo=Infinity, hi=-Infinity;
   pts.forEach(p=>{ lo=Math.min(lo,p.price,p.avg); hi=Math.max(hi,p.price,p.avg); });
   if(prevClose){ lo=Math.min(lo,prevClose); hi=Math.max(hi,prevClose); }
@@ -4366,59 +4365,32 @@ function paintMin(canvas, pts, prevClose, mini){
   };
   if(prevClose){
     ctx.setLineDash([mini?2:3, mini?2:3]); ctx.strokeStyle='rgba(159,176,198,.55)'; ctx.lineWidth=1;
-    ctx.beginPath(); ctx.moveTo(padL, Y(prevClose)); ctx.lineTo(w-padR, Y(prevClose)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(pad, Y(prevClose)); ctx.lineTo(w-pad, Y(prevClose)); ctx.stroke();
     ctx.setLineDash([]);
   }
   drawLine(pts.map(p=>p.avg), '#f5c842', mini?1:1.6);    // 均价线(金)
   drawLine(pts.map(p=>p.price), '#4f9dff', mini?1.1:1.8); // 价格线(蓝)
-  if(!mini) paintMinAxes(ctx,w,h,padL,padR,spanX, prevClose, lo, hi, Y);
+  if(!mini) paintMinAxes(ctx,w,h,pad,spanX);
 }
 
-// 展开面板分时图: 网格 + 底部时间轴(09:30 10:30 11:30 14:00 15:00) + 左侧价格阶梯 + 右侧涨跌阶梯
-// 参数: padL 左侧刻度区宽; padR 右侧刻度区宽; spanX 绘图区宽; lo/hi 数据上下限; Y 价格->y 映射
-function paintMinAxes(ctx,w,h,padL,padR,spanX, prevClose, lo, hi, Y){
-  const axisY=h-20;
-  const top=8;
-  const hRange=(h-top-axisY)>0 ? (h-top-axisY) : 1;   // 绘图区高度
-  const F=f=>top+f*hRange;                              // f∈[0,1] -> y
+// 展开面板分时图的底部时间轴 + 网格 (09:30 10:30 11:30 14:00 15:00)
+function paintMinAxes(ctx,w,h,pad,spanX){
+  const axisY=h-14;
+  ctx.strokeStyle='rgba(159,176,198,.18)'; ctx.lineWidth=1; ctx.setLineDash([]);
+  ctx.beginPath(); ctx.moveTo(pad,axisY); ctx.lineTo(w-pad,axisY); ctx.stroke();
   // 纵向网格线
   ctx.strokeStyle='rgba(159,176,198,.08)';
   [0.25,0.5,0.75].forEach(f=>{
-    ctx.beginPath(); const x=padL+f*spanX; ctx.moveTo(x,top); ctx.lineTo(x,axisY); ctx.stroke();
+    ctx.beginPath(); const x=pad+f*spanX; ctx.moveTo(x,1); ctx.lineTo(x,axisY); ctx.stroke();
   });
-  // 横向网格线 + 价格阶梯(左) + 涨跌阶梯(右)
-  ctx.font='10px monospace'; ctx.textBaseline='middle';
-  const pce = prevClose>0 ? prevClose : (hi+lo)/2 || 1;
-  [0,0.25,0.5,0.75,1].forEach(f=>{
-    const y=F(f);
-    const isPrevChg = Math.abs(pce-hi-f*(hi-lo)) < (hi-lo)*0.06;  // 该刻度线是否贴近昨收
-    ctx.strokeStyle= isPrevChg ? 'rgba(159,176,198,.28)' : 'rgba(159,176,198,.10)';
-    ctx.lineWidth=1; ctx.setLineDash(isPrevChg?[]:[2,3]);
-    ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(w-padR,y); ctx.stroke();
-    ctx.setLineDash([]);
-    const val = hi - f*(hi-lo);
-    // 左侧: 价格刻度
-    const dec = val>=1000?1 : val>=100?2 : val>=10?3 : 3;
-    ctx.textAlign='right'; ctx.fillStyle='rgba(159,176,198,.8)';
-    ctx.fillText(val.toFixed(dec), padL-5, y);
-    // 右侧: 涨跌刻度(相对昨收)
-    const chg = (val-pce)/pce*100;
-    ctx.textAlign='left';
-    const cSign = chg>0.01 ? '#e05c5c' : chg<-0.01 ? '#35a464' : 'rgba(159,176,198,.75)';
-    ctx.fillStyle=cSign;
-    ctx.fillText((chg>0?'+':'')+chg.toFixed(2)+'%', w-padR+5, y);
-  });
-  // 底部时间轴横线
-  ctx.strokeStyle='rgba(159,176,198,.18)';
-  ctx.beginPath(); ctx.moveTo(padL,axisY); ctx.lineTo(w-padR,axisY); ctx.stroke();
   // 时间标签
-  ctx.fillStyle='rgba(159,176,198,.82)'; ctx.textBaseline='top';
+  ctx.fillStyle='rgba(159,176,198,.82)'; ctx.font='10px monospace'; ctx.textBaseline='top';
   [0,0.25,0.5,0.75,1].forEach(f=>{
     const m=Math.round(f*240);
     const clock = m<=120 ? 570+m : 660+m;           // 反向换算回时钟, 午休后从13:00续
     const hh=('0'+Math.floor(clock/60)).slice(-2);
     const mm=('0'+(clock%60)).slice(-2);
-    const x=padL+f*spanX;
+    const x=pad+f*spanX;
     ctx.textAlign = f<=0.05 ? 'left' : f>=0.95 ? 'right' : 'center';
     ctx.fillText(hh+':'+mm, x, axisY+3);
   });
