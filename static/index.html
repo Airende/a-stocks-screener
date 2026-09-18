@@ -4389,7 +4389,7 @@ function paintMinAxes(ctx,w,h,lx,lw,spanX,prevClose,lo,hi,Y){
     const y = Y(v);
     ctx.strokeStyle = i===0 ? 'rgba(255,255,255,.25)' : 'rgba(159,176,198,.10)';
     ctx.lineWidth = i===0 ? 1 : 1;
-    ctx.beginPath(); ctx.moveTo(lx, y); ctx.lineTo(w-pad, y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(lx, y); ctx.lineTo(lx+spanX, y); ctx.stroke();
     // 左侧价位文本
     ctx.fillStyle='rgba(159,176,198,.75)'; ctx.font='10px monospace'; ctx.textAlign='right';
     ctx.fillText(hiFmt(v), lx-3, y);
@@ -4404,7 +4404,7 @@ function paintMinAxes(ctx,w,h,lx,lw,spanX,prevClose,lo,hi,Y){
   }
   // —— 底部时间轴 ——
   ctx.strokeStyle='rgba(159,176,198,.18)'; ctx.lineWidth=1; ctx.setLineDash([]);
-  ctx.beginPath(); ctx.moveTo(lx,axisY); ctx.lineTo(w-pad,axisY); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(lx,axisY); ctx.lineTo(lx+spanX,axisY); ctx.stroke();
   // 纵向网格线(避让左栏)
   ctx.strokeStyle='rgba(159,176,198,.08)';
   [0.25,0.5,0.75].forEach(f=>{
@@ -4433,9 +4433,10 @@ function loadMinChart(code, symbol, prevClose){
     const resp=c.resp||{};
     const pts=(resp.data)||[];
     const pc = resp.prev_close!=null ? resp.prev_close : prevClose;
-    paintMin(canvas, pts, pc, false);
-  }).catch(()=>{
-    if(nodata){ nodata.style.display='flex'; nodata.textContent='分时数据加载失败'; }
+    try{ paintMin(canvas, pts, pc, false); }
+    catch(err){ if(nodata){ nodata.style.display='flex'; nodata.textContent='绘制错误: '+(err&&err.message); window.__pterr=err; } }
+  }).catch((e)=>{
+    if(nodata){ nodata.style.display='flex'; nodata.textContent='分时数据加载失败: '+(e&&e.message); }
   });
 }
 
