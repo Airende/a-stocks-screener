@@ -4559,8 +4559,9 @@ function _minFrac(p){
   return -1;
 }
 
-// 统一绘制: 价格线(白) + 均价线(红) + 等权平均(黄, 仅指数 hover) + 昨收虚线 + 时间轴
-function paintMin(canvas, pts, prevClose, mini, ewPct){
+// 统一绘制: 指数hover用 白价格线 + 红均价线 + 黄等权线;
+// 自选盯盘/个股(stock=true)用回原配色: 蓝价格线 + 金均价线
+function paintMin(canvas, pts, prevClose, mini, ewPct, stock){
   if(!canvas) return;
   const w=canvas.clientWidth=canvas.offsetWidth||0;
   const h=canvas.clientHeight=canvas.offsetHeight||0;
@@ -4571,6 +4572,8 @@ function paintMin(canvas, pts, prevClose, mini, ewPct){
   ctx.setTransform(dpr,0,0,dpr,0,0);
   ctx.clearRect(0,0,w,h);
   if(!pts.length) return;
+  const PRICE= stock ? '#4f9dff' : '#ffffff';   // 价格线: 自选盯盘蓝 / 指数hover白
+  const AVG  = stock ? '#f5c842' : '#ff5d5d';   // 均价线: 自选盯盘金 / 指数hover红
   // X 轴定位: 优先按真实交易时间(09:30~15:00)排布; 时间解析失败时回退等距
   const xf=pts.map(_minFrac);
   const useTime=xf.every(f=>f>=0);
@@ -4623,9 +4626,9 @@ function paintMin(canvas, pts, prevClose, mini, ewPct){
     }
     ctx.stroke();
   }
-  // 均价线(红)
-  if(pts.every(p=>p.avg!=null)) drawLine(pts.map(p=>p.avg), '#ff5d5d', mini?1:1.4);
-  drawLine(pts.map(p=>p.price), '#ffffff', mini?0.8:1.2); // 价格线(白) 线条变细
+  // 均价线(红/金)
+  if(pts.every(p=>p.avg!=null)) drawLine(pts.map(p=>p.avg), AVG, mini?1:1.4);
+  drawLine(pts.map(p=>p.price), PRICE, stock? (mini?1.1:1.8):(mini?0.8:1.2));
   if(!mini) paintMinAxes(ctx,w,h,lx,rx,spanX,prevClose,lo,hi,Y);
   // 记录坐标映射, 供悬停十字线反推价格/涨跌幅
   canvas.__geo={top,bot,lx,rx,spanX,lo,hi,prevClose,mini,h};
@@ -4689,7 +4692,7 @@ function loadMinChart(code, symbol, prevClose){
     const resp=c.resp||{};
     const pts=(resp.data)||[];
     const pc = resp.prev_close!=null ? resp.prev_close : prevClose;
-    try{ paintMin(canvas, pts, pc, false); }
+    try{ paintMin(canvas, pts, pc, false, undefined, true); }
     catch(err){ if(nodata){ nodata.style.display='flex'; nodata.textContent='绘制错误: '+(err&&err.message); window.__pterr=err; } }
     bindMinFollow(canvas, code);
   }).catch((e)=>{
@@ -4751,7 +4754,7 @@ function drawMiniSparks(){
     if(!symbol) return;
     getMinData(symbol).then(c=>{
       if(!document.body.contains(cv)) return;   // 已重建, 由下一次 render 负责绘制
-      paintMin(cv, (c.resp&&c.resp.data)||[], c.resp&&c.resp.prev_close, true);
+      paintMin(cv, (c.resp&&c.resp.data)||[], c.resp&&c.resp.prev_close, true, undefined, true);
     }).catch(()=>{});
   });
 }
