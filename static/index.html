@@ -4724,29 +4724,33 @@ function bindMinFollow(canvas, code){
     const x=ev.clientX-rect.left, y=ev.clientY-rect.top;
     // 仅绘图区内响应
     if(x<g.lx || x>g.rx || y<g.top || y>g.h-g.bot){ mf.style.display='none'; return; }
-    // 吸附到横坐标最近的真实数据点: 显示该分钟的时间/真实价格/真实涨跌幅(而非鼠标y轴反推)
+    // 吸附到横坐标最近的真实数据点: 该点价格用于"鼠标边浮框"显示该分钟真实价/涨跌幅
     let best=null, bd=Infinity;
     const pts=g.pts||[];
     for(const p of pts){ const d=Math.abs(p.x-x); if(d<bd){ bd=d; best=p; } }
     if(!best || best.price==null){ mf.style.display='none'; return; }
-    const v=best.price;
-    // 该真实价格对应的 y (Y 映射: 与 paintMin 画线一致, 顶部 top 起算, 避免横虚线错位)
+    // Y 映射 (与 paintMin 画线一致, 顶部 top 起算)
     const drawH=g.h-g.top-g.bot;
-    const py = g.top + (g.hi-v)/(g.hi-g.lo)*drawH;
-    const pct = g.prevClose>0 ? (v-g.prevClose)/g.prevClose*100 : 0;
+    // 鼠标所在 y 反推的"价位/涨跌幅" → 横虚线跟随鼠标, 侧标签标该价位
+    const vy = g.hi - (y-g.top)/drawH*(g.hi-g.lo);
+    const pctY = g.prevClose>0 ? (vy-g.prevClose)/g.prevClose*100 : 0;
+    const fmtY = vy>=1000? vy.toFixed(1) : vy.toFixed(2);
+    const pcolY = pctY>0.001?'#ff5d5d':(pctY<-0.001?'#3ec98f':'var(--sub)');
     mf.style.display='block';
+    // 竖虚线仍吸附到该分钟, 横虚线跟随鼠标 y
     line.style.left=(best.x)+'px';
-    bar.style.top=(py)+'px';
+    bar.style.top=(y)+'px';
+    tagL.style.top=(y)+'px'; tagL.textContent=fmtY; tagL.style.color=pcolY;
+    tagR.style.top=(y)+'px'; tagR.textContent=(pctY>=0?'+':'')+pctY.toFixed(2)+'%'; tagR.style.color=pcolY;
+    // 鼠标边浮框: 仍显示吸附分钟的真实价格/涨跌幅(而非鼠标 y 反推)
+    const v=best.price;
+    const pct = g.prevClose>0 ? (v-g.prevClose)/g.prevClose*100 : 0;
     const fmt=v>=1000? v.toFixed(1) : v.toFixed(2);
     const pcol = pct>0.001?'#ff5d5d':(pct<-0.001?'#3ec98f':'var(--sub)');
     tipP.textContent=fmt;
     tipP.style.color=pcol;
     tipPC.textContent=(pct>=0?'+':'')+pct.toFixed(2)+'%  '+mmMin(best.t);
     tipPC.style.color=pcol;
-    // 左右坐标轴标签: 横虚线两端标注当前价(左)/涨幅(右), 随横线对齐
-    const pctTxt=(pct>=0?'+':'')+pct.toFixed(2)+'%';
-    tagL.style.top=py+'px'; tagL.textContent=fmt; tagL.style.color=pcol;
-    tagR.style.top=py+'px'; tagR.textContent=pctTxt; tagR.style.color=pcol;
     // 避免遮挡绘图: 靠右时提示左移
     const tip=mf.querySelector('.mf-tip');
     tip.style.left=(best.x>g.rx-150 ? g.rx-150 : best.x)+'px';
