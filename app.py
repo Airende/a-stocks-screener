@@ -576,6 +576,10 @@ def _fetch_spot_tencent(codes: list[str]) -> list[dict]:
                     "changepercent": _f(32),
                     "amount": _f(37) * 1e4,
                     "nmc": _f(44) * 1e4,
+                    # 盘中研判附加: 量比(字段49, 腾讯"量比"为当日每分钟均量/近5日每分钟均量)
+                    "volume_ratio": _f(49) if len(f) > 49 else 0.0,
+                    # 换手率(字段38, %)
+                    "turnover": _f(38) if len(f) > 38 else 0.0,
                 })
             except Exception:  # noqa: BLE001
                 continue
@@ -9508,7 +9512,7 @@ def index():
 _WATCHLIST_FILE = os.path.join(CACHE_DIR, "watchlist.json")
 _WATCH_LOCK = threading.Lock()
 # code -> (上次快照时间, 上次现价); 用于盘中 5 分钟快速拉升(spike)预警
-_WATCH_PREV: dict[str, tuple[float, float]] = {}
+_WATCH_PREV: dict[str, tuple[float, float, float]] = {}  # code -> (ts, price, vwap)
 _SPIKE_WINDOW = 310      # 秒: 5 分钟窗口
 _SPIKE_THRESHOLD = 1.2   # %: 窗口内涨幅达到即触发"快速拉升"
 
@@ -9543,13 +9547,36 @@ def _normalize_wcode(raw: str) -> str:
 
 
 def _watch_quote(codes: list[str]) -> dict:
-    """从全市场实时快照中提取自选行情 + 涨停/跌停/快速拉升预警 + 涨跌家数聚合。"""
+    """自选行情 + 完整盘中研判: 均价线(VWAP)/偏离度/量能量比/振幅/强弱结论/做T打分。
+    - VWAP = 当日累计成交额 / 累计成交量 (均价线, 分组中心裁判)
+    - 偏离度 = (现价-均价线)/均价线, 0~+3%健康, 偏离度越大越过热
+    - 做T打分: 按量化总表 6 项打分, ≥4 可做正T, ≤2 不做
+    - 附带大盘环境(上证指数涨跌幅, 用于 -0.5%~+1% 打分与大跌>1% 一票否决)"""
     spot = fetch_spot_all()
     by_code = {}
     for r in spot:
         c = str(r.get("code") or "")
         if c:
             by_code.setdefault(c, r)
+    # 新浪主源不含量比/换手, 用腾讯接口按自选批量补一次真实量比/换手 (做T打分第4项依赖)
+    tc_extra = {}
+    try:
+        for _tr in _fetch_spot_tencent([_to_symbol(c) for c in codes]):
+            _c = str(_tr.get("code") or "")
+            if _c:
+                tc_extra[_c] = _tr
+    except Exception:
+        tc_extra = {}
+    # 大盘环境: 取上证指数涨跌幅 (基准环境)
+    mkt_chg = 0.0
+    try:
+        idx = _get_idx_rt_data().get("indices") or []
+        for it in idx:
+            if str(it.get("symbol")) == "sh000001":
+                mkt_chg = float(it.get("chg_pct") or 0)
+                break
+    except Exception:
+        mkt_chg = 0.0
     quotes = []
     now = time.time()
     trading = _is_trading_time()
@@ -9571,25 +9598,120 @@ def _watch_quote(codes: list[str]) -> dict:
             price = float(row.get("trade") or 0)
             chg_pct = float(row.get("changepercent") or 0)
             name = str(row.get("name") or code)
+            o = float(row.get("open") or 0)
+            hi = float(row.get("high") or 0)
+            lo = float(row.get("low") or 0)
+            vol = float(row.get("volume") or 0)
+            amt = float(row.get("amount") or 0)
         except (TypeError, ValueError):
             continue
-        prev_close = round(price / (1 + chg_pct / 100), 2) if price and chg_pct != 0 else 0.0
+        if not price:
+            continue
+        prev_close = round(price / (1 + chg_pct / 100), 2) if chg_pct != 0 else float(row.get("prev_close") or 0)
         chg = round(price - prev_close, 2)
+        # ---- 均价线 VWAP 与偏离度 ----
+        vwap = round(amt / vol, 3) if vol > 0 else price
+        dev = round((price - vwap) / vwap * 100, 2) if vwap > 0 else 0.0
+        # ---- 振幅 % (当日高-低)/昨收 ----
+        amp = round((hi - lo) / prev_close * 100, 2) if prev_close > 0 and hi > 0 and lo > 0 else 0.0
+        # ---- 量能 ----
+        vol_ratio = float(row.get("volume_ratio") or 0)  # 腾讯真实量比; 新浪主源无此项
+        turnover = float(row.get("turnover") or 0)
+        if not vol_ratio and tc_extra and tc_extra.get(code):
+            vol_ratio = float(tc_extra[code].get("volume_ratio") or 0)
+        if not turnover and tc_extra and tc_extra.get(code):
+            turnover = float(tc_extra[code].get("turnover") or 0)
+        if turnover <= 0 and prev_close > 0:
+            # 无换手数据时近似: 换手无法从快照推算, 置 0 表示缺失
+            turnover = 0.0
+        # ---- 量价配合 (涨放量/跌缩量为健康): 用量比>1 且方向判断 ----
+        vp_score = "healthy"  # 默认
+        vp_note = "涨放量" if chg_pct >= 0 and vol_ratio >= 1.2 else (
+                 "涨缩量" if chg_pct >= 0 else (
+                 "跌放量" if vol_ratio >= 1.2 else "跌缩量"))
+        if vol_ratio > 0:
+            if chg_pct >= 0 and vol_ratio < 1.0:
+                vp_score, vp_note = "weak", "涨缩量·疑似背离"
+            elif chg_pct < 0 and vol_ratio >= 1.5:
+                vp_score, vp_note = "danger", "跌放量·抛压重"
+            elif chg_pct >= 0 and vol_ratio >= 1.2:
+                vp_score, vp_note = "good", "涨放量·健康上攻"
+            else:
+                vp_note = "跌缩量" if chg_pct < 0 else vp_note
+        # ---- 强弱标签 (价格 vs 均价线 + 偏离度) ----
+        above_vwap = price >= vwap
+        if above_vwap and -3 <= dev <= 3:
+            strength = "强"
+            strength_note = f"站上均价线({dev:+.2f}%), 健康区间"
+        elif above_vwap and dev > 3:
+            strength = "过热"
+            strength_note = f"偏离均价线{dev:+.2f}% 过度, 防冲高回落"
+        elif not above_vwap and dev >= -3:
+            strength = "弱"
+            strength_note = f"均价线下方({dev:+.2f}%), 反弹看38.2%"
+        else:
+            strength = "弱势"
+            strength_note = f"深跌偏离{dev:+.2f}%, 杀跌持续, 勿接飞刀"
+        # ---- 均价线趋势 (较上次采样) ----
+        vwap_dir = ""
+        prev_v = _WATCH_PREV.get(code)
+        if prev_v and (now - prev_v[0]) <= _SPIKE_WINDOW and prev_v[2] > 0:
+            d_vwap = (vwap - prev_v[2]) / prev_v[2] * 100
+            vwap_dir = "up" if d_vwap > 0.03 else ("down" if d_vwap < -0.03 else "flat")
+        # ---- spike 快速拉升预警 (窗口内涨幅) ----
+        spike = ""
+        if trading and price > 0:
+            if prev_v and 0 < now - prev_v[0] <= _SPIKE_WINDOW:
+                dt = (price - prev_v[1]) / prev_v[1] * 100 if prev_v[1] else 0
+                if dt >= _SPIKE_THRESHOLD:
+                    spike = "spike"
+            _WATCH_PREV[code] = (now, price, vwap)
+        else:
+            _WATCH_PREV.pop(code, None)
         limit = ""
         if _spot_is_limit_up(code, name, chg_pct):
             limit = "up"
         elif _spot_is_limit_down(code, name, chg_pct):
             limit = "down"
-        spike = ""
-        if trading and price > 0:
-            prev = _WATCH_PREV.get(code)
-            if prev and 0 < now - prev[0] <= _SPIKE_WINDOW:
-                dt = (price - prev[1]) / prev[1] * 100 if prev[1] else 0
-                if dt >= _SPIKE_THRESHOLD:
-                    spike = "spike"
-            _WATCH_PREV[code] = (now, price)
+        # ---- 做T打分卡 (6 项, 量化总表) ----
+        t_score = 0
+        t_items = []
+        if price >= vwap:
+            t_score += 1; t_items.append({"k": "股价在均价线上方", "pass": 1})
         else:
-            _WATCH_PREV.pop(code, None)
+            t_items.append({"k": "股价在均价线上方", "pass": 0})
+        if vwap_dir == "up":
+            t_score += 1; t_items.append({"k": "均价线向上", "pass": 1})
+        else:
+            t_items.append({"k": "均价线向上", "pass": 0})
+        if amp >= 3:
+            t_score += 1; t_items.append({"k": "当日振幅≥3%", "pass": 1})
+        else:
+            t_items.append({"k": "当日振幅≥3%", "pass": 0})
+        if vol_ratio >= 1.5:
+            t_score += 1; t_items.append({"k": "分时量比≥1.5", "pass": 1})
+        else:
+            t_items.append({"k": "分时量比≥1.5", "pass": 0})
+        if -0.5 <= mkt_chg <= 1:
+            t_score += 1; t_items.append({"k": "大盘-0.5%~+1%", "pass": 1})
+        else:
+            t_items.append({"k": "大盘-0.5%~+1%", "pass": 0})
+        if chg_pct > 0:
+            t_score += 1; t_items.append({"k": "自身今日红盘", "pass": 1})
+        else:
+            t_items.append({"k": "自身今日红盘", "pass": 0})
+        if t_score >= 4:
+            t_advice = "可做正T"
+        elif t_score <= 2:
+            t_advice = "坚决不做"
+        else:
+            t_advice = "观望"
+        # ---- 一票否决提示 ----
+        veto = ""
+        if price < vwap: veto = "均价线下方"
+        elif vol_ratio > 0 and chg_pct >= 5 and vol_ratio < 1.0: veto = "缩量涨"
+        elif mkt_chg <= -1: veto = f"大盘跌{mkt_chg:.2f}%"
+        elif dev > 3: veto = f"偏离度过热{dev:.2f}%"
         quotes.append({
             "code": code,
             "symbol": _to_symbol(code),
@@ -9600,12 +9722,29 @@ def _watch_quote(codes: list[str]) -> dict:
             "chg_pct": round(chg_pct, 2),
             "limit": limit,
             "spike": spike,
+            # ---- 研判字段 ----
+            "vwap": vwap,
+            "dev": dev,
+            "amp": amp,
+            "vol_ratio": vol_ratio,
+            "turnover": turnover,
+            "vp_score": vp_score,
+            "vp_note": vp_note,
+            "above_vwap": above_vwap,
+            "vwap_dir": vwap_dir,
+            "strength": strength,
+            "strength_note": strength_note,
+            "t_score": t_score,
+            "t_items": t_items,
+            "t_advice": t_advice,
+            "veto": veto,
         })
     up = sum(1 for q in quotes if q["chg_pct"] > 0)
     down = sum(1 for q in quotes if q["chg_pct"] < 0)
     flat = len(quotes) - up - down
     return {
         "updated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "mkt_chg": mkt_chg,
         "quotes": quotes,
         "sum": {"up": up, "down": down, "flat": flat},
     }

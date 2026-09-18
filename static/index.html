@@ -669,6 +669,42 @@
   .watch-card.alarm-limit-down{border-color:var(--down);box-shadow:0 0 0 1px var(--down) inset}
   .watch-card.alarm-spike{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset}
   .watch-empty{font-size:11px;color:var(--sub);padding:6px 2px}
+  /* ---- 盯盘实时研判面板 ---- */
+  .watch-panel{margin-top:10px;border:1px solid var(--border);border-radius:8px;
+               background:rgba(255,255,255,.03);padding:12px 14px;animation:fadeIn .18s ease}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+  .wp-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+  .wp-head .nm{font-size:15px;font-weight:800;color:var(--txt)}
+  .wp-head .cd{font-size:11px;color:var(--sub)}
+  .wp-head .st{font-size:12px;font-weight:700;padding:2px 8px;border-radius:10px}
+  .wp-head .st.strong{color:var(--up);background:rgba(255,70,70,.12)}
+  .wp-head .st.over{color:var(--gold);background:rgba(250,184,57,.12)}
+  .wp-head .st.weak{color:var(--down);background:rgba(0,200,120,.12)}
+  .wp-head .st.weakest{color:#bbb;background:rgba(255,255,255,.1)}
+  .wp-head .close{margin-left:auto;cursor:pointer;color:var(--sub);font-size:14px;padding:2px 6px;border-radius:4px}
+  .wp-head .close:hover{color:var(--txt);background:rgba(255,255,255,.08)}
+  .wp-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:10px}
+  .wp-cell{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:6px;padding:7px 10px}
+  .wp-cell .k{font-size:10px;color:var(--sub);margin-bottom:2px}
+  .wp-cell .v{font-size:14px;font-weight:700;color:var(--txt);font-variant-numeric:tabular-nums}
+  .wp-cell .v.up{color:var(--up)} .wp-cell .v.down{color:var(--down)}
+  .wp-cell .v.gold{color:var(--gold)}
+  .wp-cell .s{font-size:10px;color:var(--sub);margin-top:1px}
+  .wp-score{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+  .wp-score .lbl{font-size:12px;font-weight:700;color:var(--sub)}
+  .wp-score .num{font-size:20px;font-weight:800;color:var(--txt)}
+  .wp-score .num.up{color:var(--up)} .wp-score .num.mid{color:var(--gold)} .wp-score .num.low{color:var(--down)}
+  .wp-score .adv{font-size:12px;font-weight:700;padding:2px 10px;border-radius:10px}
+  .wp-score .adv.do{color:var(--up);background:rgba(255,70,70,.12)}
+  .wp-score .adv.no{color:var(--down);background:rgba(0,200,120,.12)}
+  .wp-score .adv.watch{color:var(--gold);background:rgba(250,184,57,.12)}
+  .wp-items{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:5px 14px;margin-bottom:10px}
+  .wp-item{font-size:11px;color:var(--sub);display:flex;align-items:center;gap:6px}
+  .wp-item .dot{width:7px;height:7px;border-radius:50%;flex:none}
+  .wp-item .dot.on{background:var(--up)} .wp-item .dot.off{background:rgba(255,255,255,.2)}
+  .wp-note{font-size:11px;color:var(--sub);background:rgba(255,255,255,.03);border-radius:4px;
+           padding:5px 8px}
+  .wp-note b{color:var(--txt)}
   /* 危险操作按钮: 红色 ghost 样式, 与普通按钮区分 */
   button.btn-danger-ghost{background:transparent;border:1px solid rgba(239,68,68,.45);color:var(--down)}
   button.btn-danger-ghost:hover{background:rgba(239,68,68,.08)}
@@ -751,6 +787,7 @@
       </div>
     </div>
     <div class="watch-wrap"><div class="watch-cards" id="watchCards"></div></div>
+    <div class="watch-panel" id="watchPanel" style="display:none"></div>
   </div>
 
   <div class="main-tabs" id="mainTabs">
@@ -3994,9 +4031,13 @@ async function loadIndicesRealtime(){
 async function loadWatch(){
   try{
     const r=await fetch('/api/watchlist'); const d=await r.json();
+    _watchData=d;
     renderWatch(d);
+    if(_activeWatchCode) renderWatchPanel(_activeWatchCode);
   }catch(e){}
 }
+let _watchData=null;      // 最近一次 /api/watchlist 响应
+let _activeWatchCode=null; // 当前展开研判面板的自选代码
 function renderWatch(d){
   const cards=document.getElementById('watchCards'); const agg=document.getElementById('watchAgg');
   if(!cards) return;
@@ -4010,14 +4051,75 @@ function renderWatch(d){
     const sgn=x.chg>0?'+':(x.chg<0?'-':'');
     const nm=esc(x.name||x.code), cd=esc(x.code);
     const limTxt = x.limit==='up' ? ' ·涨停' : (x.limit==='down' ? ' ·跌停' : (x.spike==='spike' ? ' ·拉升' : ''));
-    return `<div class="watch-card ${pcl} ${alarm}" title="点击查看分析${limTxt}"
-        onclick="gotoStockAnalyze('${cd}','${nm}')">
+    const sel = cd===_activeWatchCode ? ' selected' : '';
+    return `<div class="watch-card ${pcl} ${alarm}${sel}" title="点击查看盘中研判"
+        onclick="selectWatch('${cd}')">
       <span class="rm" title="移除" onclick="event.stopPropagation();delWatch('${cd}')">✕</span>
       <span class="chg">${pcl==='up'?'+':(pcl==='down'?'':'')}${(+x.chg_pct||0).toFixed(2)}%</span>
       <span class="sub"><span class="px">${(+x.price||0).toFixed(2)}</span><span class="chgamt">${sgn}${Math.abs(+x.chg||0).toFixed(2)}</span></span>
       <span class="nm">${nm}</span>
     </div>`;
   }).join('');
+}
+function selectWatch(code){
+  _activeWatchCode = (code===_activeWatchCode) ? null : code;
+  const panel=document.getElementById('watchPanel');
+  if(!_activeWatchCode){ panel.style.display='none'; panel.innerHTML=''; }
+  else { renderWatchPanel(_activeWatchCode); reloadWatchCardsSelected(); }
+  renderWatch(_watchData||{quotes:[],sum:{}});
+}
+function reloadWatchCardsSelected(){
+  const cards=document.getElementById('watchCards');
+  if(!cards||!_watchData) return;
+  Array.prototype.forEach.call(cards.querySelectorAll('.watch-card'),el=>{
+    const hasSel=el.classList.contains('selected');
+    // 已由 renderWatch 统一处理; 占位
+  });
+}
+function renderWatchPanel(code){
+  const panel=document.getElementById('watchPanel');
+  if(!panel) return;
+  const d=_watchData; if(!d) return;
+  const x=(d.quotes||[]).find(q=>q.code===code);
+  if(!x){ panel.style.display='none'; panel.innerHTML=''; return; }
+  panel.style.display='block';
+  const nm=esc(x.name||x.code), cd=esc(x.code);
+  const stCls = x.strength==='强'?'strong' : (x.strength==='过热'?'over' : (x.strength==='弱'?'weak':'weakest'));
+  const devCls = x.dev>0?'up':(x.dev<0?'down':'');
+  const mktCls = d.mkt_chg>0?'up':(d.mkt_chg<0?'down':'');
+  const vpCls = x.vp_score==='good'?'up':(x.vp_score==='danger'?'down':(x.vp_score==='weak'?'gold':''));
+  const vwdirTxt = x.vwap_dir==='up'?'向上':(x.vwap_dir==='down'?'向下':'走平');
+  const scCls = x.t_score>=4?'up':(x.t_score<=2?'low':'mid');
+  const advCls = x.t_advice==='可做正T'?'do':(x.t_advice==='坚决不做'?'no':'watch');
+  const items=(x.t_items||[]).map(t=>`<div class="wp-item"><span class="dot ${t.pass?'on':'off'}"></span>${esc(t.k)}</div>`).join('');
+  const vetoHtml = x.veto ? `<div class="wp-note" style="margin-top:8px">⚠ <b>一票否决:</b> ${esc(x.veto)} — 放弃买入</div>` : '';
+  panel.innerHTML=`
+    <div class="wp-head">
+      <span class="nm">${nm}</span><span class="cd">${cd}</span>
+      <span class="st ${stCls}">${esc(x.strength)}</span>
+      <span class="close" title="关闭" onclick="selectWatch('${cd}')">✕</span>
+    </div>
+    <div class="wp-grid">
+      <div class="wp-cell"><div class="k">现价</div><div class="v">${(+x.price||0).toFixed(2)}</div><div class="s">${esc(x.vp_note)}</div></div>
+      <div class="wp-cell"><div class="k">均价线 VWAP</div><div class="v">${(+x.vwap||0).toFixed(3)}</div><div class="s">较上次${vwdirTxt}</div></div>
+      <div class="wp-cell"><div class="k">偏离度</div><div class="v ${devCls}">${(+x.dev||0).toFixed(2)}%</div><div class="s">0~+3%健康</div></div>
+      <div class="wp-cell"><div class="k">量比</div><div class="v ${x.vol_ratio>=1.5?'up':'gold'}">${(+x.vol_ratio||0).toFixed(2)}</div><div class="s">≥1.5活跃</div></div>
+      <div class="wp-cell"><div class="k">振幅</div><div class="v">${(+x.amp||0).toFixed(2)}%</div><div class="s">≥3%适合做T</div></div>
+      <div class="wp-cell"><div class="k">换手率</div><div class="v">${(+x.turnover||0).toFixed(2)}%</div><div class="s">资金活跃度</div></div>
+      <div class="wp-cell"><div class="k">大盘上证</div><div class="v ${mktCls}">${(+d.mkt_chg||0).toFixed(2)}%</div><div class="s">-0.5~+1%为佳</div></div>
+      <div class="wp-cell"><div class="k">涨跌幅</div><div class="v ${x.chg_pct>=0?'up':'down'}">${x.chg_pct>=0?'+':''}${(+x.chg_pct||0).toFixed(2)}%</div><div class="s">${esc(x.strength_note)}</div></div>
+    </div>
+    <div class="wp-score">
+      <span class="lbl">做T打分</span>
+      <span class="num ${scCls}">${x.t_score}/6</span>
+      <span class="adv ${advCls}">${esc(x.t_advice)}</span>
+    </div>
+    <div class="wp-items">${items}</div>
+    <div class="wp-note"><b>基本面</b>：${esc(x.strength_note)}；量价：${esc(x.vp_note)}。</div>
+    ${vetoHtml}
+    <div style="margin-top:10px;display:flex;gap:8px">
+      <button class="btn btn-primary" onclick="gotoStockAnalyze('${cd}','${nm}')">打开完整个股分析</button>
+    </div>`;
 }
 async function delWatch(code){
   try{
