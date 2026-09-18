@@ -18,7 +18,7 @@
   .wrap{max-width:1400px;margin:0 auto;padding:20px}
   header{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px}
   .hdr-clock{flex:0 0 auto}
-  .idx-bar{flex:1 1 auto;min-width:260px;max-width:560px}
+  .idx-bar{flex:0 0 auto}
   .toolbar{flex:0 0 auto;margin-left:auto}
   h1{font-size:22px;margin:0;display:flex;align-items:center;gap:10px}
   .hdr-clock{display:flex;flex-direction:column;align-items:flex-start;gap:2px;line-height:1.15;color:var(--txt);cursor:default}
@@ -440,25 +440,17 @@
   .ma-dist.expanded .ma-dist-tags{flex-wrap:wrap;max-height:none;overflow:visible}
   .ma-dist-toggle{flex-shrink:0;cursor:pointer;color:var(--accent);font-weight:600;padding:0 4px;border-radius:3px;white-space:nowrap}
   .ma-dist-toggle:hover{background:var(--border)}
-  /* ===== 顶栏市场信息 (右侧, 上下结构) ===== */
-  .idx-bar{display:flex;flex-direction:column;align-items:flex-start;gap:4px;
-          padding:6px 12px;border-radius:10px;background:var(--panel);border:1px solid var(--border)}
-  .idx-overview{display:flex;align-items:center;gap:8px;padding-bottom:4px;border-bottom:1px solid var(--border);width:100%}
-  .idx-ov-label{font-size:10.5px;color:var(--sub)}
-  .idx-ov-value{font-size:13px;font-weight:700;color:var(--gold)}
-  .idx-cards{width:100%;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
-  .idx-card{flex:1;padding:4px 10px;border-radius:6px;background:var(--bg);border:1px solid var(--border);
-            display:flex;align-items:baseline;gap:4px;min-width:0;transition:.15s}
-  .idx-card:hover{border-color:var(--accent)}
-  .idx-card-name{font-size:11.5px;font-weight:600;color:var(--sub);flex-shrink:0;min-width:56px}
-  .idx-card-price{font-size:19px;font-weight:800;letter-spacing:-.3px;line-height:1.0;font-variant-numeric:tabular-nums}
+  /* ===== 顶栏市场信息 (紧贴时钟右侧, 参照自选卡片样式; 无外框) ===== */
+  .idx-bar{display:flex;align-items:center;padding:0;margin:0;background:transparent;border:none;border-radius:0}
+  .idx-card{position:relative;min-width:118px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;
+            background:rgba(255,255,255,.02);transition:.15s}
+  .idx-card:hover{border-color:var(--accent);background:rgba(255,255,255,.05)}
+  .idx-card-name{display:block;font-size:12px;font-weight:700;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .idx-card-price{display:block;font-size:20px;font-weight:800;line-height:1.15;font-variant-numeric:tabular-nums;margin-top:1px}
   .idx-card-price.up{color:var(--up)}
   .idx-card-price.down{color:var(--down)}
-  .idx-card-chg{font-size:9.5px;font-weight:700;flex-shrink:0;white-space:nowrap}
-  @media (max-width: 800px){
-    .idx-card{min-width:0}
-    .idx-cards{grid-template-columns:1fr}
-  }
+  .idx-card-chg{display:block;font-size:9.5px;font-weight:700;color:var(--sub);white-space:nowrap}
+  .idx-cards{display:flex;gap:8px;min-width:min-content}
   /* ===== 股票标记徽章 ===== */
   .mark-badge{display:inline-flex;align-items:center;justify-content:center;
               width:18px;height:18px;border-radius:4px;margin-left:4px;font-size:13px;font-weight:800;
@@ -837,12 +829,8 @@
       <div class="sub"><a href="https://52etf.site/" target="_blank" rel="noopener" title="大盘云图 (52ETF)" aria-label="大盘云图" class="hm-link"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg>大盘云图</a></div>
     </div>
 
-    <!-- ===== 市场信息 (右侧, 上下结构) ===== -->
+    <!-- ===== 市场信息 (紧贴时钟右侧, 参照自选卡片样式) ===== -->
     <div id="idxBar" class="idx-bar">
-      <div class="idx-overview">
-        <span class="idx-ov-label">市场</span>
-        <span id="idxOverall" class="idx-ov-value">加载中…</span>
-      </div>
       <div id="idxCards" class="idx-cards">
         <div class="empty">加载指数数据…</div>
       </div>
@@ -4077,11 +4065,12 @@ function renderMarketSnap(d){
     const c=+idx.chg_pct||0;
     const up=c>0, dn=c<0;
     const clr=up?'var(--up)':(dn?'var(--down)':'var(--sub)');
-    const sign=up?'+':'';
+    const sign=up?'+':(dn?'-':'');
+    const amt=Math.abs(+idx.chg||0).toFixed(2);
     return `<div class="idx-card">
       <span class="idx-card-name" title="${esc(idx.name)}">${esc(idx.name)}</span>
+      <span class="idx-card-chg" style="color:${clr}">${sign==='+'?'+':''}${c.toFixed(2)}% · ${sign==='+'?'+':'-'}${amt===0?'0.00':amt}</span>
       <span class="idx-card-price ${up?'up':(dn?'down':'flat')}" style="color:${clr}">${idx.price.toFixed(2)}</span>
-      <span class="idx-card-chg" style="color:${clr}">${sign}${c.toFixed(2)}%</span>
     </div>`;
   }).join('');
 }
