@@ -4151,7 +4151,6 @@ function initWatchDrag(){
     offsetX=e.clientX-st.left; offsetY=e.clientY-st.top;
     suppressClick=null;
     try{ card.setPointerCapture?.(e.pointerId); }catch(_){}
-    card.classList.add('armed','drag-hint');
     timer=setTimeout(()=>{ // 长按达成 → 进入拖拽
       if(!dragEl || !cards.contains(dragEl)){ cancel(); return; }
       armed=true; dragging=true;
