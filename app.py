@@ -8715,14 +8715,50 @@ def _kv_list(prefix: str) -> list[str]:
         return []
 
 
+def _kv_delete(key: str) -> bool:
+    """从云端删除单个 key (用于信号归档的保留天数清理); 未启用云端返回 False"""
+    backend = _kv_storage_init()
+    if backend == "supabase_rest":
+        try:
+            status, _ = _kv_supabase_rest("DELETE", f"?key=eq.{key}")
+            return status in (200, 204)
+        except Exception as e:  # noqa: BLE001
+            _kv_log(f"REST 删除 {key} 失败: {e}")
+            return False
+    if backend not in ("postgres", "sqlite"):
+        return False
+    try:
+        if _storage_backend == "postgres":
+            conn = _kv_connect_postgres()
+            ph = "%s"
+        else:
+            conn = _kv_connect_sqlite()
+            ph = "?"
+        try:
+            cur = conn.cursor()
+            cur.execute(f"DELETE FROM kv_state WHERE key={ph}", (key,))
+            conn.commit()
+        finally:
+            conn.close()
+        return True
+    except Exception as e:  # noqa: BLE001
+        _kv_log(f"删除 {key} 失败: {e}")
+        return False
+
+
 # ============================================================
 # 每日信号归档 (20260906): 选股/均线形态/上试盘结果按日存档, 供历史复盘
-# 云端: kv_state key = 'signals_<YYYY-MM-DD>'; 未配云端时: cache/signal_history.json
+# 云端(Postgres/Supabase/sqlite): kv_state key = 'signals_<YYYY-MM-DD>';
+# 未配云端时: cache/signal_history.json
 # 每日一条记录, 三个模块各自更新自己的 section (同日重扫覆盖当日数据);
-# 本地文件最多保留 _SIGNAL_KEEP_DAYS 天, 云端数据量极小暂不清理。
-# ============================================================
+# 云端与本地均只保留最近 _SIGNAL_KEEP_DAYS 天(默认 1 个月, 每日写入时自动清理过期).
 _SIGNAL_HISTORY_FILE = _os.path.join(CACHE_DIR, "signal_history.json")
-_SIGNAL_KEEP_DAYS = 120
+_SIGNAL_KEEP_DAYS = 30
+
+
+def _cloud_active() -> bool:
+    """是否启用了任意云端后端 (postgres / sqlite / supabase_rest)"""
+    return _kv_storage_init() in ("postgres", "sqlite", "supabase_rest")
 
 
 def _archive_local_load() -> dict:
@@ -8736,8 +8772,22 @@ def _archive_local_save(d: dict) -> None:
     _kv_write_local_file(_SIGNAL_HISTORY_FILE, {k: d[k] for k in keys})
 
 
+def _archive_prune() -> None:
+    """清理云端超过保留天数的旧 signals_* key (每日最多执行一次)"""
+    today = bj_now()[:10]
+    if getattr(_archive_prune, "_last", "") == today:
+        return
+    _archive_prune._last = today
+    if not _cloud_active():
+        return
+    keys = _kv_list("signals_")  # 新→旧
+    for k in keys[_SIGNAL_KEEP_DAYS:]:
+        if _kv_delete(k):
+            _kv_log(f"信号归档清理过期(key={k})")
+
+
 def _archive_get(date: str) -> dict | None:
-    if _kv_storage_init() in ("postgres", "sqlite"):
+    if _cloud_active():
         cloud = _kv_get(f"signals_{date}")
         if cloud is not None:
             return cloud
@@ -8751,12 +8801,13 @@ def _archive_put(date: str, section: str, payload: dict) -> None:
     rec[section] = payload
     rec["date"] = date
     rec["updated_at"] = bj_now()
-    if _kv_storage_init() in ("postgres", "sqlite"):
+    if _cloud_active():
         if not _kv_set(f"signals_{date}", rec):
             _kv_log(f"信号归档上云失败({date}/{section}), 仅保留本地镜像")
     local = _archive_local_load()
     local[date] = rec
     _archive_local_save(local)
+    _archive_prune()
 
 
 def _archive_dates() -> list[str]:
