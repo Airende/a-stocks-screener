@@ -4214,9 +4214,9 @@ async function delWatch(code){
   btn.onclick=doAdd;
   loadWatch();
 })();
-setInterval(loadWatch, 3000);
+setInterval(loadWatch, 2000);
 loadMarketSnap();
-setInterval(loadMarketSnap, 3000);
+setInterval(loadMarketSnap, 2000);
 function _tickIndices(){
   loadIndicesRealtime();
   setTimeout(_tickIndices, _idxTickMs);

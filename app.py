@@ -716,7 +716,7 @@ def _get(url: str, params: dict | None = None, timeout: int = 15) -> Any:
 # ============================================================
 # fetch_spot_all 内存缓存: 避免选股时每只股票补全当日bar都重复拉全市场快照
 _SPOT_MEM_CACHE = {"data": None, "ts": 0.0}
-_SPOT_MEM_TTL = 3  # 行情快照每3秒刷新, 同步降低spot缓存TTL
+_SPOT_MEM_TTL = 2  # 行情快照每2秒刷新, 同步降低spot缓存TTL
 
 
 def fetch_spot_all() -> list[dict]:
@@ -9552,21 +9552,23 @@ def _watch_quote(codes: list[str]) -> dict:
     - 偏离度 = (现价-均价线)/均价线, 0~+3%健康, 偏离度越大越过热
     - 做T打分: 按量化总表 6 项打分, ≥4 可做正T, ≤2 不做
     - 附带大盘环境(上证指数涨跌幅, 用于 -0.5%~+1% 打分与大跌>1% 一票否决)"""
-    spot = fetch_spot_all()
+    # 盯盘口径: 直接用腾讯按自选批量取实时(自带量比/换手, ~0.1s, 不依赖全市场快照)。
+    # → 支持真正秒级/2s刷新; 仅当腾讯漏票时再回退全市场快照补缺(慢路径极少触发)。
     by_code = {}
-    for r in spot:
-        c = str(r.get("code") or "")
-        if c:
-            by_code.setdefault(c, r)
-    # 新浪主源不含量比/换手, 用腾讯接口按自选批量补一次真实量比/换手 (做T打分第4项依赖)
-    tc_extra = {}
     try:
         for _tr in _fetch_spot_tencent([_to_symbol(c) for c in codes]):
             _c = str(_tr.get("code") or "")
             if _c:
-                tc_extra[_c] = _tr
+                by_code.setdefault(_c, _tr)
     except Exception:
-        tc_extra = {}
+        by_code = {}
+    if len(by_code) < len(codes):  # 腾讯漏票(新股/北交所等) → 全市场快照补缺
+        _spot_rows = fetch_spot_all()
+        for r in _spot_rows:
+            _c = str(r.get("code") or "")
+            if _c:
+                by_code.setdefault(_c, r)
+    tc_extra = by_code  # 腾讯行自带量比/换手; 补充逻辑沿用下方 merge
     # 大盘环境: 取上证指数涨跌幅 (基准环境)
     mkt_chg = 0.0
     try:
