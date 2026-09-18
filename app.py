@@ -6378,9 +6378,9 @@ def _weekly_veto_check(bars: list[dict]) -> tuple[bool, dict]:
     # PASS3: 非空头排列
     if m5 < m10 < m20:
         return False, {}
-    # PASS4: 52周区间位置 >= 0.5
-    if pos52 < 0.5:
-        return False, {}
+    # (20260918) 移除原PASS4硬性"52周位>=0.5"否决: 52周位改为前端可选过滤,
+    # 由用户按需勾选 <20%/<30%/<50% 来筛出低位标的, 不再全职过滤低位股。
+    # w_pos52 仍照常计算并随快照返回, 供前端过滤使用。
 
     snapshot = {
         "w_ma5": round(m5, 2), "w_ma10": round(m10, 2), "w_ma20": round(m20, 2),
