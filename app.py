@@ -7270,12 +7270,12 @@ _MARKET_SNAP_CACHE: dict = {"ts": 0.0, "data": None}
 _MARKET_SNAP_TTL = 3  # 行情快照每 3 秒刷新一次
 _MARKET_SNAP_LOCK = threading.Lock()
 
-# 指数：symbol, 中文名 (三大指数 + 科创50; 后者用于自选盯盘按板块取大盘环境)
+# 指数：symbol, 中文名 (顶部卡片仍只显示三大指数)
+# 科创50(sh000688)不在此列 → 顶部不显示; 仅用于自选盯盘按板块取大盘环境 (_watch_quote 单独补拉)
 _THREE_INDICES = [
     ("sh000001", "上证指数"),
     ("sz399001", "深证成指"),
     ("sz399006", "创业板指"),
-    ("sh000688", "科创50"),
 ]
 
 # 三大指数实时行情缓存 (轻量, 交易时段 1s TTL; 存储完整接口结构)
@@ -9800,6 +9800,16 @@ def _watch_quote(codes: list[str]) -> dict:
                 _mkt_name_map[_s] = it.get("name")
     except Exception:
         idx_map = {}
+    # 自选板块映射需要科创50(顶部卡片不用), 单独补拉一次并入 idx_map
+    try:
+        _kcb = _fetch_spot_tencent(["sh000688"])
+        for _r in (_kcb or []):
+            if str(_r.get("symbol")) == "sh000688":
+                idx_map["sh000688"] = float(_r.get("changepercent") or 0)
+                if _r.get("name"):
+                    _mkt_name_map["sh000688"] = _r.get("name")
+    except Exception:
+        pass
     quotes = []
     now = time.time()
     trading = _is_trading_time()
