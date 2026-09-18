@@ -4345,10 +4345,12 @@ function paintMin(canvas, pts, prevClose, mini){
   const xf=pts.map(_minFrac);
   const useTime=xf.every(f=>f>=0);
   const pad=mini?2:6, top=mini?2:8, bot=mini?2:20;
-  const spanX=w-pad*2;
+  const lw = mini?0:54;                       // 左侧价格阶梯栏宽度
+  const lx = pad + lw;                        // 绘图区左起点
+  const spanX = w-pad*2 - lw;
   const xArr = useTime
-    ? pts.map((_,i)=> pad+xf[i]*spanX)
-    : pts.map((_,i)=> pts.length>1 ? pad+i/(pts.length-1)*spanX : w/2);
+    ? pts.map((_,i)=> lx+xf[i]*spanX)
+    : pts.map((_,i)=> pts.length>1 ? lx+i/(pts.length-1)*spanX : w/2);
   let lo=Infinity, hi=-Infinity;
   pts.forEach(p=>{ lo=Math.min(lo,p.price,p.avg); hi=Math.max(hi,p.price,p.avg); });
   if(prevClose){ lo=Math.min(lo,prevClose); hi=Math.max(hi,prevClose); }
@@ -4365,23 +4367,48 @@ function paintMin(canvas, pts, prevClose, mini){
   };
   if(prevClose){
     ctx.setLineDash([mini?2:3, mini?2:3]); ctx.strokeStyle='rgba(159,176,198,.55)'; ctx.lineWidth=1;
-    ctx.beginPath(); ctx.moveTo(pad, Y(prevClose)); ctx.lineTo(w-pad, Y(prevClose)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(lx, Y(prevClose)); ctx.lineTo(w-pad, Y(prevClose)); ctx.stroke();
     ctx.setLineDash([]);
   }
   drawLine(pts.map(p=>p.avg), '#f5c842', mini?1:1.6);    // 均价线(金)
   drawLine(pts.map(p=>p.price), '#4f9dff', mini?1.1:1.8); // 价格线(蓝)
-  if(!mini) paintMinAxes(ctx,w,h,pad,spanX);
+  if(!mini) paintMinAxes(ctx,w,h,lx,lw,spanX,prevClose,lo,hi,Y);
 }
 
-// 展开面板分时图的底部时间轴 + 网格 (09:30 10:30 11:30 14:00 15:00)
-function paintMinAxes(ctx,w,h,pad,spanX){
+// 展开面板分时图的底部时间轴 + Y轴价格阶梯
+// 横向阶梯: 在高低区间内画~5条横线, 左侧标注每个价位的价格与其相对昨收的涨跌幅
+function paintMinAxes(ctx,w,h,lx,lw,spanX,prevClose,lo,hi,Y){
   const axisY=h-14;
+  const hiFmt=(v)=> v>=1000 ? v.toFixed(1) : v.toFixed(2);
+  ctx.textBaseline='middle';
+  // —— 价格阶梯(横向网格 + 价位/涨跌幅标注) ——
+  const N=5; // 0..5 共6横线
+  for(let i=0;i<=N;i++){
+    const frac=i/N;
+    const v = lo + (hi-lo)*frac;
+    const y = Y(v);
+    ctx.strokeStyle = i===0 ? 'rgba(255,255,255,.25)' : 'rgba(159,176,198,.10)';
+    ctx.lineWidth = i===0 ? 1 : 1;
+    ctx.beginPath(); ctx.moveTo(lx, y); ctx.lineTo(w-pad, y); ctx.stroke();
+    // 左侧价位文本
+    ctx.fillStyle='rgba(159,176,198,.75)'; ctx.font='10px monospace'; ctx.textAlign='right';
+    ctx.fillText(hiFmt(v), lx-3, y);
+    // 涨跌幅标注(相对昨收), 红涨绿跌黄平
+    if(prevClose && prevClose>0){
+      const pct=(v-prevClose)/prevClose*100;
+      const col = pct>0.001 ? '#ff5d5d' : pct<-0.001 ? '#3ec98f' : 'rgba(159,176,198,.7)';
+      ctx.fillStyle=col; ctx.font='10px monospace';
+      ctx.textAlign='right';
+      ctx.fillText((pct>=0?'+':'')+pct.toFixed(2)+'%', lx-3, y+11);
+    }
+  }
+  // —— 底部时间轴 ——
   ctx.strokeStyle='rgba(159,176,198,.18)'; ctx.lineWidth=1; ctx.setLineDash([]);
-  ctx.beginPath(); ctx.moveTo(pad,axisY); ctx.lineTo(w-pad,axisY); ctx.stroke();
-  // 纵向网格线
+  ctx.beginPath(); ctx.moveTo(lx,axisY); ctx.lineTo(w-pad,axisY); ctx.stroke();
+  // 纵向网格线(避让左栏)
   ctx.strokeStyle='rgba(159,176,198,.08)';
   [0.25,0.5,0.75].forEach(f=>{
-    ctx.beginPath(); const x=pad+f*spanX; ctx.moveTo(x,1); ctx.lineTo(x,axisY); ctx.stroke();
+    ctx.beginPath(); const x=lx+f*spanX; ctx.moveTo(x,1); ctx.lineTo(x,axisY); ctx.stroke();
   });
   // 时间标签
   ctx.fillStyle='rgba(159,176,198,.82)'; ctx.font='10px monospace'; ctx.textBaseline='top';
@@ -4390,7 +4417,7 @@ function paintMinAxes(ctx,w,h,pad,spanX){
     const clock = m<=120 ? 570+m : 660+m;           // 反向换算回时钟, 午休后从13:00续
     const hh=('0'+Math.floor(clock/60)).slice(-2);
     const mm=('0'+(clock%60)).slice(-2);
-    const x=pad+f*spanX;
+    const x=lx+f*spanX;
     ctx.textAlign = f<=0.05 ? 'left' : f>=0.95 ? 'right' : 'center';
     ctx.fillText(hh+':'+mm, x, axisY+3);
   });
