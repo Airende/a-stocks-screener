@@ -5581,10 +5581,16 @@ function _kdHide(){
 }
 function _kdPlace(pop, anchor){
   const rect = anchor.getBoundingClientRect();
-  let x = rect.left, y = rect.bottom + 6;
   const pw = pop.offsetWidth || 510, ph = pop.offsetHeight || 200;
-  if(x + pw > innerWidth - 8) x = Math.max(8, innerWidth - pw - 8);
-  if(y + ph > innerHeight - 8) y = Math.max(8, rect.top - ph - 6);
+  // 20260918: 默认放在名称右侧偏下, 避免覆盖左侧/下方其他股票名称, 影响查看效率;
+  let x = rect.right + 10, y = rect.top - 20;
+  if(x + pw > innerWidth - 8) x = Math.max(8, rect.left - pw - 10); // 右侧放不下才回退左侧
+  if(x === rect.left - pw - 10){ // 回退左侧且向上放
+    y = rect.top - ph - 6;
+    if(y < 8) y = rect.bottom + 6;
+  } else {
+    if(y + ph > innerHeight - 8) y = Math.max(8, innerHeight - ph - 8);
+  }
   pop.style.left = x + 'px'; pop.style.top = y + 'px';
 }
 function kdMultiChart(bars){
