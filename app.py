@@ -9562,7 +9562,9 @@ def index():
 # ============================================================
 # 自选股盯盘 (statusStrip 下方卡片条) · 后端文件持久化 (20260918)
 # ============================================================
-_WATCHLIST_FILE = os.path.join(CACHE_DIR, "watchlist.json")
+_WATCHLIST_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+_WATCHLIST_FILE = os.path.join(_WATCHLIST_DIR, "watchlist.json")   # 持久目录(与 stock_marks.json 同级)
+_WATCHLIST_FILE_LEGACY = os.path.join(CACHE_DIR, "watchlist.json")  # 旧 cache 位置, 仅用于一次性迁移
 _WATCH_LOCK = threading.Lock()
 # code -> (上次快照时间, 上次现价); 用于盘中 5 分钟快速拉升(spike)预警
 _WATCH_PREV: dict[str, tuple[float, float, float]] = {}  # code -> (ts, price, vwap)
@@ -9620,9 +9622,9 @@ def _watch_codes(rec) -> list[str]:
     return []
 
 
-def _read_watch_file() -> dict:
+def _read_watch_file(path=None) -> dict:
     try:
-        with open(_WATCHLIST_FILE, "r", encoding="utf-8") as f:
+        with open(path or _WATCHLIST_FILE, "r", encoding="utf-8") as f:
             d = json.load(f)
         return d if isinstance(d, dict) else {}
     except Exception:
@@ -9631,11 +9633,28 @@ def _read_watch_file() -> dict:
 
 def _write_watch_file(rec: dict) -> None:
     try:
-        os.makedirs(CACHE_DIR, exist_ok=True)
+        os.makedirs(os.path.dirname(_WATCHLIST_FILE), exist_ok=True)
         with open(_WATCHLIST_FILE, "w", encoding="utf-8") as f:
             json.dump(rec, f, ensure_ascii=False, indent=2)
     except Exception:
         pass
+
+
+_watch_migrated = False
+
+
+def _ensure_watch_migrated() -> None:
+    """把旧 cache/watchlist.json 一次性迁移到持久目录 data/ (避免换环境后自选丢失)"""
+    global _watch_migrated
+    if _watch_migrated:
+        return
+    _watch_migrated = True
+    if _watch_codes(_read_watch_file(_WATCHLIST_FILE)):
+        return  # data 目录已有自选, 无需迁移
+    legacy = _read_watch_file(_WATCHLIST_FILE_LEGACY)
+    if _watch_codes(legacy):
+        _write_watch_file(legacy)
+        _kv_log(f"自选盯盘已从 cache 迁移到持久目录 data/ ({len(_watch_codes(legacy))} 只)")
 
 
 def _load_watchlist() -> list[str]:
@@ -9664,6 +9683,7 @@ def _load_watchlist() -> list[str]:
 
     # 云端无数据(或未配置云端) -> 首次从本地迁移/读取
     if not _WATCH_LIST_UPDATED:
+        _ensure_watch_migrated()
         local = _read_watch_file()
         if _watch_codes(local):
             _WATCHLIST = _watch_codes(local)
