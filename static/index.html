@@ -649,9 +649,20 @@
   .watch-wrap{overflow-x:auto;padding-bottom:2px;scrollbar-width:none;-ms-overflow-style:none}
   .watch-wrap::-webkit-scrollbar{display:none;height:0;width:0}
   .watch-cards{display:flex;gap:8px;min-width:min-content}
+  .watch-cards.dragging-gap{gap:0}
   .watch-card{position:relative;display:flex;flex-direction:column;gap:2px;min-width:118px;padding:8px 10px;
               border:1px solid var(--border);border-radius:8px;background:rgba(255,255,255,.02);cursor:pointer;
               transition:.12s;user-select:none}
+  .watch-card.armed{transform:scale(1.06);border-color:var(--gold);box-shadow:0 0 0 1.5px var(--gold) inset;
+                    animation:_wdArm .3s ease}
+  .watch-card.dragging{position:relative;z-index:50;opacity:.85;transform:scale(1.08);
+                       border-color:#8b5cf6;box-shadow:0 0 0 2px #8b5cf6 inset,0 10px 24px rgba(0,0,0,.4);
+                       transition:transform .1s ease}
+  .watch-card.drag-hint::after{content:'拖拽排序';position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+                   background:rgba(10,12,20,.92);border:1px solid var(--gold);color:var(--gold);
+                   font:600 10px/1 sans-serif;padding:2px 8px;border-radius:8px;z-index:60;pointer-events:none;
+                   letter-spacing:.5px}
+  @keyframes _wdArm{0%{transform:scale(1)}50%{transform:scale(1.02)}100%{transform:scale(1.06)}}
   .watch-card:hover{border-color:var(--accent);background:rgba(255,255,255,.05)}
   .watch-card .chg{font-size:20px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.15}
   .watch-card .sub{display:flex;align-items:baseline;gap:6px;font-size:11px;color:var(--sub)}
@@ -4100,6 +4111,77 @@ async function loadWatch(){
 }
 let _watchData=null;      // 最近一次 /api/watchlist 响应
 let _activeWatchCode=null; // 当前展开研判面板的自选代码
+
+// ===== 自选拖拽排序: 长按600ms进入拖动, 松手提交新顺序到后端 =====
+let _wdDrag=null;
+function initWatchDrag(){
+  const cards=document.getElementById('watchCards');
+  if(!cards || cards.__dragInit) return;
+  cards.__dragInit=true;
+  let timer=null, armed=false, dragging=false, pointerId=null, dragEl=null;
+  let startX=0, startY=0, moved=false, offsetX=0, fromX=0, gap=8;
+  const HOME='dragging-locked'; // 守卫, 避免2s渲染打断拖动
+
+  const cancel=()=>{
+    if(timer){ clearTimeout(timer); timer=null; }
+    armed=false;
+    if(dragEl){ dragEl.classList.remove('armed','drag-hint'); dragEl.style.transform=''; }
+    dragEl=null; pointerId=null; dragging=false;
+    cards.classList.remove('dragging-gap');
+    Array.prototype.forEach.call(cards.querySelectorAll('.watch-card.dragging'),el=>el.classList.remove('dragging'));
+  };
+  // 取目标卡(忽略 .rm 移除按钮, 避免长按删除与拖拽冲突)
+  const targetCard=(e)=> e.target.closest && e.target.closest('.watch-card') && !e.target.closest('.rm') ? e.target.closest('.watch-card') : null;
+
+  cards.addEventListener('pointerdown',(e)=>{
+    if(e.pointerType==='mouse' && e.button!==0) return;
+    const card=targetCard(e);
+    if(!card || cards.querySelectorAll('.watch-card').length<2) return;
+    dragEl=card; pointerId=e.pointerId; armed=false; moved=false;
+    startX=e.clientX; startY=e.clientY;
+    try{ card.setPointerCapture?.(e.pointerId); }catch(_){}
+    card.classList.add('armed','drag-hint');
+    timer=setTimeout(()=>{ // 长按达成 → 进入拖拽
+      if(!dragEl || !cards.contains(dragEl)){ cancel(); return; }
+      armed=true; dragging=true; cards.dataset[HOME]='1';
+      card.classList.remove('armed','drag-hint'); card.classList.add('dragging'); cards.classList.add('dragging-gap');
+      const st=card.getBoundingClientRect(), par=cards.getBoundingClientRect();
+      offsetX=startX-st.left; fromX=(st.left + st.width/2)-par.left;
+      moved=false; gap = (cards.querySelector('.watch-card')) ? 8 : 0;
+    },600);
+  });
+  const onMove=(e)=>{
+    if(!dragEl || !armed) return;
+    moved=true;
+    // 拖动卡跟随手指水平移动 + 轻微上浮
+    const par=cards.getBoundingClientRect();
+    const nx=e.clientX-par.left;
+    dragEl.style.transform='translateX('+(nx-fromX-offsetX+offsetX)+'px)';
+    // 依据拖拽卡中心 X 与相邻卡中心比较 → insertBefore 实时换序
+    const cRect=dragEl.getBoundingClientRect();
+    const center=cRect.left+cRect.width/2;
+    const others=Array.prototype.filter.call(cards.querySelectorAll('.watch-card'),el=>el!==dragEl);
+    for(const o of others){
+      const oRect=o.getBoundingClientRect(), oc=oRect.left+oRect.width/2;
+      if(center<oc && o.previousElementSibling!==dragEl){ cards.insertBefore(dragEl,o); break; }
+      if(center>oc && o.nextElementSibling===dragEl){ cards.insertBefore(o,dragEl); break; }
+    }
+  };
+  const onUp=async()=>{
+    if(timer){ clearTimeout(timer); timer=null; }
+    if(dragEl){ dragEl.style.transform=''; dragEl.classList.remove('dragging'); }
+    if(dragging){
+      const order=Array.prototype.map.call(cards.querySelectorAll('.watch-card'),el=>el.dataset.code);
+      // 服务端保持 DOM 顺序 → 持久化
+      try{ const r=await fetch('/api/watchlist/order',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({order})}); if(r.ok){ const d=await r.json(); if(d.quotes) _watchData=d; } }catch(_){}
+    }
+    cancel();
+  };
+  cards.addEventListener('pointermove',onMove);
+  cards.addEventListener('pointerup',onUp);
+  cards.addEventListener('pointercancel',cancel);
+  cards.addEventListener('mouseleave',(e)=>{ if(e.relatedTarget && !cards.contains(e.relatedTarget)) cancel(); });
+}
 function renderWatch(d){
   const cards=document.getElementById('watchCards'); const agg=document.getElementById('watchAgg');
   if(!cards) return;
@@ -4590,6 +4672,7 @@ async function delWatch(code){
     }catch(e){} finally{ btn.disabled=false; }
   };
   btn.onclick=doAdd;
+  initWatchDrag();
   loadWatch();
 })();
 setInterval(loadWatch, 2000);

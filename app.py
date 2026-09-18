@@ -10047,6 +10047,21 @@ def api_watchlist_del(code: str = ""):
     return JSONResponse(_watch_quote(codes))
 
 
+@app.post("/api/watchlist/order")  # 重排自选顺序
+def api_watchlist_order(payload: dict):
+    order = payload.get("order") or []
+    codes = [str(x) for x in order if str(x).strip()]
+    if not codes:
+        return JSONResponse({"error": "缺少 order 数组"}, status_code=400)
+    with _WATCH_LOCK:
+        cur = _load_watchlist()
+        # 仅保留仍存在的自选, 允许前端以任意顺序提交
+        kept = codes + [c for c in cur if c not in codes]
+        _save_watchlist(kept)
+        data = _watch_quote(kept)
+    return JSONResponse(data)
+
+
 @app.get("/api/minute-data")
 def api_minute_data(symbol: str = ""):
     """获取个股当日分时数据: 逐分钟 时间/价格/成交量/成交额, 并计算分时均价线(VWAP)逐点值。
