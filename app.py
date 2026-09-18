@@ -9739,15 +9739,17 @@ def _watch_quote(codes: list[str]) -> dict:
         })
         t_gate.append({"k": "消息面无利空", "pass": None, "note": "需自评, 无法量化"})
         _gate_fail = sum(1 for g in t_gate if g["pass"] is False)
-        # ---- 做T方向(正T/反T/不做) ----
+        # ---- 做T方向(正T/反T/不做): 与操作指令同口径, 逢低买/逢高卖 ----
         if dev >= 2.0:
-            t_mode, t_mode_reason = "反T", f"偏离{dev:+.1f}%偏高/冲高滞涨 → 先卖后买锁利润"
-        elif -1.5 < dev < 2.0 and above_vwap:
-            t_mode, t_mode_reason = "偏正T", f"围绕均价线({dev:+.1f}%)回踩企稳 → 先买后卖"
-        elif not above_vwap:
-            t_mode, t_mode_reason = "不做", f"均价线下方({dev:+.1f}%)趋势不利, 防接飞刀"
+            t_mode, t_mode_reason = "反T", f"偏离均价线{dev:+.1f}%偏高/冲高滞涨 → 先卖后买锁利润"
+        elif dev >= 1.2:
+            t_mode, t_mode_reason = "观望", f"偏离{dev:+.1f}%偏高, 非低吸点, 别追, 等回踩"
+        elif above_vwap:
+            t_mode, t_mode_reason = "观望", f"均价线上({dev:+.1f}%)偏中高位, 等回踩均价线再正T"
+        elif -1.5 < dev < 0:
+            t_mode, t_mode_reason = "正T", f"回踩均价线下方{dev:+.1f}%企稳(相对低位) → 先买后卖低吸"
         else:
-            t_mode, t_mode_reason = "观望", "信号混合, 再等确认"
+            t_mode, t_mode_reason = "不做", f"均价线下方({dev:+.1f}%)过深, 防接飞刀"
         if amp < 2 or (not _ma_pass) or vp_score in ("weak", "danger") or _gate_fail >= 2:
             t_mode, t_mode_reason = "不做", f"门槛不达标 · {t_mode_reason}"
         # ---- 真承接 vs 假承接 (价格vs均价线 + 量能近似) ----
@@ -9761,25 +9763,37 @@ def _watch_quote(codes: list[str]) -> dict:
             t_accept, t_accept_note = "假承接", "未站上均价线, 反弹即遇压, 勿抄"
         else:
             t_accept, t_accept_note = "待验证", f"量比{vol_ratio:.2f}中性, 看能否连续站稳均价线"
-        # ---- 最终操作指令(买/卖/观望/规避) ----
+        # ---- 最终操作指令(买/卖/观望/规避): 日内做T → 逢低买、逢高卖 ----
+        #   相对位置=偏离均价线 dev(以 VWAP 为中轴), 绝对位置=当日累计涨幅 chg_pct。
+        #   价格高于均价线 = 已偏中高位, 一律不追; 只有回踩均价线下方企稳(=低位)才正T低吸。
+        chg_high = chg_pct >= 5            # 当日已累积大涨, 属相对高位区
         op = "观望"
         op_reason = "信号未确认, 再等等"
+        # 一票否决: 系统性风险 / 深破位 / 明确否决
         if mkt_chg <= -1:
             op, op_reason = "规避", f"大盘跌{mkt_chg:.2f}%>1%, 系统性风险, 暂停买入; 持仓设好止损"
         elif dev <= -3 and not above_vwap:
             op, op_reason = "规避", f"深跌破均价线({dev:+.1f}%), 勿接飞刀, 空仓/减仓观望"
         elif veto and dev >= 0:
             op, op_reason = "观望", f"一票否决: {veto}"
-        elif above_vwap and dev >= 3:
-            op, op_reason = "减仓", f"偏离{dev:+.1f}%过热, 分批止盈/高抛(反T卖点)"
-        elif above_vwap and dev >= 2 and vp_score in ("weak", "danger"):
-            op, op_reason = "减仓", f"冲高滞涨({dev:+.1f}%)量价背离, 反T卖点, 先卖后买"
-        elif above_vwap and 0 <= dev < 2 and vp_score == "good":
-            op, op_reason = "买入", f"站上均价线({dev:+.1f}%)放量健康, 回踩即正T低吸点"
-        elif above_vwap and 0 <= dev < 2:
-            op, op_reason = "观望", f"线上({dev:+.1f}%)但量能一般, 看能否放量启动"
-        elif not above_vwap and dev > -3:
-            op, op_reason = "观望", "价在均价线下, 线上看多线下看空, 不买; 反弹站稳再看"
+        # 逢高卖: 偏离均线偏大, 或 涨幅已大且仍在均价线上 = 日内高位, 不追、偏向减持/高抛
+        elif dev >= 3 or (chg_high and dev >= 1.0):
+            op, op_reason = "减仓", f"日内已处高位(偏离均价线{dev:+.1f}%/涨幅{chg_pct:.1f}%), 逢高减/反T卖点, 回落后再接"
+        elif dev >= 1.5:
+            op, op_reason = "减仓", f"冲高偏离均价线{dev:+.1f}%, 当前位置偏高, 高抛锁利, 不追高"
+        # 均价线上、未过热: 已偏中高位, 不追高, 等回踩
+        elif above_vwap:
+            op, op_reason = "观望", f"股价在均价线上({dev:+.1f}%), 位置偏高别追; 等回踩均价线企稳再正T低吸"
+        # 回踩均价线下方(相对低位): 逢低买或观望, 仅轻度回踩企稳才低吸
+        elif dev > -3:
+            if vp_score == "danger":
+                op, op_reason = "观望", f"下跌放量({vp_note}), 抛压重, 勿接"
+            elif dev >= -2 and vwap_dir != "down" and vp_score in ("healthy", "good"):
+                op, op_reason = "买入", f"回踩均价线下方{dev:+.1f}%企稳、均价线上行, 相对低位, 正T低吸点"
+            elif vwap_dir == "down":
+                op, op_reason = "观望", f"回踩({dev:+.1f}%)但均价线下压, 破位风险, 不接"
+            else:
+                op, op_reason = "观望", f"回踩{dev:+.1f}%较深或量能不足, 继续观察, 勿急接"
         else:
             op, op_reason = "观望", "信号不明, 继续观察"
         quotes.append({

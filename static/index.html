@@ -4125,7 +4125,7 @@ function renderWatchPanel(code){
   const scCls = x.t_score>=4?'up':(x.t_score<=2?'low':'mid');
   const advCls = x.t_advice==='可做正T'?'do':(x.t_advice==='坚决不做'?'no':'watch');
   const items=(x.t_items||[]).map(t=>`<div class="wp-item"><span class="dot ${t.pass?'on':'off'}"></span>${esc(t.k)}</div>`).join('');
-  const modeCls = x.t_mode==='反T'?'down':(x.t_mode==='偏正T'?'up':(x.t_mode==='不做'?'no':'watch'));
+  const modeCls = x.t_mode==='反T'?'down':(x.t_mode==='正T'?'up':(x.t_mode==='不做'?'no':'watch'));
   const accCls = x.t_accept==='真承接'?'up':(x.t_accept==='假承接'?'down':'mid');
   const opCls = x.op==='买入'?'buy':(x.op==='减仓'?'sell':(x.op==='规避'?'avoid':'watch'));
   const gateHtml=(x.t_gate||[]).map(g=>{
