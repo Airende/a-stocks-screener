@@ -21,7 +21,6 @@
   .hdr-clock{display:inline-flex;align-items:baseline;gap:5px;font-variant-numeric:tabular-nums;line-height:1;color:var(--txt);cursor:default}
   .hdr-clock .hm{font-size:28px;font-weight:800;letter-spacing:.5px}
   .hdr-clock .sec{font-size:11px;font-weight:700;color:var(--sub);margin-right:3px}
-  .hdr-clock .date{font-size:11px;font-weight:600;color:var(--sub);border:1px solid var(--border);background:rgba(255,255,255,.05);padding:2px 6px;border-radius:6px}
   .sub{color:var(--sub);font-size:13px;margin-top:2px}
   .sub .hm-link{display:inline-flex;align-items:center;gap:4px;color:var(--sub);text-decoration:none;cursor:pointer;transition:color .15s}
   .sub .hm-link:hover{color:var(--accent)}
@@ -637,6 +636,8 @@
   .watch-bar{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:12px}
   .watch-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
   .watch-head .tt{font-weight:800;font-size:13px;color:var(--txt)}
+  .watch-head .wd-date{font-style:normal;font-size:12px;font-weight:600;color:var(--sub);font-variant-numeric:tabular-nums;
+                       border:1px solid var(--border);background:rgba(255,255,255,.05);padding:2px 7px;border-radius:6px}
   .watch-head .agg{font-size:11px;color:var(--sub);font-variant-numeric:tabular-nums}
   .watch-head .agg b.up{color:var(--up)} .watch-head .agg b.down{color:var(--down)}
   .watch-add{display:flex;align-items:center;gap:6px;margin-left:auto}
@@ -823,7 +824,7 @@
 <div class="wrap">
   <header>
     <div>
-      <h1><span id="hdrClock" class="hdr-clock"><i class="hm">--:--</i><i class="sec">--</i><i class="date">--</i></span> ARD选股系统 <span style="font-size:12px;color:var(--sub);font-weight:400">v1</span></h1>
+      <h1><span id="hdrClock" class="hdr-clock"><span class="hm">--:--</span><span class="sec">--</span></span></h1>
       <div class="sub"><a href="https://52etf.site/" target="_blank" rel="noopener" title="大盘云图 (52ETF)" aria-label="大盘云图" class="hm-link"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg>大盘云图 ↗</a></div>
     </div>
     <div class="toolbar">
@@ -855,6 +856,7 @@
   <div id="watchBar" class="watch-bar">
     <div class="watch-head">
       <span class="tt">自选盯盘</span>
+      <span id="watchDate" class="wd-date">--</span>
       <span class="agg" id="watchAgg"></span>
       <div class="watch-add">
         <div class="watch-search">
@@ -4736,17 +4738,17 @@ function _tickIndices(){
   setTimeout(_tickIndices, _idxTickMs);
 }
 _tickIndices();
-// ===== 顶栏时钟: 大时分 · 小秒 · 小月日 =====
+// ===== 顶栏时钟: 大时分 + 小秒; 月日放到盯盘栏 =====
 function startHeaderClock(){
   const c=document.getElementById('hdrClock');
-  if(!c) return;
-  const hm=c.querySelector('.hm'), sec=c.querySelector('.sec'), date=c.querySelector('.date');
+  const wd=document.getElementById('watchDate');
+  const hm=c&&c.querySelector('.hm'), sec=c&&c.querySelector('.sec');
   const pad=n=>String(n).padStart(2,'0');
   function tick(){
     const d=new Date();
-    hm.textContent=pad(d.getHours())+':'+pad(d.getMinutes());
-    sec.textContent=pad(d.getSeconds());
-    date.textContent=pad(d.getMonth()+1)+'-'+pad(d.getDate());
+    if(hm) hm.textContent=pad(d.getHours())+':'+pad(d.getMinutes());
+    if(sec) sec.textContent=pad(d.getSeconds());
+    if(wd) wd.textContent=pad(d.getMonth()+1)+'-'+pad(d.getDate());
   }
   tick();
   setInterval(tick,1000);
