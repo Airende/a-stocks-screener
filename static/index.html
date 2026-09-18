@@ -839,9 +839,9 @@
     </div>
 
     <div class="toolbar">
-      <span class="meta" id="cacheInfo">本地缓存: 加载中…</span>
+      <span class="meta" id="cacheInfo">加载中…</span>
       <span class="meta" id="updated"></span>
-      <button class="ghost btn-danger-ghost" id="cacheRefreshBtn">刷新K线数据</button>
+      <button class="ghost btn-danger-ghost" id="cacheRefreshBtn">刷新</button>
     </div>
   </header>
 
@@ -1513,12 +1513,12 @@ async function loadCacheInfo(){
     const r=await fetch('/api/cache_info');
     const d=await r.json();
     if(!d.kline_count && !d.spot_size_mb){
-      $('#cacheInfo').textContent='本地缓存: 无';
+      $('#cacheInfo').textContent='无';
       return;
     }
-    $('#cacheInfo').innerHTML=`本地缓存: <b style="color:var(--gold)">${d.cache_date}</b> · K线 ${d.kline_count}只/${d.kline_size_mb}MB`;
+    $('#cacheInfo').innerHTML=`<b style="color:var(--gold)">${d.cache_date}</b> · K线 ${d.kline_count}只/${d.kline_size_mb}MB`;
   }catch(e){
-    $('#cacheInfo').textContent='本地缓存: 获取失败';
+    $('#cacheInfo').textContent='获取失败';
   }
 }
 $('#cacheRefreshBtn').onclick=async()=>{
@@ -1540,11 +1540,11 @@ $('#cacheRefreshBtn').onclick=async()=>{
           setTimeout(poll, 3000);
         }else if(d.universe>0){
           // 筛选完成且有新数据
-          btn.disabled=false; btn.textContent='刷新K线数据';
+          btn.disabled=false; btn.textContent='刷新';
           loadCacheInfo();
           render(d, false);
         }else if(d.error){
-          btn.disabled=false; btn.textContent='刷新K线数据';
+          btn.disabled=false; btn.textContent='刷新';
           $('#cacheInfo').textContent='K线数据: 拉取失败 - '+d.error;
         }else{
           // 无数据且未运行, 可能异常, 继续等一会
@@ -1556,7 +1556,7 @@ $('#cacheRefreshBtn').onclick=async()=>{
     };
     setTimeout(poll, 2000);
   }catch(e){
-    btn.disabled=false; btn.textContent='刷新K线数据';
+    btn.disabled=false; btn.textContent='刷新';
     $('#cacheInfo').textContent='K线数据: 刷新失败';
   }
 };
