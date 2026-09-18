@@ -6335,8 +6335,8 @@ def _weekly_veto_check(bars: list[dict]) -> tuple[bool, dict]:
     """周线一票否决检查 (作为底仓逻辑, 同时应用于日线向上形态)。
     返回 (是否通过否决, 周线指标快照)。
     否决条件(满足任一直接剔除):
-      1. 收盘价 < MA30(30周线)
-      2. MA30 向下 (MA30 <= 8周前的MA30)
+      1. 收盘价 < MA20(20周线)
+      2. MA20 向下 (MA20 <= 8周前的MA20)
       3. 空头排列 (MA5 < MA10 < MA20)
       4. 52周区间位置 < 0.5 ((收盘-52周最低)/(52周最高-52周最低))
     """
@@ -6368,12 +6368,12 @@ def _weekly_veto_check(bars: list[dict]) -> tuple[bool, dict]:
     low52 = min(lows[-52:]) if len(lows) >= 52 else min(lows)
     pos52 = (c - low52) / (high52 - low52) if high52 > low52 else 1.0
 
-    # PASS1: 收盘价 > MA30
-    if c <= m30:
+    # PASS1: 收盘价 > MA20 (20260918 判定与显示统一为周MA20, 原为周MA30)
+    if c <= m20:
         return False, {}
-    # PASS2: MA30 向上 (MA30 > 8周前的MA30)
-    m30_8w = _v(ma30, -9)
-    if m30_8w is None or m30 <= m30_8w:
+    # PASS2: MA20 向上 (MA20 > 8周前的MA20)
+    m20_8w = _v(ma20, -9)
+    if m20_8w is None or m20 <= m20_8w:
         return False, {}
     # PASS3: 非空头排列
     if m5 < m10 < m20:
@@ -6428,8 +6428,8 @@ def classify_weekly_ma_pattern(bars: list[dict]) -> tuple[list[str], dict]:
 
     hits: list[str] = []
 
-    # ---- A类: 强势主升 ----
-    if m5 > m10 > m20 > m30:
+    # ---- A类: 强势主升 (20260918 多头排列到MA20即可, 与显示口径统一, 原含MA30) ----
+    if m5 > m10 > m20:
         m20_4w = _v(ma20, -5)
         if m20_4w is not None and m20 > m20_4w:
             if c > m10:
@@ -6443,12 +6443,12 @@ def classify_weekly_ma_pattern(bars: list[dict]) -> tuple[list[str], dict]:
                                     snapshot["w_vol_boost"] = True
                                     break
 
-    # ---- B类: 趋势回踩 ----
-    m30_4w = _v(ma30, -5)
+    # ---- B类: 趋势回踩 (20260918 判定跟随显示统一为周MA20, 原为MA30) ----
+    m20_4w = _v(ma20, -5)
     m60_4w = _v(ma60, -5)
-    if m30_4w is not None and m60_4w is not None and m60 is not None:
-        if m30 > m30_4w and m60 > m60_4w:
-            if c >= m30 and c / m30 < 1.05:
+    if m20_4w is not None and m60_4w is not None and m60 is not None:
+        if m20 > m20_4w and m60 > m60_4w:
+            if c >= m20 and c / m20 < 1.05:
                 if c / high52 > 0.75:
                     hits.append("周线B·趋势回踩")
 
