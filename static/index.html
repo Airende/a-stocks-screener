@@ -785,6 +785,16 @@
                         box-shadow:0 2px 10px rgba(0,0,0,.35)}
   .minchart .mf .mf-tip .p{color:var(--accent)}
   .minchart .mf .mf-tip .pc{color:var(--sub)}
+  /* 分时图横虚线左右坐标轴标签 (跟随横线上价格/涨幅) */
+  .minchart .mf .mf-tag{position:absolute;transform:translateY(-50%);padding:1px 5px;border-radius:4px;
+                        font:700 11px/1.4 monospace;white-space:nowrap;pointer-events:none;
+                        backdrop-filter:blur(2px)}
+  .minchart .mf .mf-tag-l{left:2px;background:rgba(10,12,20,.88);border:1px solid var(--border)}
+  .minchart .mf .mf-tag-l::after{content:'';position:absolute;top:50%;left:100%;width:0;height:0;margin-top:-4px;
+                                 border-top:4px solid transparent;border-bottom:4px solid transparent;border-left:6px solid var(--border)}
+  .minchart .mf .mf-tag-r{right:2px;background:rgba(10,12,20,.88);border:1px solid var(--border)}
+  .minchart .mf .mf-tag-r::after{content:'';position:absolute;top:50%;right:100%;width:0;height:0;margin-top:-4px;
+                                 border-top:4px solid transparent;border-bottom:4px solid transparent;border-right:6px solid var(--border)}
   /* 盯盘卡片迷你分时图 */
   .mini-spark{width:calc(100% - 2px);height:30px;margin:2px 0 0;display:block;opacity:.95}
   /* 危险操作按钮: 红色 ghost 样式, 与普通按钮区分 */
@@ -4401,7 +4411,7 @@ function buildWatchPanelSkeleton(panel, code, x){
         <i class="l-pc"><span class="sq"></span>昨收</i>
       </div>
       <canvas id="minChart${cd}"></canvas>
-      <div class="mf" id="minFollow${cd}"><div class="mf-line"></div><div class="mf-bar"></div><div class="mf-tip"><span class="p"></span> <span class="pc"></span></div></div>
+      <div class="mf" id="minFollow${cd}"><div class="mf-line"></div><div class="mf-bar"></div><div class="mf-tag mf-tag-l"></div><div class="mf-tag mf-tag-r"></div><div class="mf-tip"><span class="p"></span> <span class="pc"></span></div></div>
       <div class="nodata" id="minNoData${cd}">分时加载中…</div>
     </div>
     <div class="wp-grid">
@@ -4705,6 +4715,8 @@ function bindMinFollow(canvas, code){
   const bar=mf.querySelector('.mf-bar');
   const tipP=mf.querySelector('.mf-tip .p');
   const tipPC=mf.querySelector('.mf-tip .pc');
+  const tagL=mf.querySelector('.mf-tag-l');
+  const tagR=mf.querySelector('.mf-tag-r');
   mc.addEventListener('mousemove', ev=>{
     const g=canvas.__geo;
     if(!g || g.mini){ mf.style.display='none'; return; }
@@ -4731,6 +4743,10 @@ function bindMinFollow(canvas, code){
     tipP.style.color=pcol;
     tipPC.textContent=(pct>=0?'+':'')+pct.toFixed(2)+'%  '+mmMin(best.t);
     tipPC.style.color=pcol;
+    // 左右坐标轴标签: 横虚线两端标注当前价(左)/涨幅(右), 随横线对齐
+    const pctTxt=(pct>=0?'+':'')+pct.toFixed(2)+'%';
+    tagL.style.top=py+'px'; tagL.textContent=fmt; tagL.style.color=pcol;
+    tagR.style.top=py+'px'; tagR.textContent=pctTxt; tagR.style.color=pcol;
     // 避免遮挡绘图: 靠右时提示左移
     const tip=mf.querySelector('.mf-tip');
     tip.style.left=(best.x>g.rx-150 ? g.rx-150 : best.x)+'px';
