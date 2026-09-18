@@ -4749,14 +4749,25 @@ function _isSessionOpen(){
 }
 function _smartSpotInterval(){ return _isSessionOpen() ? 2000 : 60000; }
 function _scheduleSpotPoll(){
-  setTimeout(()=>{ loadWatch(); loadMarketSnap(); _scheduleSpotPoll(); }, _smartSpotInterval());
+  if(_isSessionOpen()){
+    // 交易时段: 2s 刷新行情
+    loadWatch(); loadMarketSnap();
+    setTimeout(_scheduleSpotPoll, _smartSpotInterval());
+  } else {
+    // 非交易时段: 完全不刷新行情, 仅低频检查是否已开盘 (无网络请求)
+    setTimeout(_scheduleSpotPoll, 60000);
+  }
 }
 loadWatch();
 loadMarketSnap();
 _scheduleSpotPoll();
 function _tickIndices(){
-  loadIndicesRealtime();
-  setTimeout(_tickIndices, _idxTickMs);
+  if(_isSessionOpen()){
+    loadIndicesRealtime();           // 交易时段才加载指数实时分时
+    setTimeout(_tickIndices, _idxTickMs);
+  } else {
+    setTimeout(_tickIndices, 60000); // 非交易时段不加载, 仅低频检查开盘
+  }
 }
 _tickIndices();
 // ===== 顶栏时钟: 大时分 + 小秒; 年月日放时钟上方, 同时显示在盯盘栏 =====
