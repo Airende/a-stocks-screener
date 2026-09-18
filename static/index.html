@@ -657,7 +657,8 @@
   .watch-card .sub{display:flex;align-items:baseline;gap:6px;font-size:11px;color:var(--sub)}
   .watch-card .sub .px{font-size:11px;font-weight:600;color:var(--txt);font-variant-numeric:tabular-nums}
   .watch-card .sub .chgamt{font-size:11px;font-weight:600;color:var(--sub);font-variant-numeric:tabular-nums}
-  .watch-card .nm{font-size:12px;font-weight:700;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .watch-card .nmwrap{display:flex;align-items:baseline;min-width:0}
+  .watch-card .nm{font-size:12px;font-weight:700;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1 1 auto;min-width:0}
   .watch-card .op{display:inline-block;font-size:10px;font-weight:600;line-height:1;margin-left:4px;
     opacity:.55;background:none;border:none;padding:0;vertical-align:1px}
   .watch-card .op.buy{color:var(--up)}
@@ -4072,31 +4073,59 @@ function renderWatch(d){
   if(!cards) return;
   const q=d.quotes||[]; const s=d.sum||{up:0,down:0,flat:0};
   if(agg) agg.innerHTML=`今日 涨 <b class="up">${s.up}</b> · 跌 <b class="down">${s.down}</b> · 平 ${s.flat}`;
-  if(!q.length){ cards.innerHTML='<div class="watch-empty">还没有自选，输入股票代码后点「添加」开始盯盘</div>'; return; }
-  cards.innerHTML=q.map(x=>{
+  if(!q.length){
+    if(!cards.querySelector('.watch-empty'))
+      cards.innerHTML='<div class="watch-empty">还没有自选，输入股票代码后点「添加」开始盯盘</div>';
+    return;
+  }
+  // 增量更新: 复用已有卡片节点, 只移除已不在自选中的卡, 不整体重建 → 避免 2s 刷新时
+  // mini 分时 canvas 被销毁重建导致的闪烁。
+  const qcodes=new Set(q.map(x=>String(x.code)));
+  Array.prototype.forEach.call(cards.querySelectorAll('.watch-card'), el=>{
+    if(!qcodes.has(String(el.dataset.code||''))) el.remove();
+  });
+  q.forEach(x=>{
+    const cd=String(x.code);
+    const nmTxt=String(x.name||x.code);
+    let el=cards.querySelector('.watch-card[data-code="'+cd+'"]');
+    if(!el){
+      el=document.createElement('div');
+      el.className='watch-card';
+      el.dataset.code=cd;
+      el.title='点击查看盘中研判';
+      el.innerHTML=
+        '<canvas class="mini-spark" data-code="'+cd+'"></canvas>'+
+        '<span class="rm" title="移除">✕</span>'+
+        '<span class="chg"></span>'+
+        '<span class="sub"><span class="px"></span><span class="chgamt"></span></span>'+
+        '<span class="nmwrap"><span class="nm"></span><span class="op"></span></span>';
+      el.querySelector('.rm').onclick=(e)=>{e.stopPropagation();delWatch(cd);};
+      el.onclick=()=>selectWatch(cd);
+      cards.appendChild(el);
+    }
+    // 就地更新 class 与文本 (canvas 不销毁, 由 drawMiniSparks 持续重绘)
     const pcl=x.chg_pct>0?'up':(x.chg_pct<0?'down':'flat');
-    const alarm = x.limit==='up' ? 'alarm-limit-up' : (x.limit==='down' ? 'alarm-limit-down'
-              : (x.spike==='spike' ? 'alarm-spike' : ''));
-    const sgn=x.chg>0?'+':(x.chg<0?'-':'');
-    const nm=esc(x.name||x.code), cd=esc(x.code);
-    const limTxt = x.limit==='up' ? ' ·涨停' : (x.limit==='down' ? ' ·跌停' : (x.spike==='spike' ? ' ·拉升' : ''));
+    const alarm = x.limit==='up' ? 'alarm-limit-up' : (x.limit==='down' ? 'alarm-limit-down' : (x.spike==='spike' ? 'alarm-spike' : ''));
     const sel = cd===_activeWatchCode ? ' selected' : '';
-    const opCls = x.op==='买入'?'buy':(x.op==='减仓'?'sell':(x.op==='规避'?'avoid':'watch'));
-    return `<div class="watch-card ${pcl} ${alarm}${sel}" title="点击查看盘中研判"
-        onclick="selectWatch('${cd}')">
-      <canvas class="mini-spark" data-symbol="${esc(x.symbol||'')}" data-code="${cd}"></canvas>
-      <span class="rm" title="移除" onclick="event.stopPropagation();delWatch('${cd}')">✕</span>
-      <span class="chg">${pcl==='up'?'+':(pcl==='down'?'':'')}${(+x.chg_pct||0).toFixed(2)}%</span>
-      <span class="sub"><span class="px">${(+x.price||0).toFixed(2)}</span><span class="chgamt">${sgn}${Math.abs(+x.chg||0).toFixed(2)}</span></span>
-      <span class="nm">${nm}<span class="op ${opCls}">${esc(x.op||'观望')}</span></span>
-    </div>`;
-  }).join('');
+    el.className='watch-card '+pcl+' '+alarm+sel;
+    const symEl=el.querySelector('.mini-spark');
+    symEl.setAttribute('data-symbol', x.symbol||'');
+    el.querySelector('.chg').textContent=(pcl==='up'?'+':(pcl==='down'?'':''))+(+x.chg_pct||0).toFixed(2)+'%';
+    el.querySelector('.px').textContent=(+x.price||0).toFixed(2);
+    const sgn=x.chg>0?'+':(x.chg<0?'-':'');
+    el.querySelector('.chgamt').textContent=sgn+Math.abs(+x.chg||0).toFixed(2);
+    el.querySelector('.nm').textContent=nmTxt;
+    const opT=x.op||'观望';
+    const opEl=el.querySelector('.op');
+    opEl.className='op '+(opT==='买入'?'buy':(opT==='减仓'?'sell':(opT==='规避'?'avoid':'watch')));
+    opEl.textContent=opT;
+  });
   drawMiniSparks();
 }
 function selectWatch(code){
   _activeWatchCode = (code===_activeWatchCode) ? null : code;
   const panel=document.getElementById('watchPanel');
-  if(!_activeWatchCode){ panel.style.display='none'; panel.innerHTML=''; }
+  if(!_activeWatchCode){ panel.style.display='none'; panel.innerHTML=''; panel.dataset.code=''; }
   else { renderWatchPanel(_activeWatchCode); reloadWatchCardsSelected(); }
   renderWatch(_watchData||{quotes:[],sum:{}});
 }
@@ -4113,32 +4142,27 @@ function renderWatchPanel(code){
   if(!panel) return;
   const d=_watchData; if(!d) return;
   const x=(d.quotes||[]).find(q=>q.code===code);
-  if(!x){ panel.style.display='none'; panel.innerHTML=''; return; }
+  if(!x){ panel.style.display='none'; panel.innerHTML=''; panel.dataset.code=''; return; }
   panel.style.display='block';
-  const nm=esc(x.name||x.code), cd=esc(x.code);
-  const stCls = x.strength==='强'?'strong' : (x.strength==='过热'?'over' : (x.strength==='弱'?'weak':'weakest'));
-  const devCls = x.dev>0?'up':(x.dev<0?'down':'');
-  const mktCls = d.mkt_chg>0?'up':(d.mkt_chg<0?'down':'');
-  const vpCls = x.vp_score==='good'?'up':(x.vp_score==='danger'?'down':(x.vp_score==='weak'?'gold':''));
-  const vwdirTxt = x.vwap_dir==='up'?'向上':(x.vwap_dir==='down'?'向下':'走平');
-  const scCls = x.t_score>=4?'up':(x.t_score<=2?'low':'mid');
-  const advCls = x.t_advice==='可做正T'?'do':(x.t_advice==='坚决不做'?'no':'watch');
-  const items=(x.t_items||[]).map(t=>`<div class="wp-item"><span class="dot ${t.pass?'on':'off'}"></span>${esc(t.k)}</div>`).join('');
-  const modeCls = x.t_mode==='反T'?'down':(x.t_mode==='正T'?'up':(x.t_mode==='不做'?'no':'watch'));
-  const accCls = x.t_accept==='真承接'?'up':(x.t_accept==='假承接'?'down':'mid');
-  const opCls = x.op==='买入'?'buy':(x.op==='减仓'?'sell':(x.op==='规避'?'avoid':'watch'));
-  const gateHtml=(x.t_gate||[]).map(g=>{
-    const dot = g.pass===true?'on':(g.pass===false?'off':'mid');
-    return `<div class="wp-item"><span class="dot ${dot}"></span>${esc(g.k)}<em style="font-style:normal;opacity:.75;margin-left:auto">${esc(g.note||'')}</em></div>`;
-  }).join('');
-  const vetoHtml = x.veto ? `<div class="wp-note" style="margin-top:8px">⚠ <b>一票否决:</b> ${esc(x.veto)} — 放弃买入</div>` : '';
+  // 骨架仅在切换自选时重建一次, 之后仅就地更新数值 → 避免每 2s 整体 innerHTML 重建导致
+  // 分时 canvas 被销毁重建而闪烁。
+  if(String(panel.dataset.code)!==String(code)){
+    buildWatchPanelSkeleton(panel, code, x);
+    panel.dataset.code=code;
+  }
+  updateWatchPanelValues(panel, d, x);
+  loadMinChart(code, x.symbol||'', x.prev_close);
+}
+// 面板静态骨架 (动态值用 data-f 标记, 供 updateWatchPanelValues 就地更新)
+function buildWatchPanelSkeleton(panel, code, x){
+  const cd=esc(x.code);
   panel.innerHTML=`
     <div class="wp-head">
-      <span class="nm">${nm}</span><span class="cd">${cd}</span>
-      <span class="st ${stCls}">${esc(x.strength)}</span>
+      <span class="nm" data-f="name"></span><span class="cd" data-f="code"></span>
+      <span class="st" data-f="strength"></span>
       <span class="close" title="关闭" onclick="selectWatch('${cd}')">✕</span>
     </div>
-    <div class="wp-op txt ${opCls}"><span class="opbig">${esc(x.op||'观望')}</span><span class="opwhy">${esc(x.op_reason||'')}</span></div>
+    <div class="wp-op txt"><span class="opbig" data-f="op"></span><span class="opwhy" data-f="opwhy"></span></div>
     <div class="minchart">
       <div class="legend">
         <i class="l-price"><span class="sq"></span>价格</i>
@@ -4149,34 +4173,88 @@ function renderWatchPanel(code){
       <div class="nodata" id="minNoData${cd}">分时加载中…</div>
     </div>
     <div class="wp-grid">
-      <div class="wp-cell"><div class="k">现价</div><div class="v">${(+x.price||0).toFixed(2)}</div><div class="s">${esc(x.vp_note)}</div></div>
-      <div class="wp-cell"><div class="k">均价线 VWAP</div><div class="v">${(+x.vwap||0).toFixed(3)}</div><div class="s">较上次${vwdirTxt}</div></div>
-      <div class="wp-cell"><div class="k">偏离度</div><div class="v ${devCls}">${(+x.dev||0).toFixed(2)}%</div><div class="s">0~+3%健康</div></div>
-      <div class="wp-cell"><div class="k">量比</div><div class="v ${x.vol_ratio>=1.5?'up':'gold'}">${(+x.vol_ratio||0).toFixed(2)}</div><div class="s">≥1.5活跃</div></div>
-      <div class="wp-cell"><div class="k">振幅</div><div class="v">${(+x.amp||0).toFixed(2)}%</div><div class="s">≥3%适合做T</div></div>
-      <div class="wp-cell"><div class="k">换手率</div><div class="v">${(+x.turnover||0).toFixed(2)}%</div><div class="s">资金活跃度</div></div>
-      <div class="wp-cell"><div class="k">大盘上证</div><div class="v ${mktCls}">${(+d.mkt_chg||0).toFixed(2)}%</div><div class="s">-0.5~+1%为佳</div></div>
-      <div class="wp-cell"><div class="k">涨跌幅</div><div class="v ${x.chg_pct>=0?'up':'down'}">${x.chg_pct>=0?'+':''}${(+x.chg_pct||0).toFixed(2)}%</div><div class="s">${esc(x.strength_note)}</div></div>
+      <div class="wp-cell"><div class="k">现价</div><div class="v" data-f="price"></div><div class="s" data-f="vpnote"></div></div>
+      <div class="wp-cell"><div class="k">均价线 VWAP</div><div class="v" data-f="vwap"></div><div class="s" data-f="vwdir"></div></div>
+      <div class="wp-cell"><div class="k">偏离度</div><div class="v" data-f="dev"></div><div class="s">0~+3%健康</div></div>
+      <div class="wp-cell"><div class="k">量比</div><div class="v" data-f="volratio"></div><div class="s">≥1.5活跃</div></div>
+      <div class="wp-cell"><div class="k">振幅</div><div class="v" data-f="amp"></div><div class="s">≥3%适合做T</div></div>
+      <div class="wp-cell"><div class="k">换手率</div><div class="v" data-f="turnover"></div><div class="s">资金活跃度</div></div>
+      <div class="wp-cell"><div class="k">大盘上证</div><div class="v" data-f="mkt"></div><div class="s">-0.5~+1%为佳</div></div>
+      <div class="wp-cell"><div class="k">涨跌幅</div><div class="v" data-f="chg"></div><div class="s" data-f="strnote"></div></div>
     </div>
     <div class="wp-score">
       <span class="lbl">做T打分</span>
-      <span class="num ${scCls}">${x.t_score}/6</span>
-      <span class="adv ${advCls}">${esc(x.t_advice)}</span>
+      <span class="num" data-f="tscore"></span>
+      <span class="adv" data-f="tadv"></span>
     </div>
-    <div class="wp-items">${items}</div>
+    <div class="wp-items" data-f="items"></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-      <div class="wp-cell" style="flex:1;min-width:150px"><div class="k">做T方向</div><div class="v ${modeCls}">${esc(x.t_mode||'—')}</div><div class="s">${esc(x.t_mode_reason||'')}</div></div>
-      <div class="wp-cell" style="flex:1;min-width:150px"><div class="k">承接真伪</div><div class="v ${accCls}">${esc(x.t_accept||'—')}</div><div class="s">${esc(x.t_accept_note||'')}</div></div>
+      <div class="wp-cell" style="flex:1;min-width:150px"><div class="k">做T方向</div><div class="v" data-f="mode"></div><div class="s" data-f="mreason"></div></div>
+      <div class="wp-cell" style="flex:1;min-width:150px"><div class="k">承接真伪</div><div class="v" data-f="accept"></div><div class="s" data-f="areason"></div></div>
       <div class="wp-cell" style="flex:1;min-width:150px"><div class="k">做T成本</div><div class="v">~1‰</div><div class="s">差价需≥0.3%, 目标≥1%</div></div>
     </div>
     <div class="wp-note" style="margin-bottom:6px"><b>做T五大门槛</b></div>
-    <div class="wp-items" style="gap:3px 14px">${gateHtml}</div>
-    <div class="wp-note"><b>基本面</b>：${esc(x.strength_note)}；量价：${esc(x.vp_note)}。</div>
-    ${vetoHtml}
+    <div class="wp-items" data-f="gate"></div>
+    <div class="wp-note" data-f="fundamental"></div>
+    <div class="wp-veto" data-f="veto"></div>
     <div style="margin-top:10px;display:flex;gap:8px">
-      <button class="btn btn-primary" onclick="gotoStockAnalyze('${cd}','${nm}')">打开完整个股分析</button>
+      <button class="btn btn-primary" data-f="btnAnalyze">打开完整个股分析</button>
     </div>`;
-  loadMinChart(cd, x.symbol||'', x.prev_close);
+  panel.querySelector('[data-f="btnAnalyze"]')
+    .onclick=()=>gotoStockAnalyze(String(x.code), x.name||String(x.code));
+}
+// 就地更新面板动态数值 (复用骨架节点, 不重建结构)
+function updateWatchPanelValues(panel, d, x){
+  const stCls = x.strength==='强'?'strong' : (x.strength==='过热'?'over' : (x.strength==='弱'?'weak':'weakest'));
+  const devCls = x.dev>0?'up':(x.dev<0?'down':'');
+  const mktCls = d.mkt_chg>0?'up':(d.mkt_chg<0?'down':'');
+  const vwdirTxt = x.vwap_dir==='up'?'向上':(x.vwap_dir==='down'?'向下':'走平');
+  const scCls = x.t_score>=4?'up':(x.t_score<=2?'low':'mid');
+  const advCls = x.t_advice==='可做正T'?'do':(x.t_advice==='坚决不做'?'no':'watch');
+  const opCls = x.op==='买入'?'buy':(x.op==='减仓'?'sell':(x.op==='规避'?'avoid':'watch'));
+  const modeCls = x.t_mode==='反T'?'down':(x.t_mode==='正T'?'up':(x.t_mode==='不做'?'no':'watch'));
+  const accCls = x.t_accept==='真承接'?'up':(x.t_accept==='假承接'?'down':'mid');
+  const items=(x.t_items||[]).map(t=>`<div class="wp-item"><span class="dot ${t.pass?'on':'off'}"></span>${esc(t.k)}</div>`).join('');
+  const gateHtml=(x.t_gate||[]).map(g=>{
+    const dot = g.pass===true?'on':(g.pass===false?'off':'mid');
+    return `<div class="wp-item"><span class="dot ${dot}"></span>${esc(g.k)}<em style="font-style:normal;opacity:.75;margin-left:auto">${esc(g.note||'')}</em></div>`;
+  }).join('');
+  const F=k=>panel.querySelector('[data-f="'+k+'"]');
+  // 头部
+  F('name').textContent=x.name||x.code;
+  F('code').textContent=String(x.code);
+  const stEl=F('strength'); stEl.textContent=x.strength||''; stEl.className='st '+stCls;
+  // 主操作横幅
+  F('op').textContent=x.op||'观望';
+  panel.querySelector('.wp-op').className='wp-op txt '+opCls;
+  F('opwhy').textContent=x.op_reason||'';
+  // 指标网格
+  F('price').textContent=(+x.price||0).toFixed(2);
+  F('vpnote').textContent=x.vp_note||'';
+  F('vwap').textContent=(+x.vwap||0).toFixed(3);
+  F('vwdir').textContent='较上次'+vwdirTxt;
+  const devEl=F('dev'); devEl.textContent=(+x.dev||0).toFixed(2)+'%'; devEl.className='v '+devCls;
+  const volEl=F('volratio'); volEl.textContent=(+x.vol_ratio||0).toFixed(2); volEl.className='v '+(x.vol_ratio>=1.5?'up':'gold');
+  F('amp').textContent=(+x.amp||0).toFixed(2)+'%';
+  F('turnover').textContent=(+x.turnover||0).toFixed(2)+'%';
+  const mktEl=F('mkt'); mktEl.textContent=(+d.mkt_chg||0).toFixed(2)+'%'; mktEl.className='v '+mktCls;
+  const chgEl=F('chg'); chgEl.textContent=(x.chg_pct>=0?'+':'')+(+x.chg_pct||0).toFixed(2)+'%'; chgEl.className='v '+(x.chg_pct>=0?'up':'down');
+  F('strnote').textContent=x.strength_note||'';
+  // 做T打分
+  const scEl=F('tscore'); scEl.textContent=(x.t_score||0)+'/6'; scEl.className='num '+scCls;
+  const advEl=F('tadv'); advEl.textContent=x.t_advice||''; advEl.className='adv '+advCls;
+  F('items').innerHTML=items;
+  // 做T方向 / 承接真伪
+  const modeEl=F('mode'); modeEl.textContent=x.t_mode||'—'; modeEl.className='v '+modeCls;
+  F('mreason').textContent=x.t_mode_reason||'';
+  const accEl=F('accept'); accEl.textContent=x.t_accept||'—'; accEl.className='v '+accCls;
+  F('areason').textContent=x.t_accept_note||'';
+  // 门槛 / 基本面 / 一票否决
+  F('gate').innerHTML=gateHtml;
+  F('fundamental').innerHTML='<b>基本面</b>：'+esc(x.strength_note)+'；量价：'+esc(x.vp_note)+'。';
+  const vetoEl=F('veto');
+  if(x.veto){ vetoEl.style.display=''; vetoEl.innerHTML='<div class="wp-note" style="margin-top:8px">⚠ <b>一票否决:</b> '+esc(x.veto)+' — 放弃买入</div>'; }
+  else { vetoEl.style.display='none'; vetoEl.innerHTML=''; }
 }
 
 // ============ 今日分时图 (价格线 + 均价线/VWAP) ============
