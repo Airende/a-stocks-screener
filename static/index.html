@@ -453,6 +453,17 @@
   .idx-card-chg{display:block;font-size:9.5px;font-weight:700;color:var(--sub);white-space:nowrap}
   .idx-cards{display:flex;gap:8px;min-width:min-content}
   .idx-cards .empty{padding:4px 8px;font-size:11px;color:var(--sub);display:flex;align-items:center;height:34px;white-space:nowrap}
+  /* 指数卡片悬浮分时图 (20260918) */
+  .idx-card{cursor:crosshair}
+  #idxMinTip{position:fixed;z-index:1200;width:340px;background:rgba(18,22,32,.97);border:1px solid var(--border);
+             border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.5);padding:8px 10px 6px;display:none;pointer-events:none;backdrop-filter:blur(4px)}
+  #idxMinTip .imt-head{display:flex;align-items:baseline;gap:8px;margin-bottom:6px}
+  #idxMinTip .imt-name{font-size:13px;font-weight:800;color:var(--txt)}
+  #idxMinTip .imt-price{font-size:14px;font-weight:800;color:var(--accent);font-variant-numeric:tabular-nums}
+  #idxMinTip .imt-chg{font-size:11px;font-weight:700;font-variant-numeric:tabular-nums}
+  #idxMinTip .imt-up{color:var(--up)} #idxMinTip .imt-dn{color:var(--down)}
+  #idxMinTip canvas{display:block;width:100%;height:120px;border-radius:6px;background:#0f1219}
+  #idxMinTip .imt-meta{font-size:10px;color:var(--sub);margin-top:4px;color:#7a8699}
   /* ===== 股票标记徽章 ===== */
   .mark-badge{display:inline-flex;align-items:center;justify-content:center;
               width:18px;height:18px;border-radius:4px;margin-left:4px;font-size:13px;font-weight:800;
@@ -837,6 +848,17 @@
       <button class="ghost btn-danger-ghost" id="cacheRefreshBtn">刷新</button>
     </div>
   </header>
+
+  <!-- 指数卡片悬浮分时图 (20260918): hover 顶部指数卡时展示该指数当日分时 -->
+  <div id="idxMinTip">
+    <div class="imt-head">
+      <span class="imt-name"></span>
+      <span class="imt-price"></span>
+      <span class="imt-chg"></span>
+    </div>
+    <canvas></canvas>
+    <div class="imt-meta"></div>
+  </div>
 
   <!-- ===== 自选股盯盘: 添加自选 + 实时涨跌幅 + 预警高亮 (20260918) ===== -->
   <div id="watchBar" class="watch-bar">
@@ -4063,7 +4085,7 @@ function renderMarketSnap(d){
     const clr=up?'var(--up)':(dn?'var(--down)':'var(--sub)');
     const sign=up?'+':(dn?'-':'');
     const amt=Math.abs(+idx.chg||0).toFixed(2);
-    return `<div class="idx-card">
+    return `<div class="idx-card" data-symbol="${esc(idx.symbol)}" data-name="${esc(idx.name)}">
       <span class="idx-card-name" title="${esc(idx.name)}">${esc(idx.name)}</span>
       <span class="idx-card-price ${up?'up':(dn?'down':'flat')}" style="color:${clr}">${sign==='+'?'+':''}${c.toFixed(2)}%</span>
       <span class="idx-card-chg" style="color:${clr}">${idx.price.toFixed(2)} · ${sign==='+'?'+':'-'}${amt===0?'0.00':amt}</span>
@@ -4072,6 +4094,55 @@ function renderMarketSnap(d){
 }
 let _lastSnap = null;
 let _idxTickMs = 60000;  // 非交易时段默认 60s, 后端返回 trading=true 时切到 1s
+
+// ===== 指数卡片悬浮分时图 (20260918): hover 顶部指数卡展示该指数当日分时 =====
+let _idxMinSym = null;
+function _showIdxMinTip(card, ev){
+  const sym=card.getAttribute('data-symbol'), name=card.getAttribute('data-name');
+  if(!sym){ _hideIdxMinTip(); return; }
+  const tip=document.getElementById('idxMinTip');
+  if(!tip){ return; }
+  tip.style.display='block';
+  tip.querySelector('.imt-name').textContent=name;
+  const chgEl=tip.querySelector('.imt-chg'); chgEl.textContent='';
+  chgEl.className='imt-chg';
+  // 定位到鼠标旁 (避免贴边; 顶部已在卡片上, 弹到其上方)
+  const mw=tip.offsetWidth||340, mh=tip.offsetHeight||160;
+  let x=ev.clientX-mw/2, y=ev.clientY-mh-14;
+  if(x<8) x=8; if(x+mw>window.innerWidth-8) x=window.innerWidth-mw-8;
+  if(y<8) y=ev.clientY+20;
+  tip.style.left=x+'px'; tip.style.top=y+'px';
+  // 同一指数不重复拉取重绘
+  if(_idxMinSym===sym) return;
+  _idxMinSym=sym;
+  const canvas=tip.querySelector('canvas');
+  const meta=tip.querySelector('.imt-meta');
+  meta.textContent='分时加载中…';
+  getMinData(sym).then(c=>{
+    if(_idxMinSym!==sym){ return; }
+    const resp=c.resp||{}; const pts=resp.data||[];
+    const pc=resp.prev_close;
+    const last=pts.length? (pts[pts.length-1].price||0):0;
+    const pct=pc>0? (last-pc)/pc*100 : 0;
+    tip.querySelector('.imt-price').textContent= last? last.toFixed(2):'—';
+    const up=pct>0, dn=pct<0;
+    chgEl.className='imt-chg'+(up?' imt-up':(dn?' imt-dn':''));
+    chgEl.textContent=(pct>0?'+':(pct<0?'-':''))+(pct||0).toFixed(2)+'%';
+    meta.textContent= pts.length? ('分时 · '+pts.length+' 点'+(pc? ' · 昨收 '+pc.toFixed(2):'')) : '该指数暂无分时数据';
+    try{ paintMin(canvas, pts, pc>0?pc:last, true); }
+    catch(err){ meta.textContent='绘制错误: '+(err&&err.message); }
+  }).catch(e=>{ if(_idxMinSym===sym){ meta.textContent='分时加载失败: '+(e&&e.message); } });
+}
+function _hideIdxMinTip(){ const tip=document.getElementById('idxMinTip'); if(tip) tip.style.display='none'; }
+function initIdxMinTip(){
+  // 用 mouseover (冒泡委托): 鼠标扫过/移入任意元素都会触发, 避免 mouseleave 静止时漏掉
+  document.addEventListener('mouseover', ev=>{
+    const card=ev.target&&ev.target.closest? ev.target.closest('.idx-card[data-symbol]'):null;
+    if(card){ _showIdxMinTip(card, ev); }
+    else { _hideIdxMinTip(); _idxMinSym=null; }
+  });
+}
+
 async function loadMarketSnap(){
   try{
     const r=await fetch('/api/market-snapshot');
@@ -4746,6 +4817,7 @@ function _scheduleSpotPoll(){
 }
 loadWatch();
 loadMarketSnap();
+initIdxMinTip();
 _scheduleSpotPoll();
 function _tickIndices(){
   if(_isSessionOpen()){
