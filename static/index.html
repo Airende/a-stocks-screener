@@ -4653,8 +4653,12 @@ function paintMinAxes(ctx,w,h,lx,rx,spanX,prevClose,lo,hi,Y){
   [0.25,0.5,0.75].forEach(f=>{
     ctx.beginPath(); const x=lx+f*spanX; ctx.moveTo(x,1); ctx.lineTo(x,axisY); ctx.stroke();
   });
-  // 时间标签
-  ctx.fillStyle='rgba(159,176,198,.82)'; ctx.font='10px monospace'; ctx.textBaseline='top';
+  // 15:00 收盘竖线标记(金色虚线), 醒目标识收于尾端
+  ctx.strokeStyle='rgba(245,200,66,.4)'; ctx.lineWidth=1; ctx.setLineDash([3,3]);
+  ctx.beginPath(); const cx=lx+1*spanX; ctx.moveTo(cx,1); ctx.lineTo(cx,axisY); ctx.stroke();
+  ctx.setLineDash([]);
+  // 时间标签: 起始 09:30, 结束 15:00(加粗"15:00收")
+  ctx.textBaseline='top';
   [0,0.25,0.5,0.75,1].forEach(f=>{
     const m=Math.round(f*240);
     const clock = m<=120 ? 570+m : 660+m;           // 反向换算回时钟, 午休后从13:00续
@@ -4662,7 +4666,10 @@ function paintMinAxes(ctx,w,h,lx,rx,spanX,prevClose,lo,hi,Y){
     const mm=('0'+(clock%60)).slice(-2);
     const x=lx+f*spanX;
     ctx.textAlign = f<=0.05 ? 'left' : f>=0.95 ? 'right' : 'center';
-    ctx.fillText(hh+':'+mm, x, axisY+3);
+    const isClose = f>=0.985;                        // 15:00 收盘标记
+    if(isClose){ ctx.fillStyle='#f5c842'; ctx.font='bold 10px monospace'; }
+    else      { ctx.fillStyle='rgba(159,176,198,.82)'; ctx.font='10px monospace'; }
+    ctx.fillText(isClose ? '15:00收' : (hh+':'+mm), x, axisY+3);
   });
 }
 
