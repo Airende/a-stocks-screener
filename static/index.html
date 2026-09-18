@@ -1377,7 +1377,8 @@ function render(d, syncConds=true){
   const act=d.active||{gA:1,gB:1,gC:1,gD:1};
   const lgHtml=G_ORDER.filter(([k])=>act[k]).map(([k,l])=>`<span class="lg" title="${l}">${l}</span>`).join('');
   _lastScreenMeta = {updated: d.updated, cached: d.cached, running: d.running};
-  $('#updated').textContent = d.updated + (d.cached?' (缓存)':'');
+  const _updT=String(d.updated||'').match(/\d{1,2}:\d{2}/g);
+  $('#updated').textContent = (_updT&&_updT.length? _updT[_updT.length-1] : (d.updated||'')) + (d.cached?' (缓存)':'');
   syncStatusStrip();
   $('#stats').innerHTML=[
     ['总样本',d.universe],['预筛候选',d.candidates],
@@ -1517,7 +1518,7 @@ async function loadCacheInfo(){
       $('#cacheInfo').textContent='本地缓存: 无';
       return;
     }
-    $('#cacheInfo').innerHTML=`本地缓存: <b style="color:var(--gold)">${d.cache_date}</b> · K线 ${d.kline_count}只/${d.kline_size_mb}MB · 行情 ${d.spot_size_mb}MB`;
+    $('#cacheInfo').innerHTML=`本地缓存: <b style="color:var(--gold)">${d.cache_date}</b> · K线 ${d.kline_count}只/${d.kline_size_mb}MB`;
   }catch(e){
     $('#cacheInfo').textContent='本地缓存: 获取失败';
   }
