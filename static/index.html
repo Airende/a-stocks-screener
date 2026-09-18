@@ -789,6 +789,11 @@
   /* 危险操作按钮: 红色 ghost 样式, 与普通按钮区分 */
   button.btn-danger-ghost{background:transparent;border:1px solid rgba(239,68,68,.45);color:var(--down)}
   button.btn-danger-ghost:hover{background:rgba(239,68,68,.08)}
+  /* 顶栏「刷新K线数据」: 缩小并贴合 toolbar 的 meta 风格 */
+  #cacheRefreshBtn{background:transparent;border:1px solid var(--border);color:var(--sub);
+                   border-radius:6px;padding:4px 10px;font-size:12px;font-weight:500;height:26px;
+                   display:inline-flex;align-items:center}
+  #cacheRefreshBtn:hover{color:var(--down);border-color:rgba(239,68,68,.45);background:rgba(239,68,68,.06)}
   .del-btn{color:var(--down);cursor:pointer;opacity:.6;transition:.12s;padding:2px 5px;border-radius:4px}
   .del-btn:hover{opacity:1;background:rgba(239,68,68,.12)}
   /* K线图十字光标 + OHLC 悬浮提示 */
