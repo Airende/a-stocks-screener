@@ -10113,12 +10113,21 @@ def api_watchlist_order(payload: dict):
     return JSONResponse(data)
 
 
+# 等权重指数代理: 三大指数卡片悬浮分时图的黄线 = "全部股票等权平均走势"。
+# 数据源没有与三大指数一一对应的"等权"指数, 故统一采用 沪深300等权(sh000984)
+# 作为市场等权平均走势的代理 (更贴近中小盘/市场的平均表现)。
+_EW_FOR = {"sh000001": "sh000984", "sz399001": "sh000984", "sz399006": "sh000984"}
+
+
 @app.get("/api/minute-data")
 def api_minute_data(symbol: str = ""):
     """获取个股当日分时数据: 逐分钟 时间/价格/成交量/成交额, 并计算分时均价线(VWAP)逐点值。
 
     数据源: 腾讯分时接口 appstock/app/minute/query。返回的 avg 为截止该分钟的
     累计均价(VWAP = 累计成交额/累计成交量), 与盯盘面板展示的均价线口径一致。
+
+    对三大指数, 额外返回 ew 数组: 与 data 逐分钟对齐的"等权平均走势"涨跌幅(%),
+    黄线据此绘制 (全部成分视为等权)。
     """
     if not symbol:
         return JSONResponse({"error": "缺少 symbol 参数"}, status_code=400)
@@ -10181,12 +10190,49 @@ def api_minute_data(symbol: str = ""):
                 prev_close = float(ql[4])
         except (TypeError, ValueError, IndexError):
             prev_close = None
+
+        # —— 等权平均走势(黄线): 拉取对应等权指数分时, 折算成逐分钟涨跌幅(%),
+        #    与前端的 data 按时间对齐。仅对三大指数卡片提供 (hover 展示) ——
+        ew = []
+        ew_code = _EW_FOR.get(symbol)
+        if ew_code and is_index and prev_close:
+            try:
+                re = requests.get(url, params={"code": ew_code}, headers=HEADERS, timeout=10)
+                re.raise_for_status()
+                ewnode = re.json().get("data", {}).get(ew_code, {}) or {}
+                ew_prev = None
+                eqt = (ewnode.get("qt") or {}).get(ew_code)
+                if isinstance(eqt, list) and len(eqt) > 4:
+                    ew_prev = float(eqt[4])
+                ew_price = {}   # time -> 等权指数价格
+                if ew_prev and ew_prev > 0:
+                    for ln in (ewnode.get("data") or {}).get("data") or []:
+                        parts = str(ln).split()
+                        if len(parts) < 2:
+                            continue
+                        try:
+                            ep = float(parts[1])
+                        except (TypeError, ValueError):
+                            continue
+                        if ep > 0:
+                            ew_price[parts[0]] = ep
+                # 按主序列每根分钟的价格折算成涨跌幅(%); 缺失分钟归空 (前端跳过该点)
+                for p in parsed:
+                    ep = ew_price.get(p["time"])
+                    if ep is not None:
+                        ew.append(round((ep / ew_prev - 1.0) * 100.0, 4))
+                    else:
+                        ew.append(None)
+            except Exception:
+                ew = []
+
         return JSONResponse({
             "symbol": symbol,
             "is_index": is_index,
             "prev_close": prev_close,
             "count": len(parsed),
             "data": parsed,
+            "ew": ew,
         })
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)

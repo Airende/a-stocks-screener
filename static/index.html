@@ -4129,7 +4129,7 @@ function _showIdxMinTip(card, ev){
     chgEl.className='imt-chg'+(up?' imt-up':(dn?' imt-dn':''));
     chgEl.textContent=(pct>0?'+':(pct<0?'-':''))+(pct||0).toFixed(2)+'%';
     meta.textContent= pts.length? ('分时 · '+pts.length+' 点'+(pc? ' · 昨收 '+pc.toFixed(2):'')) : '该指数暂无分时数据';
-    try{ paintMin(canvas, pts, pc>0?pc:last, false); }
+    try{ paintMin(canvas, pts, pc>0?pc:last, false, resp.ew); }
     catch(err){ meta.textContent='绘制错误: '+(err&&err.message); }
   }).catch(e=>{ if(_idxMinSym===sym){ meta.textContent='分时加载失败: '+(e&&e.message); } });
 }
@@ -4559,8 +4559,8 @@ function _minFrac(p){
   return -1;
 }
 
-// 统一绘制: 价格线(蓝) + 均价线(金) + 昨收虚线 + 时间轴
-function paintMin(canvas, pts, prevClose, mini){
+// 统一绘制: 价格线(白) + 均价线(红) + 等权平均(黄, 仅指数 hover) + 昨收虚线 + 时间轴
+function paintMin(canvas, pts, prevClose, mini, ewPct){
   if(!canvas) return;
   const w=canvas.clientWidth=canvas.offsetWidth||0;
   const h=canvas.clientHeight=canvas.offsetHeight||0;
@@ -4583,12 +4583,17 @@ function paintMin(canvas, pts, prevClose, mini){
   const xArr = useTime
     ? pts.map((_,i)=> lx+xf[i]*spanX)
     : pts.map((_,i)=> pts.length>1 ? lx+i/(pts.length-1)*spanX : w/2);
+  // 等权平均线(黄): 逐分钟涨跌幅(%) -> 按主指数昨收折算成"虚拟点位", 与价格线同轴对比
+  const ewVals = (ewPct && prevClose>0 && Array.isArray(ewPct))
+    ? ewPct.map(x => (x==null||isNaN(x)) ? null : prevClose*(1+x/100))
+    : null;
   let lo=Infinity, hi=-Infinity;
   pts.forEach(p=>{
     if(p.price!=null){ lo=Math.min(lo,p.price); hi=Math.max(hi,p.price); }
     if(p.avg!=null){ lo=Math.min(lo,p.avg); hi=Math.max(hi,p.avg); }
   });
   if(prevClose){ lo=Math.min(lo,prevClose); hi=Math.max(hi,prevClose); }
+  if(ewVals) ewVals.forEach(v=>{ if(v!=null){ lo=Math.min(lo,v); hi=Math.max(hi,v); } });
   let range=hi-lo; if(range<=0) range=(hi||1)*0.01;
   lo-=range*0.05; hi+=range*0.05; range=hi-lo||1;
   const Y=(v)=> top + (hi-v)/range*(h-top-bot);
@@ -4605,9 +4610,22 @@ function paintMin(canvas, pts, prevClose, mini){
     ctx.beginPath(); ctx.moveTo(lx, Y(prevClose)); ctx.lineTo(rx, Y(prevClose)); ctx.stroke();
     ctx.setLineDash([]);
   }
-  // 均价线(金) 只要不全为空就绘制 (指数/个股均适用)
-  if(pts.every(p=>p.avg!=null)) drawLine(pts.map(p=>p.avg), '#f5c842', mini?1:1.4);
-  drawLine(pts.map(p=>p.price), '#4f9dff', mini?1.1:1.8); // 价格线(蓝)
+  // 等权平均线(黄): 允许缺失分钟(跳过断点)
+  if(ewVals && ewVals.some(v=>v!=null)){
+    ctx.beginPath(); ctx.strokeStyle='#f5c842'; ctx.lineWidth= mini?1:1.2;
+    ctx.lineJoin='round'; ctx.lineCap='round';
+    let pen=false;
+    for(let i=0;i<ewVals.length;i++){
+      const v=ewVals[i];
+      if(v==null){ pen=false; continue; }
+      if(!pen){ ctx.moveTo(xArr[i],Y(v)); pen=true; }
+      else ctx.lineTo(xArr[i],Y(v));
+    }
+    ctx.stroke();
+  }
+  // 均价线(红)
+  if(pts.every(p=>p.avg!=null)) drawLine(pts.map(p=>p.avg), '#ff5d5d', mini?1:1.4);
+  drawLine(pts.map(p=>p.price), '#ffffff', mini?0.8:1.2); // 价格线(白) 线条变细
   if(!mini) paintMinAxes(ctx,w,h,lx,rx,spanX,prevClose,lo,hi,Y);
   // 记录坐标映射, 供悬停十字线反推价格/涨跌幅
   canvas.__geo={top,bot,lx,rx,spanX,lo,hi,prevClose,mini,h};
