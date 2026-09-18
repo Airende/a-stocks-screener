@@ -9759,6 +9759,27 @@ def _watch_quote(codes: list[str]) -> dict:
             t_accept, t_accept_note = "假承接", "未站上均价线, 反弹即遇压, 勿抄"
         else:
             t_accept, t_accept_note = "待验证", f"量比{vol_ratio:.2f}中性, 看能否连续站稳均价线"
+        # ---- 最终操作指令(买/卖/观望/规避) ----
+        op = "观望"
+        op_reason = "信号未确认, 再等等"
+        if mkt_chg <= -1:
+            op, op_reason = "规避", f"大盘跌{mkt_chg:.2f}%>1%, 系统性风险, 暂停买入; 持仓设好止损"
+        elif dev <= -3 and not above_vwap:
+            op, op_reason = "规避", f"深跌破均价线({dev:+.1f}%), 勿接飞刀, 空仓/减仓观望"
+        elif veto and dev >= 0:
+            op, op_reason = "观望", f"一票否决: {veto}"
+        elif above_vwap and dev >= 3:
+            op, op_reason = "减仓", f"偏离{dev:+.1f}%过热, 分批止盈/高抛(反T卖点)"
+        elif above_vwap and dev >= 2 and vp_score in ("weak", "danger"):
+            op, op_reason = "减仓", f"冲高滞涨({dev:+.1f}%)量价背离, 反T卖点, 先卖后买"
+        elif above_vwap and 0 <= dev < 2 and vp_score == "good":
+            op, op_reason = "买入", f"站上均价线({dev:+.1f}%)放量健康, 回踩即正T低吸点"
+        elif above_vwap and 0 <= dev < 2:
+            op, op_reason = "观望", f"线上({dev:+.1f}%)但量能一般, 看能否放量启动"
+        elif not above_vwap and dev > -3:
+            op, op_reason = "观望", "价在均价线下, 线上看多线下看空, 不买; 反弹站稳再看"
+        else:
+            op, op_reason = "观望", "信号不明, 继续观察"
         quotes.append({
             "code": code,
             "symbol": _to_symbol(code),
@@ -9791,6 +9812,9 @@ def _watch_quote(codes: list[str]) -> dict:
             "t_mode_reason": t_mode_reason,
             "t_accept": t_accept,
             "t_accept_note": t_accept_note,
+            # ---- 实时操作指令(买/卖/观望/规避) ----
+            "op": op,
+            "op_reason": op_reason,
         })
     up = sum(1 for q in quotes if q["chg_pct"] > 0)
     down = sum(1 for q in quotes if q["chg_pct"] < 0)

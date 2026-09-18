@@ -658,6 +658,12 @@
   .watch-card .sub .px{font-size:11px;font-weight:600;color:var(--txt);font-variant-numeric:tabular-nums}
   .watch-card .sub .chgamt{font-size:11px;font-weight:600;color:var(--sub);font-variant-numeric:tabular-nums}
   .watch-card .nm{font-size:12px;font-weight:700;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .watch-card .op{position:absolute;top:2px;left:6px;font-size:10px;font-weight:700;line-height:1;
+    padding:1px 5px;border-radius:3px;z-index:2}
+  .watch-card .op.buy{color:#111;background:var(--up)}
+  .watch-card .op.sell{color:#fff;background:var(--down)}
+  .watch-card .op.watch{color:var(--gold);border:1px solid var(--gold)}
+  .watch-card .op.avoid{color:var(--sub);border:1px dashed var(--sub)}
   .watch-card .rm{position:absolute;top:2px;right:4px;color:var(--sub);opacity:0;font-size:12px;line-height:1;
                   padding:1px 4px;border-radius:4px;cursor:pointer;transition:.12s}
   .watch-card:hover .rm{opacity:.8}
@@ -683,6 +689,14 @@
   .wp-head .st.weakest{color:#bbb;background:rgba(255,255,255,.1)}
   .wp-head .close{margin-left:auto;cursor:pointer;color:var(--sub);font-size:14px;padding:2px 6px;border-radius:4px}
   .wp-head .close:hover{color:var(--txt);background:rgba(255,255,255,.08)}
+  .wp-op{display:flex;align-items:center;gap:10px;margin-bottom:10px;padding:8px 12px;border-radius:8px;
+    border:1px solid var(--border);background:rgba(255,255,255,.03)}
+  .wp-op .opbig{font-size:22px;font-weight:900;line-height:1}
+  .wp-op .opwhy{font-size:12px;color:var(--txt);line-height:1.45}
+  .wp-op.buy{border-color:var(--up);background:rgba(255,70,70,.10)} .wp-op.buy .opbig{color:var(--up)}
+  .wp-op.sell{border-color:var(--down);background:rgba(0,200,120,.10)} .wp-op.sell .opbig{color:var(--down)}
+  .wp-op.watch{border-color:var(--gold);background:rgba(250,184,57,.08)} .wp-op.watch .opbig{color:var(--gold)}
+  .wp-op.avoid{border-color:var(--border)} .wp-op.avoid .opbig{color:#bbb}
   .wp-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:10px}
   .wp-cell{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:6px;padding:7px 10px}
   .wp-cell .k{font-size:10px;color:var(--sub);margin-bottom:2px}
@@ -4052,9 +4066,11 @@ function renderWatch(d){
     const nm=esc(x.name||x.code), cd=esc(x.code);
     const limTxt = x.limit==='up' ? ' ·涨停' : (x.limit==='down' ? ' ·跌停' : (x.spike==='spike' ? ' ·拉升' : ''));
     const sel = cd===_activeWatchCode ? ' selected' : '';
+    const opCls = x.op==='买入'?'buy':(x.op==='减仓'?'sell':(x.op==='规避'?'avoid':'watch'));
     return `<div class="watch-card ${pcl} ${alarm}${sel}" title="点击查看盘中研判"
         onclick="selectWatch('${cd}')">
       <span class="rm" title="移除" onclick="event.stopPropagation();delWatch('${cd}')">✕</span>
+      <span class="op ${opCls}">${esc(x.op||'观望')}</span>
       <span class="chg">${pcl==='up'?'+':(pcl==='down'?'':'')}${(+x.chg_pct||0).toFixed(2)}%</span>
       <span class="sub"><span class="px">${(+x.price||0).toFixed(2)}</span><span class="chgamt">${sgn}${Math.abs(+x.chg||0).toFixed(2)}</span></span>
       <span class="nm">${nm}</span>
@@ -4094,6 +4110,7 @@ function renderWatchPanel(code){
   const items=(x.t_items||[]).map(t=>`<div class="wp-item"><span class="dot ${t.pass?'on':'off'}"></span>${esc(t.k)}</div>`).join('');
   const modeCls = x.t_mode==='反T'?'down':(x.t_mode==='偏正T'?'up':(x.t_mode==='不做'?'no':'watch'));
   const accCls = x.t_accept==='真承接'?'up':(x.t_accept==='假承接'?'down':'mid');
+  const opCls = x.op==='买入'?'buy':(x.op==='减仓'?'sell':(x.op==='规避'?'avoid':'watch'));
   const gateHtml=(x.t_gate||[]).map(g=>{
     const dot = g.pass===true?'on':(g.pass===false?'off':'mid');
     return `<div class="wp-item"><span class="dot ${dot}"></span>${esc(g.k)}<em style="font-style:normal;opacity:.75;margin-left:auto">${esc(g.note||'')}</em></div>`;
@@ -4105,6 +4122,7 @@ function renderWatchPanel(code){
       <span class="st ${stCls}">${esc(x.strength)}</span>
       <span class="close" title="关闭" onclick="selectWatch('${cd}')">✕</span>
     </div>
+    <div class="wp-op txt ${opCls}"><span class="opbig">${esc(x.op||'观望')}</span><span class="opwhy">${esc(x.op_reason||'')}</span></div>
     <div class="wp-grid">
       <div class="wp-cell"><div class="k">现价</div><div class="v">${(+x.price||0).toFixed(2)}</div><div class="s">${esc(x.vp_note)}</div></div>
       <div class="wp-cell"><div class="k">均价线 VWAP</div><div class="v">${(+x.vwap||0).toFixed(3)}</div><div class="s">较上次${vwdirTxt}</div></div>
