@@ -1396,21 +1396,11 @@ function render(d, syncConds=true){
   $('#exactHead').innerHTML = `完全命中 (${na}/${na} 全部激活条件) <span class="cnt">${ex.length}</span>`;
   $('#tbodyExact').innerHTML = !ex.length
     ? `<tr><td colspan="11" class="empty">当前勾选条件下暂无同时满足全部 ${na} 组的标的 (趋势/启动/买点常存在时序差异; 见下方"接近满足")${emptyCta}</td></tr>`
-    : (()=>{ // 分页: 首屏 PAGE_SIZE 行, 加载更多 (20260906)
-        const show = ex.slice(0, screenExactPage*PAGE_SIZE);
-        let html = show.map((s,i)=>rowHTML(s,i,false)).join('');
-        if(ex.length > show.length) html += loadMoreRow(show.length, ex.length, 11, 'screenExactPage++;render(_lastScreenData,true)');
-        return html;
-      })();
+    : ex.map((s,i)=>rowHTML(s,i,false)).join('');
   $('#nearHead').innerHTML = `接近满足 (≥${Math.max(1,na-1)}/${na}) · 按达成度排序 <span style="font-weight:400;color:var(--sub);font-size:12px;margin-left:8px">达成: ${lgHtml}</span>`;
   $('#tbodyNear').innerHTML = !nr.length
     ? '<tr><td colspan="12" class="empty">暂无接近满足的标的</td></tr>'
-    : (()=>{
-        const show = nr.slice(0, screenNearPage*PAGE_SIZE);
-        let html = show.map((s,i)=>rowHTML(s,i,true)).join('');
-        if(nr.length > show.length) html += loadMoreRow(show.length, nr.length, 12, 'screenNearPage++;render(_lastScreenData,true)');
-        return html;
-      })();
+    : nr.map((s,i)=>rowHTML(s,i,true)).join('');
   // 同步勾选状态为本次筛选使用的conds (刷新操作不打断用户未提交的勾选)
   if(syncConds && Array.isArray(d.conds) && d.conds.length){
     renderConds(d.conds);
@@ -3799,10 +3789,7 @@ function renderMATable(){
       return `<tr><td colspan="12" class="empty">${pool==='new_signals'?'今日无新试盘信号':(pool==='watch_pool'?'观察池为空':'今日无刚确认买入的标的')}</td></tr>`;
     };
     if(!list.length){ $('#tbodyMA').innerHTML=empty(); return; }
-    const show = list.slice(0, maPage*PAGE_SIZE);  // 分页加载 (20260906)
-    let html = show.map((s,i)=>sspRowHtml(s,i,pool)).join('');
-    if(list.length > show.length) html += loadMoreRow(show.length, list.length, 12, 'maPage++;renderMATable()');
-    $('#tbodyMA').innerHTML = html;
+    $('#tbodyMA').innerHTML = list.map((s,i)=>sspRowHtml(s,i,pool)).join('');
     return;
   }
   if(!maData||!maData.patterns){ return; }
@@ -3863,10 +3850,7 @@ function renderMATable(){
     // 把bestKey暂存到stocks元素上供行渲染显示徽标
     stocks.forEach(s=>{ s._grpKey=bestKey[s.code]; s._grpCnt=cnt[bestKey[s.code]]||0; });
   }
-  const show = stocks.slice(0, maPage*PAGE_SIZE);  // 分页加载 (20260906)
-  let html = show.map((s,i)=>maRowHtml(s,i)).join('');
-  if(stocks.length > show.length) html += loadMoreRow(show.length, stocks.length, 9, 'maPage++;renderMATable()');
-  $('#tbodyMA').innerHTML=html;
+  $('#tbodyMA').innerHTML=stocks.map((s,i)=>maRowHtml(s,i)).join('');
 }
 // 板块子概念拆分(宽松: 按、,，/分隔)
 function maSplitConcept(c){
