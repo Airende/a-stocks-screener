@@ -4718,9 +4718,9 @@ function bindMinFollow(canvas, code){
     for(const p of pts){ const d=Math.abs(p.x-x); if(d<bd){ bd=d; best=p; } }
     if(!best || best.price==null){ mf.style.display='none'; return; }
     const v=best.price;
-    // 该真实价格对应的 y (Y 映射)
+    // 该真实价格对应的 y (Y 映射: 与 paintMin 画线一致, 顶部 top 起算, 避免横虚线错位)
     const drawH=g.h-g.top-g.bot;
-    const py = g.h - (v-g.lo)/(g.hi-g.lo)*drawH;
+    const py = g.top + (g.hi-v)/(g.hi-g.lo)*drawH;
     const pct = g.prevClose>0 ? (v-g.prevClose)/g.prevClose*100 : 0;
     mf.style.display='block';
     line.style.left=(best.x)+'px';
