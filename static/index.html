@@ -4346,8 +4346,10 @@ function paintMin(canvas, pts, prevClose, mini){
   const useTime=xf.every(f=>f>=0);
   const pad=mini?2:6, top=mini?2:8, bot=mini?2:20;
   const lw = mini?0:54;                       // 左侧价格阶梯栏宽度
+  const rw = mini?0:46;                       // 右侧涨跌幅标注栏宽度
   const lx = pad + lw;                        // 绘图区左起点
-  const spanX = w-pad*2 - lw;
+  const rx = w - pad - rw;                    // 绘图区右端点
+  const spanX = rx - lx;
   const xArr = useTime
     ? pts.map((_,i)=> lx+xf[i]*spanX)
     : pts.map((_,i)=> pts.length>1 ? lx+i/(pts.length-1)*spanX : w/2);
@@ -4367,17 +4369,17 @@ function paintMin(canvas, pts, prevClose, mini){
   };
   if(prevClose){
     ctx.setLineDash([mini?2:3, mini?2:3]); ctx.strokeStyle='rgba(159,176,198,.55)'; ctx.lineWidth=1;
-    ctx.beginPath(); ctx.moveTo(lx, Y(prevClose)); ctx.lineTo(w-pad, Y(prevClose)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(lx, Y(prevClose)); ctx.lineTo(rx, Y(prevClose)); ctx.stroke();
     ctx.setLineDash([]);
   }
   drawLine(pts.map(p=>p.avg), '#f5c842', mini?1:1.6);    // 均价线(金)
   drawLine(pts.map(p=>p.price), '#4f9dff', mini?1.1:1.8); // 价格线(蓝)
-  if(!mini) paintMinAxes(ctx,w,h,lx,lw,spanX,prevClose,lo,hi,Y);
+  if(!mini) paintMinAxes(ctx,w,h,lx,rx,spanX,prevClose,lo,hi,Y);
 }
 
-// 展开面板分时图的底部时间轴 + Y轴价格阶梯
-// 横向阶梯: 在高低区间内画~5条横线, 左侧标注每个价位的价格与其相对昨收的涨跌幅
-function paintMinAxes(ctx,w,h,lx,lw,spanX,prevClose,lo,hi,Y){
+// 展开面板分时图的底部时间轴 + 价格阶梯
+// 横向阶梯: 高低区间内画~5条横线; 左侧标注价位价格, 右侧标注相对昨收的涨跌幅
+function paintMinAxes(ctx,w,h,lx,rx,spanX,prevClose,lo,hi,Y){
   const axisY=h-14;
   const hiFmt=(v)=> v>=1000 ? v.toFixed(1) : v.toFixed(2);
   ctx.textBaseline='middle';
@@ -4390,16 +4392,16 @@ function paintMinAxes(ctx,w,h,lx,lw,spanX,prevClose,lo,hi,Y){
     ctx.strokeStyle = i===0 ? 'rgba(255,255,255,.25)' : 'rgba(159,176,198,.10)';
     ctx.lineWidth = i===0 ? 1 : 1;
     ctx.beginPath(); ctx.moveTo(lx, y); ctx.lineTo(lx+spanX, y); ctx.stroke();
-    // 左侧价位文本
+    // 左侧价位(价格)
     ctx.fillStyle='rgba(159,176,198,.75)'; ctx.font='10px monospace'; ctx.textAlign='right';
     ctx.fillText(hiFmt(v), lx-3, y);
-    // 涨跌幅标注(相对昨收), 红涨绿跌黄平
+    // 右侧涨跌幅(相对昨收), 红涨绿跌灰平
     if(prevClose && prevClose>0){
       const pct=(v-prevClose)/prevClose*100;
       const col = pct>0.001 ? '#ff5d5d' : pct<-0.001 ? '#3ec98f' : 'rgba(159,176,198,.7)';
       ctx.fillStyle=col; ctx.font='10px monospace';
-      ctx.textAlign='right';
-      ctx.fillText((pct>=0?'+':'')+pct.toFixed(2)+'%', lx-3, y+11);
+      ctx.textAlign='left';
+      ctx.fillText((pct>=0?'+':'')+pct.toFixed(2)+'%', lx+spanX+3, y);
     }
   }
   // —— 底部时间轴 ——
