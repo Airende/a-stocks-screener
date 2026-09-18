@@ -10266,6 +10266,16 @@ def api_minute_data(symbol: str = ""):
                 "amount": amt,
                 "avg": avg,
             })
+        # 个股: 截断到 15:00, 剔除 15:00 后的盘后段(深市盘后固定价格交易/沪市基本无成交),
+        # 该段价格连续保持不变, 画成分时线时会留一条水平长直线(与同花顺/通达信仅显示到15:00一致)。
+        # 指数数据本就只到 15:00, 无需处理。
+        if not is_index:
+            buf = []
+            for p in parsed:
+                toks = p["time"]
+                if len(toks) >= 4 and int(toks[:2]) * 60 + int(toks[2:4]) <= 900:  # 900 = 15:00
+                    buf.append(p)
+            parsed = buf
         prev_close = None
         try:
             qt = node.get("qt") or {}
