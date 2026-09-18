@@ -7270,11 +7270,12 @@ _MARKET_SNAP_CACHE: dict = {"ts": 0.0, "data": None}
 _MARKET_SNAP_TTL = 3  # 行情快照每 3 秒刷新一次
 _MARKET_SNAP_LOCK = threading.Lock()
 
-# 三大指数：symbol, 中文名
+# 指数：symbol, 中文名 (三大指数 + 科创50; 后者用于自选盯盘按板块取大盘环境)
 _THREE_INDICES = [
     ("sh000001", "上证指数"),
     ("sz399001", "深证成指"),
     ("sz399006", "创业板指"),
+    ("sh000688", "科创50"),
 ]
 
 # 三大指数实时行情缓存 (轻量, 交易时段 1s TTL; 存储完整接口结构)
@@ -9787,21 +9788,27 @@ def _watch_quote(codes: list[str]) -> dict:
             if _c:
                 by_code.setdefault(_c, r)
     tc_extra = by_code  # 腾讯行自带量比/换手; 补充逻辑沿用下方 merge
-    # 大盘环境: 取上证指数涨跌幅 (基准环境)
-    mkt_chg = 0.0
+    # 大盘环境: 各板块指数涨跌幅(上证/深成/创业板/科创50), 按个股所属板块取对应指数,
+    # 不再对所有票统一用上证综指 (创业板/科创票看上证失真)
+    idx_map = {}
+    _mkt_name_map = {k: v for k, v in _INDEX_NAME_MAP.items()}
     try:
-        idx = _get_idx_rt_data().get("indices") or []
-        for it in idx:
-            if str(it.get("symbol")) == "sh000001":
-                mkt_chg = float(it.get("chg_pct") or 0)
-                break
+        for it in (_get_idx_rt_data().get("indices") or []):
+            _s = str(it.get("symbol"))
+            idx_map[_s] = float(it.get("chg_pct") or 0)
+            if it.get("name"):
+                _mkt_name_map[_s] = it.get("name")
     except Exception:
-        mkt_chg = 0.0
+        idx_map = {}
     quotes = []
     now = time.time()
     trading = _is_trading_time()
     tail_win = trading and _in_tail_window()   # 是否处于尾盘窗口(14:45-15:00)
     for code in codes:
+        # 所属板块指数作为该票大盘环境 (上证主板→沪指/深主板→深成/创业板→创指/科创板→科创50)
+        _mkt_sym = _index_symbol_for(code)
+        mkt_chg = idx_map.get(_mkt_sym, 0.0)
+        mkt_name = _mkt_name_map.get(_mkt_sym) or _mkt_sym
         row = by_code.get(code)
         if not row:
             # 快照(备源仅覆盖本地股票池)可能漏掉个别自选, 用腾讯按前缀单测兜底
@@ -10107,6 +10114,9 @@ def _watch_quote(codes: list[str]) -> dict:
             "t_buy_note": (op_reason if (buy_ok or (dev > -3 and vp_score != "danger" and not above_vwap)) else ""),
             "t_atr_pct": round(atr_pct, 2),
             "t_atr_abs": round(atr_abs, 2),
+            # ---- 该票所属板块指数(大盘环境) ----
+            "mkt_chg": mkt_chg,
+            "mkt_name": mkt_name,
             "t_sell_point": round(sell_ref, 2),
             "t_sell_note": sell_note,
             # ---- 实时操作指令(买/卖/观望/规避) ----
@@ -10123,7 +10133,7 @@ def _watch_quote(codes: list[str]) -> dict:
     flat = len(quotes) - up - down
     return {
         "updated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "mkt_chg": mkt_chg,
+        "mkt_chg": idx_map.get("sh000001", 0.0),
         "quotes": quotes,
         "sum": {"up": up, "down": down, "flat": flat},
     }

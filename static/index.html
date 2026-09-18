@@ -4411,7 +4411,7 @@ function buildWatchPanelSkeleton(panel, code, x){
       <div class="wp-cell"><div class="k">量比</div><div class="v" data-f="volratio"></div><div class="s">≥1.5活跃</div></div>
       <div class="wp-cell"><div class="k">振幅</div><div class="v" data-f="amp"></div><div class="s">≥3%适合做T</div></div>
       <div class="wp-cell"><div class="k">换手率</div><div class="v" data-f="turnover"></div><div class="s">资金活跃度</div></div>
-      <div class="wp-cell"><div class="k">大盘上证</div><div class="v" data-f="mkt"></div><div class="s">-0.5~+1%为佳</div></div>
+      <div class="wp-cell"><div class="k" data-f="mktname">大盘</div><div class="v" data-f="mkt"></div><div class="s">-0.5~+1%为佳</div></div>
       <div class="wp-cell"><div class="k">涨跌幅</div><div class="v" data-f="chg"></div><div class="s" data-f="strnote"></div></div>
     </div>
     <div class="wp-score">
@@ -4443,7 +4443,7 @@ function buildWatchPanelSkeleton(panel, code, x){
 function updateWatchPanelValues(panel, d, x){
   const stCls = x.strength==='强'?'strong' : (x.strength==='过热'?'over' : (x.strength==='弱'?'weak':'weakest'));
   const devCls = x.dev>0?'up':(x.dev<0?'down':'');
-  const mktCls = d.mkt_chg>0?'up':(d.mkt_chg<0?'down':'');
+  const mktCls = (x.mkt_chg||0)>0?'up':((x.mkt_chg||0)<0?'down':'');
   const vwdirTxt = x.vwap_dir==='up'?'向上':(x.vwap_dir==='down'?'向下':'走平');
   const scCls = x.t_score>=4?'up':(x.t_score<=2?'low':'mid');
   const advCls = x.t_advice==='可做正T'?'do':(x.t_advice==='坚决不做'?'no':'watch');
@@ -4474,7 +4474,8 @@ function updateWatchPanelValues(panel, d, x){
   const volEl=F('volratio'); volEl.textContent=(+x.vol_ratio||0).toFixed(2); volEl.className='v '+(x.vol_ratio>=1.5?'up':'gold');
   F('amp').textContent=(+x.amp||0).toFixed(2)+'%';
   F('turnover').textContent=(+x.turnover||0).toFixed(2)+'%';
-  const mktEl=F('mkt'); mktEl.textContent=(+d.mkt_chg||0).toFixed(2)+'%'; mktEl.className='v '+mktCls;
+  const mktEl=F('mkt'); mktEl.textContent=((+x.mkt_chg||0)>=0?'+':'')+(+x.mkt_chg||0).toFixed(2)+'%'; mktEl.className='v '+mktCls;
+  const mnEl=F('mktname'); if(mnEl && x.mkt_name) mnEl.textContent='大盘'+x.mkt_name;
   const chgEl=F('chg'); chgEl.textContent=(x.chg_pct>=0?'+':'')+(+x.chg_pct||0).toFixed(2)+'%'; chgEl.className='v '+(x.chg_pct>=0?'up':'down');
   F('strnote').textContent=x.strength_note||'';
   // 做T打分
