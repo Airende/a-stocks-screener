@@ -10119,9 +10119,10 @@ def _watch_quote(codes: list[str]) -> dict:
             "t_accept": t_accept,
             "t_accept_note": t_accept_note,
             # ---- 做T买卖点位 (买点质检收紧 + ATR卖出参考) ----
-            "t_buy_hit": f"{hit_n}/{total_qc}",
+            "t_buy_hit": (f"{hit_n}/{total_qc}" if total_qc > 0 else ""),
             "t_buy_ok": buy_ok,
-            "t_buy_note": (op_reason if (buy_ok or (dev > -3 and vp_score != "danger" and not above_vwap)) else ""),
+            "t_buy_note": (op_reason if (buy_ok or (dev > -dev_hi and vp_score != "danger" and not above_vwap))
+                           else ("非回踩低吸位, 未评估买点质检" if total_qc == 0 else "")),
             "t_atr_pct": round(atr_pct, 2),
             "t_atr_abs": round(atr_abs, 2),
             # ---- 该票所属板块指数(大盘环境) ----
