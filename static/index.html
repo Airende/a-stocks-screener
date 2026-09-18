@@ -4070,8 +4070,8 @@ function renderMarketSnap(d){
     const amt=Math.abs(+idx.chg||0).toFixed(2);
     return `<div class="idx-card">
       <span class="idx-card-name" title="${esc(idx.name)}">${esc(idx.name)}</span>
-      <span class="idx-card-chg" style="color:${clr}">${sign==='+'?'+':''}${c.toFixed(2)}% · ${sign==='+'?'+':'-'}${amt===0?'0.00':amt}</span>
-      <span class="idx-card-price ${up?'up':(dn?'down':'flat')}" style="color:${clr}">${idx.price.toFixed(2)}</span>
+      <span class="idx-card-price ${up?'up':(dn?'down':'flat')}" style="color:${clr}">${sign==='+'?'+':''}${c.toFixed(2)}%</span>
+      <span class="idx-card-chg" style="color:${clr}">${idx.price.toFixed(2)} · ${sign==='+'?'+':'-'}${amt===0?'0.00':amt}</span>
     </div>`;
   }).join('');
 }
