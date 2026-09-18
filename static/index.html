@@ -841,7 +841,8 @@
     <div class="toolbar">
       <span class="meta" id="cacheInfo">加载中…</span>
       <span class="meta" id="updated"></span>
-      <button class="ghost btn-danger-ghost" id="cacheRefreshBtn">刷新</button>
+      <button class="ghost btn-danger-ghost" id="cacheRefreshBtn" title="刷新本地缓存(K线)数据">刷新</button>
+      <button class="ghost" id="pageRefreshBtn" title="重新加载整个页面">刷新页面</button>
     </div>
   </header>
 
@@ -1559,6 +1560,8 @@ $('#cacheRefreshBtn').onclick=async()=>{
     $('#cacheInfo').textContent='K线数据: 刷新失败';
   }
 };
+// 20260918: 刷新页面按钮, 重载整个页面
+$('#pageRefreshBtn').onclick=()=>{ location.reload(); };
 loadCacheInfo();
 
 // ===== 个股分析模块 =====
