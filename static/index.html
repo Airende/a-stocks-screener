@@ -17,6 +17,9 @@
   body{margin:0;font-family:-apple-system,"PingFang SC","Microsoft YaHei",Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--txt)}
   .wrap{max-width:1400px;margin:0 auto;padding:20px}
   header{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px}
+  .hdr-clock{flex:0 0 auto}
+  .idx-bar{flex:1 1 auto;min-width:260px;max-width:560px}
+  .toolbar{flex:0 0 auto;margin-left:auto}
   h1{font-size:22px;margin:0;display:flex;align-items:center;gap:10px}
   .hdr-clock{display:flex;flex-direction:column;align-items:flex-start;gap:2px;line-height:1.15;color:var(--txt);cursor:default}
   .hdr-clock .date{font-size:11px;font-weight:600;color:var(--sub);font-variant-numeric:tabular-nums;letter-spacing:.3px}
@@ -437,14 +440,14 @@
   .ma-dist.expanded .ma-dist-tags{flex-wrap:wrap;max-height:none;overflow:visible}
   .ma-dist-toggle{flex-shrink:0;cursor:pointer;color:var(--accent);font-weight:600;padding:0 4px;border-radius:3px;white-space:nowrap}
   .ma-dist-toggle:hover{background:var(--border)}
-  /* ===== 顶栏指数快照 (极简约三数版) ===== */
-  .idx-bar{display:flex;gap:10px;align-items:center;padding:6px 12px;border-radius:10px;margin-bottom:10px;
-          background:var(--panel);border:1px solid var(--border)}
-  .idx-overview{flex:0 0 auto;display:flex;align-items:center;gap:10px;padding-right:10px;border-right:1px solid var(--border)}
+  /* ===== 顶栏市场信息 (右侧, 上下结构) ===== */
+  .idx-bar{display:flex;flex-direction:column;align-items:flex-start;gap:4px;
+          padding:6px 12px;border-radius:10px;background:var(--panel);border:1px solid var(--border)}
+  .idx-overview{display:flex;align-items:center;gap:8px;padding-bottom:4px;border-bottom:1px solid var(--border);width:100%}
   .idx-ov-label{font-size:10.5px;color:var(--sub)}
   .idx-ov-value{font-size:13px;font-weight:700;color:var(--gold)}
-  .idx-cards{flex:1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
-  .idx-card{padding:4px 10px;border-radius:6px;background:var(--bg);border:1px solid var(--border);
+  .idx-cards{width:100%;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+  .idx-card{flex:1;padding:4px 10px;border-radius:6px;background:var(--bg);border:1px solid var(--border);
             display:flex;align-items:baseline;gap:4px;min-width:0;transition:.15s}
   .idx-card:hover{border-color:var(--accent)}
   .idx-card-name{font-size:11.5px;font-weight:600;color:var(--sub);flex-shrink:0;min-width:56px}
@@ -453,8 +456,7 @@
   .idx-card-price.down{color:var(--down)}
   .idx-card-chg{font-size:9.5px;font-weight:700;flex-shrink:0;white-space:nowrap}
   @media (max-width: 800px){
-    .idx-bar{flex-direction:column;align-items:stretch;padding:6px 8px;gap:6px}
-    .idx-overview{padding-right:0;border-right:none;border-bottom:1px solid var(--border);padding-bottom:4px}
+    .idx-card{min-width:0}
     .idx-cards{grid-template-columns:1fr}
   }
   /* ===== 股票标记徽章 ===== */
@@ -830,27 +832,28 @@
 <body>
 <div class="wrap">
   <header>
-    <div>
+    <div class="hdr-clock">
       <h1><span id="hdrClock" class="hdr-clock"><span id="hdrDate" class="date">--</span><span class="time"><span class="hm">--:--</span><span class="sec">--</span></span></span></h1>
       <div class="sub"><a href="https://52etf.site/" target="_blank" rel="noopener" title="大盘云图 (52ETF)" aria-label="大盘云图" class="hm-link"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg>大盘云图</a></div>
     </div>
+
+    <!-- ===== 市场信息 (右侧, 上下结构) ===== -->
+    <div id="idxBar" class="idx-bar">
+      <div class="idx-overview">
+        <span class="idx-ov-label">市场</span>
+        <span id="idxOverall" class="idx-ov-value">加载中…</span>
+      </div>
+      <div id="idxCards" class="idx-cards">
+        <div class="empty">加载指数数据…</div>
+      </div>
+    </div>
+
     <div class="toolbar">
       <span class="meta" id="cacheInfo">本地缓存: 加载中…</span>
       <span class="meta" id="updated"></span>
       <button class="ghost btn-danger-ghost" id="cacheRefreshBtn">刷新K线数据</button>
     </div>
   </header>
-
-  <!-- ===== 顶栏指数快照 (上证/深证/创业板 极简约) ===== -->
-  <div id="idxBar" class="idx-bar">
-    <div class="idx-overview">
-      <span class="idx-ov-label">市场</span>
-      <span id="idxOverall" class="idx-ov-value">加载中…</span>
-    </div>
-    <div id="idxCards" class="idx-cards">
-      <div class="empty">加载指数数据…</div>
-    </div>
-  </div>
 
   <!-- ===== 统一状态条: 各后台模块更新时间/状态 (20260906) ===== -->
   <div id="statusStrip" class="status-strip">
