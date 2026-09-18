@@ -5418,10 +5418,12 @@ def _do_stock_search(q: str) -> dict:
     def _pick(hay: list) -> list:
         code_match = [it for it in hay if q in it["code"].lower()]
         name_match = [it for it in hay if q in it["name"]]
+        # 拼音匹配不做 [:5] 截断: 避免命中靠后的股票(如"zckj"搜"中材科技")被前几个同名缩写
+        # 挤掉而漏搜。按 代码>名称>拼音 三档优先级去重, 整体上限 10 条由外层循环控制。
         py_match = [it for it in hay if q in it["py_abbr"] or q in it["py_full"]]
         seen = set()
         result = []
-        for it in code_match[:5] + name_match[:5] + py_match[:5]:
+        for it in code_match + name_match + py_match:
             if it["code"] not in seen:
                 seen.add(it["code"])
                 result.append({"code": it["code"], "name": it["name"], "symbol": it["symbol"]})
