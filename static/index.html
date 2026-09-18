@@ -4092,6 +4092,12 @@ function renderWatchPanel(code){
   const scCls = x.t_score>=4?'up':(x.t_score<=2?'low':'mid');
   const advCls = x.t_advice==='可做正T'?'do':(x.t_advice==='坚决不做'?'no':'watch');
   const items=(x.t_items||[]).map(t=>`<div class="wp-item"><span class="dot ${t.pass?'on':'off'}"></span>${esc(t.k)}</div>`).join('');
+  const modeCls = x.t_mode==='反T'?'down':(x.t_mode==='偏正T'?'up':(x.t_mode==='不做'?'no':'watch'));
+  const accCls = x.t_accept==='真承接'?'up':(x.t_accept==='假承接'?'down':'mid');
+  const gateHtml=(x.t_gate||[]).map(g=>{
+    const dot = g.pass===true?'on':(g.pass===false?'off':'mid');
+    return `<div class="wp-item"><span class="dot ${dot}"></span>${esc(g.k)}<em style="font-style:normal;opacity:.75;margin-left:auto">${esc(g.note||'')}</em></div>`;
+  }).join('');
   const vetoHtml = x.veto ? `<div class="wp-note" style="margin-top:8px">⚠ <b>一票否决:</b> ${esc(x.veto)} — 放弃买入</div>` : '';
   panel.innerHTML=`
     <div class="wp-head">
@@ -4115,6 +4121,13 @@ function renderWatchPanel(code){
       <span class="adv ${advCls}">${esc(x.t_advice)}</span>
     </div>
     <div class="wp-items">${items}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+      <div class="wp-cell" style="flex:1;min-width:150px"><div class="k">做T方向</div><div class="v ${modeCls}">${esc(x.t_mode||'—')}</div><div class="s">${esc(x.t_mode_reason||'')}</div></div>
+      <div class="wp-cell" style="flex:1;min-width:150px"><div class="k">承接真伪</div><div class="v ${accCls}">${esc(x.t_accept||'—')}</div><div class="s">${esc(x.t_accept_note||'')}</div></div>
+      <div class="wp-cell" style="flex:1;min-width:150px"><div class="k">做T成本</div><div class="v">~1‰</div><div class="s">差价需≥0.3%, 目标≥1%</div></div>
+    </div>
+    <div class="wp-note" style="margin-bottom:6px"><b>做T五大门槛</b></div>
+    <div class="wp-items" style="gap:3px 14px">${gateHtml}</div>
     <div class="wp-note"><b>基本面</b>：${esc(x.strength_note)}；量价：${esc(x.vp_note)}。</div>
     ${vetoHtml}
     <div style="margin-top:10px;display:flex;gap:8px">

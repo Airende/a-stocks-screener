@@ -9712,6 +9712,53 @@ def _watch_quote(codes: list[str]) -> dict:
         elif vol_ratio > 0 and chg_pct >= 5 and vol_ratio < 1.0: veto = "缩量涨"
         elif mkt_chg <= -1: veto = f"大盘跌{mkt_chg:.2f}%"
         elif dev > 3: veto = f"偏离度过热{dev:.2f}%"
+        # ---- 做T门槛(五大量化门槛: 振幅/换手/趋势/量价/消息面) ----
+        t_gate = []
+        t_gate.append({
+            "k": "振幅≥3%", "pass": amp >= 3,
+            "note": f"振幅{amp:.1f}%" + ("" if amp >= 3 else " → 空间不足"),
+        })
+        if turnover > 0:
+            _tk_pass = 3 <= turnover <= 15
+            t_gate.append({
+                "k": "换手3%~15%", "pass": _tk_pass,
+                "note": f"换手{turnover:.1f}%" + ("" if _tk_pass else (" → 呆滞" if turnover < 3 else " → 过热")),
+            })
+        else:
+            t_gate.append({"k": "换手3%~15%", "pass": None, "note": "换手数据暂缺"})
+        _ma_pass = above_vwap and vwap_dir != "down"  # 以分钟均价线近似趋势
+        t_gate.append({
+            "k": "趋势向上/震荡", "pass": _ma_pass,
+            "note": (f"站均价线上方·{('向上' if vwap_dir == 'up' else '走平')}") if _ma_pass else "均价线下方/下压, 趋势不利",
+        })
+        t_gate.append({
+            "k": "量价配合", "pass": vp_score in ("healthy", "good"),
+            "note": vp_note,
+        })
+        t_gate.append({"k": "消息面无利空", "pass": None, "note": "需自评, 无法量化"})
+        _gate_fail = sum(1 for g in t_gate if g["pass"] is False)
+        # ---- 做T方向(正T/反T/不做) ----
+        if dev >= 2.0:
+            t_mode, t_mode_reason = "反T", f"偏离{dev:+.1f}%偏高/冲高滞涨 → 先卖后买锁利润"
+        elif -1.5 < dev < 2.0 and above_vwap:
+            t_mode, t_mode_reason = "偏正T", f"围绕均价线({dev:+.1f}%)回踩企稳 → 先买后卖"
+        elif not above_vwap:
+            t_mode, t_mode_reason = "不做", f"均价线下方({dev:+.1f}%)趋势不利, 防接飞刀"
+        else:
+            t_mode, t_mode_reason = "观望", "信号混合, 再等确认"
+        if amp < 2 or (not _ma_pass) or vp_score in ("weak", "danger") or _gate_fail >= 2:
+            t_mode, t_mode_reason = "不做", f"门槛不达标 · {t_mode_reason}"
+        # ---- 真承接 vs 假承接 (价格vs均价线 + 量能近似) ----
+        if vol_ratio <= 0:
+            t_accept, t_accept_note = "待验证", "量比数据暂缺, 无法验真"
+        elif above_vwap and vwap_dir != "down" and vol_ratio >= 1.5:
+            t_accept, t_accept_note = "真承接", f"站上均价线+放量(量比{vol_ratio:.2f}), 承接强"
+        elif above_vwap and vol_ratio < 1.2:
+            t_accept, t_accept_note = "假承接", f"站上但缩量(量比{vol_ratio:.2f}<1.2), 反弹无量易回落"
+        elif not above_vwap:
+            t_accept, t_accept_note = "假承接", "未站上均价线, 反弹即遇压, 勿抄"
+        else:
+            t_accept, t_accept_note = "待验证", f"量比{vol_ratio:.2f}中性, 看能否连续站稳均价线"
         quotes.append({
             "code": code,
             "symbol": _to_symbol(code),
@@ -9738,6 +9785,12 @@ def _watch_quote(codes: list[str]) -> dict:
             "t_items": t_items,
             "t_advice": t_advice,
             "veto": veto,
+            # ---- 做T完整体系(门槛/方向/承接) ----
+            "t_gate": t_gate,
+            "t_mode": t_mode,
+            "t_mode_reason": t_mode_reason,
+            "t_accept": t_accept,
+            "t_accept_note": t_accept_note,
         })
     up = sum(1 for q in quotes if q["chg_pct"] > 0)
     down = sum(1 for q in quotes if q["chg_pct"] < 0)
