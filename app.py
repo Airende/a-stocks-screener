@@ -9602,24 +9602,89 @@ def _get_atr(symbol: str) -> tuple[float, float]:
     return atr_abs, atr_pct
 
 
-def _load_watchlist() -> list[str]:
+# ---------- 自选盯盘: 本地文件 + 云端双写, 多机按 updated_at 覆盖同步 ----------
+_WATCHLIST: list[str] = []          # 内存中的当前自选顺序
+_WATCH_LIST_UPDATED = ""            # 内存版本的时间戳 (YYYY-MM-DD HH:MM:SS)
+_WATCH_RESYNC_AT = 0.0              # 下次向云端重拉的时刻
+_WATCH_RESYNC_TTL = 5.0             # 云端重拉间隔(秒), 让别的电脑改动较快可见
+
+def _kv_cloud_ready() -> bool:
+    return _kv_storage_init() in ("postgres", "sqlite", "supabase_rest")
+
+
+def _watch_codes(rec) -> list[str]:
+    if isinstance(rec, dict):
+        c = rec.get("codes")
+        if isinstance(c, list):
+            return [str(x) for x in c]
+    return []
+
+
+def _read_watch_file() -> dict:
     try:
         with open(_WATCHLIST_FILE, "r", encoding="utf-8") as f:
             d = json.load(f)
-        codes = d.get("codes") or []
-        return [str(c) for c in codes]
+        return d if isinstance(d, dict) else {}
     except Exception:
-        return []
+        return {}
 
 
-def _save_watchlist(codes: list[str]) -> None:
+def _write_watch_file(rec: dict) -> None:
     try:
         os.makedirs(CACHE_DIR, exist_ok=True)
         with open(_WATCHLIST_FILE, "w", encoding="utf-8") as f:
-            json.dump({"codes": codes, "updated_at": time.strftime("%Y-%m-%d %H:%M:%S")},
-                      f, ensure_ascii=False, indent=2)
+            json.dump(rec, f, ensure_ascii=False, indent=2)
     except Exception:
         pass
+
+
+def _load_watchlist() -> list[str]:
+    """加载自选盯盘: 内存/云端/本地三层。
+    高频读取命中内存; 每 _WATCH_RESYNC_TTL 秒向云端重拉一次以便多机同步;
+    云端与本地按整份列表 updated_at 较新者胜出 (自选是带顺序的列表, 采用整体覆盖式同步)。"""
+    global _WATCHLIST, _WATCH_LIST_UPDATED, _WATCH_RESYNC_AT
+    now_t = time.time()
+    if now_t - _WATCH_RESYNC_AT <= _WATCH_RESYNC_TTL and _WATCH_LIST_UPDATED:
+        return list(_WATCHLIST)  # 缓存热期, 直接用内存
+    _WATCH_RESYNC_AT = now_t
+
+    cloud_ok = _kv_cloud_ready()
+    cloud = _kv_get("watchlist") if cloud_ok else None
+    if isinstance(cloud, dict) and _watch_codes(cloud):
+        cu = cloud.get("updated_at") or ""
+        if cu > _WATCH_LIST_UPDATED:
+            # 云端较新 -> 应用到内存并刷新本地镜像
+            _WATCHLIST = _watch_codes(cloud)
+            _WATCH_LIST_UPDATED = cu
+            _write_watch_file(cloud)
+        elif _WATCH_LIST_UPDATED > cu:
+            # 本地内存较新 -> 推送云端
+            _kv_set("watchlist", {"codes": _WATCHLIST, "updated_at": _WATCH_LIST_UPDATED})
+        return list(_WATCHLIST)
+
+    # 云端无数据(或未配置云端) -> 首次从本地迁移/读取
+    if not _WATCH_LIST_UPDATED:
+        local = _read_watch_file()
+        if _watch_codes(local):
+            _WATCHLIST = _watch_codes(local)
+            _WATCH_LIST_UPDATED = local.get("updated_at") or ""
+            if cloud_ok and _kv_set("watchlist", {"codes": _WATCHLIST, "updated_at": _WATCH_LIST_UPDATED}):
+                _kv_log("自选盯盘已从本地文件迁移上云")
+    return list(_WATCHLIST)
+
+
+def _save_watchlist(codes: list[str]) -> None:
+    """保存自选盯盘: 更新内存 + 写本地镜像 + (云端模式下) 推送云端, 记录新时间戳"""
+    global _WATCHLIST, _WATCH_LIST_UPDATED, _WATCH_RESYNC_AT
+    codes = [str(c) for c in codes]
+    upd = time.strftime("%Y-%m-%d %H:%M:%S")
+    _WATCHLIST = codes
+    _WATCH_LIST_UPDATED = upd
+    _WATCH_RESYNC_AT = time.time()
+    rec = {"codes": codes, "updated_at": upd}
+    _write_watch_file(rec)
+    if _kv_cloud_ready() and _kv_set("watchlist", rec):
+        _kv_log("自选盯盘已同步云端")
 
 
 def _normalize_wcode(raw: str) -> str:
