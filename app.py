@@ -9852,8 +9852,8 @@ def _watch_quote(codes: list[str]) -> dict:
             atr_abs, atr_pct = _a, (amp if _a > 0 else 0.0)
         # ---- 按个股股性(ATR%)动态化"健康偏离区间" ----
         # 原固定 0~+3% 对所有票一刀切: 低波动票(银行 ATR≈0.8%)偏离1%已很热,
-        # 高波动题材票(ATR≈6%)3%只是正常波动。改为 健康上限=0.5×ATR%, 随股性缩放。
-        dev_hi = round(max(atr_pct * 0.5, 0.5), 2)
+        # 高波动题材票(ATR≈6%)3%只是正常波动。改为 健康上限=0.7×ATR%, 随股性缩放。
+        dev_hi = round(max(atr_pct * 0.7, 0.5), 2)
         # ---- 量价配合 (涨放量/跌缩量为健康): 用量比>1 且方向判断 ----
         vp_score = "healthy"  # 默认
         vp_note = "涨放量" if chg_pct >= 0 and vol_ratio >= 1.2 else (

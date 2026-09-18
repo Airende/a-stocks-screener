@@ -4470,7 +4470,7 @@ function updateWatchPanelValues(panel, d, x){
   F('vwap').textContent=(+x.vwap||0).toFixed(3);
   F('vwdir').textContent='较上次'+vwdirTxt;
   const devEl=F('dev'); devEl.textContent=(+x.dev||0).toFixed(2)+'%'; devEl.className='v '+devCls;
-  const dn=F('devnote'); if(dn) dn.textContent='0~+'+((+x.dev_hi||0).toFixed(1))+'%健康(0.5×ATR股性)';
+  const dn=F('devnote'); if(dn) dn.textContent='0~+'+((+x.dev_hi||0).toFixed(1))+'%健康(0.7×ATR股性)';
   const volEl=F('volratio'); volEl.textContent=(+x.vol_ratio||0).toFixed(2); volEl.className='v '+(x.vol_ratio>=1.5?'up':'gold');
   F('amp').textContent=(+x.amp||0).toFixed(2)+'%';
   F('turnover').textContent=(+x.turnover||0).toFixed(2)+'%';
