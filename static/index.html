@@ -914,7 +914,7 @@
           <span class="meta" style="margin-left:8px;font-weight:700;color:var(--txt)">52周位可选:</span>
           <label style="display:inline-flex;align-items:center;gap:5px;margin-right:8px;font-size:13px;cursor:pointer"><input type="checkbox" data-pos52="lt20"> 52周位&lt;20%</label>
           <label style="display:inline-flex;align-items:center;gap:5px;margin-right:8px;font-size:13px;cursor:pointer"><input type="checkbox" data-pos52="lt30"> 52周位&lt;30%</label>
-          <label style="display:inline-flex;align-items:center;gap:5px;margin-right:8px;font-size:13px;cursor:pointer"><input type="checkbox" data-pos52="lt50"> 52周位&lt;50%</label>
+          <label style="display:inline-flex;align-items:center;gap:5px;margin-right:8px;font-size:13px;cursor:pointer"><input type="checkbox" data-pos52="lt50" checked> 52周位&lt;50%</label>
         </div>
         <div class="ma-tabs" id="maTabs"></div>
         <div class="ma-tab-desc" id="maDesc"></div>
@@ -3647,8 +3647,8 @@ document.querySelectorAll('#maBody input[data-atr]').forEach(cb => {
     renderMATable();  // 立即按当前勾选过滤已扫描结果
   });
 });
-// 52周位可选过滤 (20260918): 置于ATR过滤区, 多选满足其一, 默认不勾选(=不限); 均按新条件过滤
-let maPos52Conds = [];
+// 52周位可选过滤 (20260918): 置于ATR过滤区, 多选满足其一, 默认勾选 <50%
+let maPos52Conds = ['lt50'];
 function passMaPos52(s){
   if(!maPos52Conds.length) return true;          // 未勾选 → 不过滤
   if(s.w_pos52 == null) return false;            // 无52周位数据(如旧扫描) → 不通过
