@@ -9888,6 +9888,69 @@ def api_watchlist_del(code: str = ""):
     return JSONResponse(_watch_quote(codes))
 
 
+@app.get("/api/minute-data")
+def api_minute_data(symbol: str = ""):
+    """获取个股当日分时数据: 逐分钟 时间/价格/成交量/成交额, 并计算分时均价线(VWAP)逐点值。
+
+    数据源: 腾讯分时接口 appstock/app/minute/query。返回的 avg 为截止该分钟的
+    累计均价(VWAP = 累计成交额/累计成交量), 与盯盘面板展示的均价线口径一致。
+    """
+    if not symbol:
+        return JSONResponse({"error": "缺少 symbol 参数"}, status_code=400)
+    symbol = str(symbol).strip().lower()
+    try:
+        url = "https://web.ifzq.gtimg.cn/appstock/app/minute/query"
+        r = requests.get(url, params={"code": symbol}, headers=HEADERS, timeout=10)
+        r.raise_for_status()
+        payload = r.json()
+        node = payload.get("data", {}).get(symbol, {}) or {}
+        raw = (node.get("data") or {}).get("data") or []
+        parsed = []
+        cum_amt = 0.0
+        cum_vol = 0.0
+        for ln in raw:
+            parts = str(ln).split()
+            if len(parts) < 2:
+                continue
+            t = parts[0]
+            try:
+                price = float(parts[1])
+                vol = float(parts[2]) if len(parts) > 2 else 0.0
+                amt = float(parts[3]) if len(parts) > 3 else 0.0
+            except (TypeError, ValueError):
+                continue
+            if price <= 0:
+                continue
+            cum_amt += max(amt, 0.0)
+            cum_vol += max(vol, 0.0)
+            # 腾讯分时 volume 单位为手(100股), amount 为元 → 均价=金额/股数=金额/(手*100)
+            avg = round(cum_amt / (cum_vol * 100), 3) if cum_vol > 0 else price
+            parsed.append({
+                "time": t,
+                "price": round(price, 3),
+                "volume": vol,
+                "amount": amt,
+                "avg": avg,
+            })
+        prev_close = None
+        try:
+            qt = node.get("qt") or {}
+            ql = qt.get(symbol)
+            if isinstance(ql, list) and len(ql) > 4:
+                # 腾讯 qt 列表: [0]=?, [1]=名称, [2]=代码, [3]=现价, [4]=昨收
+                prev_close = float(ql[4])
+        except (TypeError, ValueError, IndexError):
+            prev_close = None
+        return JSONResponse({
+            "symbol": symbol,
+            "prev_close": prev_close,
+            "count": len(parsed),
+            "data": parsed,
+        })
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 if __name__ == "__main__":
     import uvicorn
     # 云平台(Render/Railway)通过 PORT 环境变量指定端口, 默认 8000

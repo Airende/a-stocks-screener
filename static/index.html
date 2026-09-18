@@ -719,6 +719,21 @@
   .wp-note{font-size:11px;color:var(--sub);background:rgba(255,255,255,.03);border-radius:4px;
            padding:5px 8px}
   .wp-note b{color:var(--txt)}
+  /* ---- 分时图(展开面板) ---- */
+  .minchart{position:relative;width:100%;height:210px;margin:8px 0 12px;border:1px solid var(--border);
+            border-radius:8px;background:rgba(0,0,0,.18);overflow:hidden}
+  .minchart canvas{display:block;width:100%;height:100%}
+  .minchart .legend{position:absolute;top:6px;left:10px;display:flex;gap:12px;font-size:11px;color:var(--sub);
+                    z-index:2;pointer-events:none}
+  .minchart .legend i{font-style:normal;display:inline-flex;align-items:center;gap:4px}
+  .minchart .legend .sq{width:12px;height:3px;border-radius:2px;display:inline-block}
+  .legend .l-price{color:var(--accent)} .legend .l-avg{color:var(--gold)} .legend .l-pc{color:var(--sub)}
+  .legend .l-price .sq{background:var(--accent)} .legend .l-avg .sq{background:var(--gold)}
+  .legend .l-pc .sq{background:rgba(159,176,198,.5)}
+  .minchart .nodata{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+                    font-size:12px;color:var(--sub);z-index:2;pointer-events:none}
+  /* 盯盘卡片迷你分时图 */
+  .mini-spark{width:calc(100% - 2px);height:30px;margin:2px 0 0;display:block;opacity:.95}
   /* 危险操作按钮: 红色 ghost 样式, 与普通按钮区分 */
   button.btn-danger-ghost{background:transparent;border:1px solid rgba(239,68,68,.45);color:var(--down)}
   button.btn-danger-ghost:hover{background:rgba(239,68,68,.08)}
@@ -4074,8 +4089,10 @@ function renderWatch(d){
       <span class="chg">${pcl==='up'?'+':(pcl==='down'?'':'')}${(+x.chg_pct||0).toFixed(2)}%</span>
       <span class="sub"><span class="px">${(+x.price||0).toFixed(2)}</span><span class="chgamt">${sgn}${Math.abs(+x.chg||0).toFixed(2)}</span></span>
       <span class="nm">${nm}</span>
+      <canvas class="mini-spark" data-symbol="${esc(x.symbol||'')}" data-code="${cd}"></canvas>
     </div>`;
   }).join('');
+  drawMiniSparks();
 }
 function selectWatch(code){
   _activeWatchCode = (code===_activeWatchCode) ? null : code;
@@ -4123,6 +4140,15 @@ function renderWatchPanel(code){
       <span class="close" title="关闭" onclick="selectWatch('${cd}')">✕</span>
     </div>
     <div class="wp-op txt ${opCls}"><span class="opbig">${esc(x.op||'观望')}</span><span class="opwhy">${esc(x.op_reason||'')}</span></div>
+    <div class="minchart">
+      <div class="legend">
+        <i class="l-price"><span class="sq"></span>价格</i>
+        <i class="l-avg"><span class="sq"></span>均价线</i>
+        <i class="l-pc"><span class="sq"></span>昨收</i>
+      </div>
+      <canvas id="minChart${cd}"></canvas>
+      <div class="nodata" id="minNoData${cd}">分时加载中…</div>
+    </div>
     <div class="wp-grid">
       <div class="wp-cell"><div class="k">现价</div><div class="v">${(+x.price||0).toFixed(2)}</div><div class="s">${esc(x.vp_note)}</div></div>
       <div class="wp-cell"><div class="k">均价线 VWAP</div><div class="v">${(+x.vwap||0).toFixed(3)}</div><div class="s">较上次${vwdirTxt}</div></div>
@@ -4151,7 +4177,90 @@ function renderWatchPanel(code){
     <div style="margin-top:10px;display:flex;gap:8px">
       <button class="btn btn-primary" onclick="gotoStockAnalyze('${cd}','${nm}')">打开完整个股分析</button>
     </div>`;
+  loadMinChart(cd, x.symbol||'', x.prev_close);
 }
+
+// ============ 今日分时图 (价格线 + 均价线/VWAP) ============
+const _MIN_TTL = 30000;        // 分时数据缓存 30s, 避免 2s 轮询重复拉取
+const _MIN_CACHE = {};         // symbol -> {ts, resp}
+
+function getMinData(symbol){
+  const c=_MIN_CACHE[symbol];
+  if(c && Date.now()-c.ts<_MIN_TTL) return Promise.resolve(c);
+  return fetch('/api/minute-data?symbol='+encodeURIComponent(symbol))
+    .then(r=>r.json())
+    .then(d=>{
+      const o={ts:Date.now(), resp:d};
+      _MIN_CACHE[symbol]=o;
+      return o;
+    })
+    .catch(()=> c ? c : Promise.reject(new Error('min data fail')));
+}
+
+// 统一绘制: 价格线(蓝) + 均价线(金) + 昨收虚线
+function paintMin(canvas, pts, prevClose, mini){
+  if(!canvas) return;
+  const w=canvas.clientWidth=canvas.offsetWidth||0;
+  const h=canvas.clientHeight=canvas.offsetHeight||0;
+  if(!w||!h) return;
+  const ctx=canvas.getContext('2d');
+  const dpr=window.devicePixelRatio||1;
+  canvas.width=w*dpr; canvas.height=h*dpr;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,w,h);
+  if(!pts.length) return;
+  let lo=Infinity, hi=-Infinity;
+  pts.forEach(p=>{ lo=Math.min(lo,p.price,p.avg); hi=Math.max(hi,p.price,p.avg); });
+  if(prevClose){ lo=Math.min(lo,prevClose); hi=Math.max(hi,prevClose); }
+  const pad=mini?2:6, top=mini?2:8, bot=mini?2:8;
+  let range=hi-lo; if(range<=0) range=(hi||1)*0.01;
+  lo-=range*0.05; hi+=range*0.05; range=hi-lo||1;
+  const X=(i)=> pts.length>1 ? pad+i/(pts.length-1)*(w-pad*2) : w/2;
+  const Y=(v)=> top + (hi-v)/range*(h-top-bot);
+  const drawLine=(arr,color,width)=>{
+    ctx.beginPath();
+    ctx.moveTo(X(0), Y(arr[0]));
+    for(let i=1;i<arr.length;i++) ctx.lineTo(X(i), Y(arr[i]));
+    ctx.strokeStyle=color; ctx.lineWidth=width||1.5;
+    ctx.lineJoin='round'; ctx.lineCap='round';
+    ctx.stroke();
+  };
+  if(prevClose){
+    ctx.setLineDash([mini?2:3, mini?2:3]); ctx.strokeStyle='rgba(159,176,198,.55)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(pad, Y(prevClose)); ctx.lineTo(w-pad, Y(prevClose)); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  drawLine(pts.map(p=>p.avg), '#f5c842', mini?1:1.6);   // 均价线(金)
+  drawLine(pts.map(p=>p.price), '#4f9dff', mini?1.1:1.8); // 价格线(蓝)
+}
+
+function loadMinChart(code, symbol, prevClose){
+  const canvas=document.getElementById('minChart'+code);
+  const nodata=document.getElementById('minNoData'+code);
+  if(!canvas) return;
+  if(!symbol){ if(nodata){nodata.style.display='flex';nodata.textContent='无法获取分时';} return; }
+  getMinData(symbol).then(c=>{
+    if(nodata) nodata.style.display='none';
+    const resp=c.resp||{};
+    const pts=(resp.data)||[];
+    const pc = resp.prev_close!=null ? resp.prev_close : prevClose;
+    paintMin(canvas, pts, pc, false);
+  }).catch(()=>{
+    if(nodata){ nodata.style.display='flex'; nodata.textContent='分时数据加载失败'; }
+  });
+}
+
+function drawMiniSparks(){
+  document.querySelectorAll('.mini-spark').forEach(cv=>{
+    const symbol=cv.getAttribute('data-symbol');
+    if(!symbol) return;
+    getMinData(symbol).then(c=>{
+      if(!document.body.contains(cv)) return;   // 已重建, 由下一次 render 负责绘制
+      paintMin(cv, (c.resp&&c.resp.data)||[], c.resp&&c.resp.prev_close, true);
+    }).catch(()=>{});
+  });
+}
+
 async function delWatch(code){
   try{
     const r=await fetch('/api/watchlist?code='+encodeURIComponent(code),{method:'DELETE'});
