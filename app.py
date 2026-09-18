@@ -4865,7 +4865,7 @@ def run_screen(conds=None) -> dict:
     total_cand = len(candidates)
     done_cnt = [0]
     hit_cnt = [0]
-    _set_screen_progress(f"并发拉取K线 0/{total_cand} (命中 0)…")
+    _set_screen_progress(f"并发拉取K线 0/{total_cand}…")
 
     # 用 run_screen 开头已拉取的 spot 数据补全当日bar, 避免每只股票重复拉全市场快照 (20260907)
     def work(r):
@@ -4906,19 +4906,19 @@ def run_screen(conds=None) -> dict:
         done_cnt[0] += 1
         if not res:
             if done_cnt[0] % 100 == 0 or done_cnt[0] == total_cand:
-                _set_screen_progress(f"拉取K线 {done_cnt[0]}/{total_cand} (命中 {hit_cnt[0]})…")
+                _set_screen_progress(f"拉取K线 {done_cnt[0]}/{total_cand}…")
             continue
         g = res["groups"]
         # 必选组: 激活就必须通过
         if any(active_g[m] and not g[m] for m in MANDATORY):
             if done_cnt[0] % 100 == 0 or done_cnt[0] == total_cand:
-                _set_screen_progress(f"拉取K线 {done_cnt[0]}/{total_cand} (命中 {hit_cnt[0]})…")
+                _set_screen_progress(f"拉取K线 {done_cnt[0]}/{total_cand}…")
             continue
         # 可选组: 通过数 >= flex_threshold (允许差1组)
         flex_pass = sum(1 for gid in GROUP_LEAVES if flex_active[gid] and g[gid])
         if flex_pass < flex_threshold:
             if done_cnt[0] % 100 == 0 or done_cnt[0] == total_cand:
-                _set_screen_progress(f"拉取K线 {done_cnt[0]}/{total_cand} (命中 {hit_cnt[0]})…")
+                _set_screen_progress(f"拉取K线 {done_cnt[0]}/{total_cand}…")
             continue
         results.append(res)
         hit_cnt[0] += 1
