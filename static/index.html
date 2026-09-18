@@ -658,12 +658,12 @@
   .watch-card .sub .px{font-size:11px;font-weight:600;color:var(--txt);font-variant-numeric:tabular-nums}
   .watch-card .sub .chgamt{font-size:11px;font-weight:600;color:var(--sub);font-variant-numeric:tabular-nums}
   .watch-card .nm{font-size:12px;font-weight:700;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .watch-card .op{position:absolute;top:2px;left:6px;font-size:10px;font-weight:700;line-height:1;
-    padding:1px 5px;border-radius:3px;z-index:2}
-  .watch-card .op.buy{color:#111;background:var(--up)}
-  .watch-card .op.sell{color:#fff;background:var(--down)}
-  .watch-card .op.watch{color:var(--gold);border:1px solid var(--gold)}
-  .watch-card .op.avoid{color:var(--sub);border:1px dashed var(--sub)}
+  .watch-card .op{display:inline-block;font-size:10px;font-weight:600;line-height:1;margin-left:4px;
+    opacity:.55;background:none;border:none;padding:0;vertical-align:1px}
+  .watch-card .op.buy{color:var(--up)}
+  .watch-card .op.sell{color:var(--down)}
+  .watch-card .op.watch{color:var(--gold)}
+  .watch-card .op.avoid{color:var(--sub)}
   .watch-card .rm{position:absolute;top:2px;right:4px;color:var(--sub);opacity:0;font-size:12px;line-height:1;
                   padding:1px 4px;border-radius:4px;cursor:pointer;transition:.12s}
   .watch-card:hover .rm{opacity:.8}
@@ -4086,10 +4086,9 @@ function renderWatch(d){
         onclick="selectWatch('${cd}')">
       <canvas class="mini-spark" data-symbol="${esc(x.symbol||'')}" data-code="${cd}"></canvas>
       <span class="rm" title="移除" onclick="event.stopPropagation();delWatch('${cd}')">✕</span>
-      <span class="op ${opCls}">${esc(x.op||'观望')}</span>
       <span class="chg">${pcl==='up'?'+':(pcl==='down'?'':'')}${(+x.chg_pct||0).toFixed(2)}%</span>
       <span class="sub"><span class="px">${(+x.price||0).toFixed(2)}</span><span class="chgamt">${sgn}${Math.abs(+x.chg||0).toFixed(2)}</span></span>
-      <span class="nm">${nm}</span>
+      <span class="nm">${nm}<span class="op ${opCls}">${esc(x.op||'观望')}</span></span>
     </div>`;
   }).join('');
   drawMiniSparks();
