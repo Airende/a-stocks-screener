@@ -4748,7 +4748,7 @@ function startHeaderClock(){
     const d=new Date();
     if(hm) hm.textContent=pad(d.getHours())+':'+pad(d.getMinutes());
     if(sec) sec.textContent=pad(d.getSeconds());
-    if(wd) wd.textContent=pad(d.getMonth()+1)+'-'+pad(d.getDate());
+    if(wd) wd.textContent=d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
   }
   tick();
   setInterval(tick,1000);
