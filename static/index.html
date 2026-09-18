@@ -4740,9 +4740,20 @@ async function delWatch(code){
   initWatchDrag();
   loadWatch();
 })();
-setInterval(loadWatch, 2000);
+// ===== 收盘后行情降频: 盘中2秒, 收盘后60秒 (避免无效高频请求) 20260918 =====
+function _isSessionOpen(){
+  const d=new Date(), day=d.getDay();
+  if(day===0 || day===6) return false;            // 周末休市
+  const m=d.getHours()*60+d.getMinutes();
+  return m>=9*60+15 && m<=15*60+5;                 // 交易日 09:15~15:05
+}
+function _smartSpotInterval(){ return _isSessionOpen() ? 2000 : 60000; }
+function _scheduleSpotPoll(){
+  setTimeout(()=>{ loadWatch(); loadMarketSnap(); _scheduleSpotPoll(); }, _smartSpotInterval());
+}
+loadWatch();
 loadMarketSnap();
-setInterval(loadMarketSnap, 2000);
+_scheduleSpotPoll();
 function _tickIndices(){
   loadIndicesRealtime();
   setTimeout(_tickIndices, _idxTickMs);
