@@ -665,6 +665,23 @@
   .watch-card .op.sell{color:var(--down)}
   .watch-card .op.watch{color:var(--gold)}
   .watch-card .op.avoid{color:var(--sub)}
+  /* 尾盘决策(最后15分钟持仓研判, 可收起) */
+  .tail-wrap{border:1px solid rgba(159,176,198,.18);border-radius:6px;margin-bottom:8px;background:rgba(255,255,255,.03)}
+  .tail-head{display:flex;align-items:center;gap:8px;padding:6px 8px;cursor:pointer;user-select:none}
+  .tail-head:hover{background:rgba(255,255,255,.04)}
+  .tail-title{font-size:12px;font-weight:700;color:var(--txt);white-space:nowrap}
+  .tail-title em{font-style:normal;font-weight:400;font-size:11px;color:var(--sub);opacity:.75;margin-left:4px}
+  .tail-title em.on{color:var(--gold);opacity:1}
+  .tail-act{margin-left:auto;font-size:13px;font-weight:800;white-space:nowrap}
+  .tail-act.clear{color:var(--down)}
+  .tail-act.cut{color:var(--gold)}
+  .tail-act.hold{color:var(--up)}
+  .tail-caret{transition:transform .15s;color:var(--sub);font-size:11px}
+  .tail-wrap.closed .tail-caret{transform:rotate(-90deg)}
+  .tail-body{padding:0 10px 10px;border-top:1px dashed rgba(159,176,198,.14)}
+  .tail-wrap.closed .tail-body{display:none}
+  .tail-headline{font-size:12px;color:var(--txt);margin:8px 0 4px;opacity:.9}
+  .tail-reasons{margin:0;padding-left:18px;font-size:12px;color:var(--sub);line-height:1.7}
   .watch-card .rm{position:absolute;top:2px;right:4px;color:var(--sub);opacity:0;font-size:12px;line-height:1;
                   padding:1px 4px;border-radius:4px;cursor:pointer;transition:.12s}
   .watch-card:hover .rm{opacity:.8}
@@ -4163,6 +4180,17 @@ function buildWatchPanelSkeleton(panel, code, x){
       <span class="close" title="关闭" onclick="selectWatch('${cd}')">✕</span>
     </div>
     <div class="wp-op txt"><span class="opbig" data-f="op"></span><span class="opwhy" data-f="opwhy"></span></div>
+    <div class="tail-wrap" data-f="tailwrap">
+      <div class="tail-head" onclick="toggleTail(this)">
+        <span class="tail-title">尾盘持仓 <em data-f="tailwin"></em></span>
+        <span class="tail-act" data-f="tailact"></span>
+        <span class="tail-caret">▾</span>
+      </div>
+      <div class="tail-body">
+        <div class="tail-headline" data-f="tailhead"></div>
+        <ul class="tail-reasons" data-f="tailreasons"></ul>
+      </div>
+    </div>
     <div class="minchart">
       <div class="legend">
         <i class="l-price"><span class="sq"></span>价格</i>
@@ -4255,6 +4283,19 @@ function updateWatchPanelValues(panel, d, x){
   const vetoEl=F('veto');
   if(x.veto){ vetoEl.style.display=''; vetoEl.innerHTML='<div class="wp-note" style="margin-top:8px">⚠ <b>一票否决:</b> '+esc(x.veto)+' — 放弃买入</div>'; }
   else { vetoEl.style.display='none'; vetoEl.innerHTML=''; }
+  // 尾盘持仓决策(清仓/减仓/持仓)
+  const twin=F('tailwin');
+  if(x.tail_window){ twin.textContent='· 最后15分钟'; twin.className='on'; }
+  else { twin.textContent='· 未到尾盘'; twin.className=''; }
+  const tacEl=F('tailact'); tacEl.textContent=x.tail_act||'—';
+  tacEl.className='tail-act '+(x.tail_act==='清仓'?'clear':(x.tail_act==='减仓'?'cut':'hold'));
+  F('tailhead').textContent=x.tail_head||'';
+  F('tailreasons').innerHTML=(x.tail_reasons||[]).map(r=>`<li>${esc(r)}</li>`).join('');
+}
+// 展开/收起尾盘决策区
+function toggleTail(headEl){
+  const wrap=(headEl&&headEl.closest)?headEl.closest('.tail-wrap'):null;
+  if(wrap) wrap.classList.toggle('closed');
 }
 
 // ============ 今日分时图 (价格线 + 均价线/VWAP) ============

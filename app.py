@@ -9548,6 +9548,54 @@ def _normalize_wcode(raw: str) -> str:
     return s if (s.isdigit() and len(s) == 6) else ""
 
 
+def _in_tail_window() -> bool:
+    """是否处于尾盘窗口(北京时间 14:45-15:00)。固定东八区, 避免受服务器时区影响。"""
+    try:
+        from datetime import datetime, timedelta, timezone
+        bj = datetime.now(timezone(timedelta(hours=8)))
+        hm = bj.hour * 60 + bj.minute
+        return 885 <= hm <= 900   # 14:45=885, 15:00=900
+    except Exception:
+        return False
+
+
+def _tail_position_decision(dev, chg_pct, above_vwap, vwap_dir, vp_score, vp_note, strength, mkt_chg):
+    """尾盘持仓决策(14:45-15:00): 综合本系统完整研判 → 清仓/减仓/持仓, 给出完整理由。
+    权重口径: 系统性风险/深破位/放量下跌最重(清/减), 高位滞涨与弱势(减), 健康趋势(持仓)。"""
+    reasons = []
+    act = "持仓"
+    if mkt_chg <= -1:
+        act = "减仓"
+        reasons.append(f"大盘跌{mkt_chg:.2f}%>1%, 系统性风险高, 尾盘不重仓过夜")
+    if dev <= -3 and not above_vwap:
+        act = "清仓"
+        reasons.append(f"深跌破均价线(偏离{dev:+.1f}%), 破位持续, 认错减亏防隔夜跳空")
+    if vp_score == "danger":
+        if act == "持仓":
+            act = "减仓"
+        reasons.append(f"下跌放量({vp_note}), 抛压重, 尾盘减仓防续跌")
+    high_pos = dev >= 3 or (chg_pct >= 5 and dev >= 1)
+    if high_pos:
+        if act == "持仓":
+            act = "减仓"
+        reasons.append(f"日内已处高位(偏离均价线{dev:+.1f}%/涨{chg_pct:.1f}%), 尾盘易回吐, 高抛锁利")
+    if not above_vwap and strength in ("弱", "弱势"):
+        if act == "持仓":
+            act = "减仓"
+        reasons.append(f"跌居均价线下方(偏离{dev:+.1f}%), 走势偏弱, 尾盘不抱宿疾")
+    if above_vwap and vwap_dir != "down" and vp_score in ("healthy", "good"):
+        if act == "持仓":
+            reasons.append(f"站上均价线、量价健康({vp_note}), 趋势未坏, 可持股过夜")
+        else:
+            reasons.append(f"已减仓, 但站上均价线+量价健康({vp_note}), 强势可留底仓")
+    if not reasons:
+        reasons.append("信号中性, 维持现仓, 观察尾盘量能与均价线")
+    head = {"清仓": "尾盘破位/风险加剧, 建议清仓离场",
+            "减仓": "尾盘风险收益比不佳, 建议逢高减仓",
+            "持仓": "尾盘趋势健康, 建议继续持仓"}[act]
+    return act, head, reasons
+
+
 def _watch_quote(codes: list[str]) -> dict:
     """自选行情 + 完整盘中研判: 均价线(VWAP)/偏离度/量能量比/振幅/强弱结论/做T打分。
     - VWAP = 当日累计成交额 / 累计成交量 (均价线, 分组中心裁判)
@@ -9584,6 +9632,7 @@ def _watch_quote(codes: list[str]) -> dict:
     quotes = []
     now = time.time()
     trading = _is_trading_time()
+    tail_win = trading and _in_tail_window()   # 是否处于尾盘窗口(14:45-15:00)
     for code in codes:
         row = by_code.get(code)
         if not row:
@@ -9798,6 +9847,9 @@ def _watch_quote(codes: list[str]) -> dict:
                 op, op_reason = "观望", f"回踩{dev:+.1f}%较深或量能不足, 继续观察, 勿急接"
         else:
             op, op_reason = "观望", "信号不明, 继续观察"
+        # ---- 尾盘持仓决策(清仓/减仓/持仓): 每日最后15分钟完整分析 ----
+        tail_act, tail_head, tail_reasons = _tail_position_decision(
+            dev, chg_pct, above_vwap, vwap_dir, vp_score, vp_note, strength, mkt_chg)
         quotes.append({
             "code": code,
             "symbol": _to_symbol(code),
@@ -9833,6 +9885,11 @@ def _watch_quote(codes: list[str]) -> dict:
             # ---- 实时操作指令(买/卖/观望/规避) ----
             "op": op,
             "op_reason": op_reason,
+            # ---- 尾盘持仓决策(清仓/减仓/持仓) ----
+            "tail_window": tail_win,
+            "tail_act": tail_act,
+            "tail_head": tail_head,
+            "tail_reasons": tail_reasons,
         })
     up = sum(1 for q in quotes if q["chg_pct"] > 0)
     down = sum(1 for q in quotes if q["chg_pct"] < 0)
