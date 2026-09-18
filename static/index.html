@@ -18,9 +18,11 @@
   .wrap{max-width:1400px;margin:0 auto;padding:20px}
   header{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px}
   h1{font-size:22px;margin:0;display:flex;align-items:center;gap:10px}
-  .hdr-clock{display:inline-flex;align-items:baseline;gap:5px;font-variant-numeric:tabular-nums;line-height:1;color:var(--txt);cursor:default}
+  .hdr-clock{display:flex;flex-direction:column;align-items:flex-start;gap:2px;line-height:1.15;color:var(--txt);cursor:default}
+  .hdr-clock .date{font-size:11px;font-weight:600;color:var(--sub);font-variant-numeric:tabular-nums;letter-spacing:.3px}
+  .hdr-clock .time{display:flex;align-items:baseline;gap:5px;font-variant-numeric:tabular-nums;line-height:1}
   .hdr-clock .hm{font-size:28px;font-weight:800;letter-spacing:.5px}
-  .hdr-clock .sec{font-size:11px;font-weight:700;color:var(--sub);margin-right:3px}
+  .hdr-clock .sec{font-size:11px;font-weight:700;color:var(--sub)}
   .sub{color:var(--sub);font-size:13px;margin-top:2px}
   .sub .hm-link{display:inline-flex;align-items:center;gap:4px;color:var(--sub);text-decoration:none;cursor:pointer;transition:color .15s}
   .sub .hm-link:hover{color:var(--accent)}
@@ -824,7 +826,7 @@
 <div class="wrap">
   <header>
     <div>
-      <h1><span id="hdrClock" class="hdr-clock"><span class="hm">--:--</span><span class="sec">--</span></span></h1>
+      <h1><span id="hdrClock" class="hdr-clock"><span id="hdrDate" class="date">--</span><span class="time"><span class="hm">--:--</span><span class="sec">--</span></span></span></h1>
       <div class="sub"><a href="https://52etf.site/" target="_blank" rel="noopener" title="大盘云图 (52ETF)" aria-label="大盘云图" class="hm-link"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg>大盘云图 ↗</a></div>
     </div>
     <div class="toolbar">
@@ -4738,17 +4740,19 @@ function _tickIndices(){
   setTimeout(_tickIndices, _idxTickMs);
 }
 _tickIndices();
-// ===== 顶栏时钟: 大时分 + 小秒; 月日放到盯盘栏 =====
+// ===== 顶栏时钟: 大时分 + 小秒; 年月日放时钟上方, 同时显示在盯盘栏 =====
 function startHeaderClock(){
   const c=document.getElementById('hdrClock');
   const wd=document.getElementById('watchDate');
-  const hm=c&&c.querySelector('.hm'), sec=c&&c.querySelector('.sec');
+  const hm=c&&c.querySelector('.hm'), sec=c&&c.querySelector('.sec'), hd=c&&c.querySelector('.date');
   const pad=n=>String(n).padStart(2,'0');
+  const ymd=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
   function tick(){
     const d=new Date();
     if(hm) hm.textContent=pad(d.getHours())+':'+pad(d.getMinutes());
     if(sec) sec.textContent=pad(d.getSeconds());
-    if(wd) wd.textContent=d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+    if(hd) hd.textContent=ymd(d);
+    if(wd) wd.textContent=ymd(d);
   }
   tick();
   setInterval(tick,1000);
