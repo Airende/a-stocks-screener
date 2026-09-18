@@ -4044,13 +4044,22 @@ $('#maRunBtn').onclick=startMAScreen;
 
 // 启动
 initConds().then(()=>{
-  // 页面加载即自动刷新选股条件筛选 (用最新行情重新筛选, 而非仅显示旧缓存)
-  startScreen(null, true).catch(()=>{});
+  // 页载先查后端缓存: 若已有可用结果则直接渲染, 避免每次刷新浏览器都重扫全市场。
+  fetch('/api/screen').then(r=>r.json()).then(d=>{
+    if(d.universe>0 && !d.running && !d.error){
+      render(d, true); syncStatusStrip(); updateProgLine('#screenProg','',false); return;
+    }
+    // 无缓存/正在跑/失败 → 启动(用最新行情重新筛选)
+    startScreen(null, true).catch(()=>{});
+  }).catch(()=>{ startScreen(null, true).catch(()=>{}); });
 });
-// 均线形态筛选: 页载即自动启动刷新
+// 均线形态筛选: 页载先查缓存, 有结果则只渲染不重扫
 renderMATabs();
 bindMASortHeaders();
-startMAScreen();
+fetch('/api/ma-screen').then(r=>r.json()).then(d=>{
+  if(d.patterns && Object.keys(d.patterns).length){ renderMA(d); return; }
+  startMAScreen();
+}).catch(()=>{ startMAScreen(); });
 // 上试盘: 页载即拉一次 counts 显示在 3 个 tab 角标上 (不启动轮询, 不阻塞 MA 数据)
 fetchSspData(false);
 // 个股分析历史记录初始化
