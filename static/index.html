@@ -4084,12 +4084,12 @@ function renderWatch(d){
     const opCls = x.op==='买入'?'buy':(x.op==='减仓'?'sell':(x.op==='规避'?'avoid':'watch'));
     return `<div class="watch-card ${pcl} ${alarm}${sel}" title="点击查看盘中研判"
         onclick="selectWatch('${cd}')">
+      <canvas class="mini-spark" data-symbol="${esc(x.symbol||'')}" data-code="${cd}"></canvas>
       <span class="rm" title="移除" onclick="event.stopPropagation();delWatch('${cd}')">✕</span>
       <span class="op ${opCls}">${esc(x.op||'观望')}</span>
       <span class="chg">${pcl==='up'?'+':(pcl==='down'?'':'')}${(+x.chg_pct||0).toFixed(2)}%</span>
       <span class="sub"><span class="px">${(+x.price||0).toFixed(2)}</span><span class="chgamt">${sgn}${Math.abs(+x.chg||0).toFixed(2)}</span></span>
       <span class="nm">${nm}</span>
-      <canvas class="mini-spark" data-symbol="${esc(x.symbol||'')}" data-code="${cd}"></canvas>
     </div>`;
   }).join('');
   drawMiniSparks();
@@ -4197,7 +4197,21 @@ function getMinData(symbol){
     .catch(()=> c ? c : Promise.reject(new Error('min data fail')));
 }
 
-// 统一绘制: 价格线(蓝) + 均价线(金) + 昨收虚线
+// 分时时间 "HHMM" -> 交易进度 [0,1] (09:30起, 剔除午休 11:30-13:00, 15:00止)
+function _minFrac(p){
+  const s=String((p&&p.time)||'').replace(':','');
+  if(s.length>=4){
+    const h=parseInt(s.slice(0,2),10), mm=parseInt(s.slice(2,4),10);
+    if(!isNaN(h)&&!isNaN(mm)){
+      const t=h*60+mm;                    // 自零点起的分钟数
+      const m = t<=690 ? t-570 : t-660;   // 570=09:30, 690=11:30, 780=13:00
+      if(m>=0 && m<=240) return m/240;    // 全天交易日为 240 分钟
+    }
+  }
+  return -1;
+}
+
+// 统一绘制: 价格线(蓝) + 均价线(金) + 昨收虚线 + 时间轴
 function paintMin(canvas, pts, prevClose, mini){
   if(!canvas) return;
   const w=canvas.clientWidth=canvas.offsetWidth||0;
@@ -4209,18 +4223,24 @@ function paintMin(canvas, pts, prevClose, mini){
   ctx.setTransform(dpr,0,0,dpr,0,0);
   ctx.clearRect(0,0,w,h);
   if(!pts.length) return;
+  // X 轴定位: 优先按真实交易时间(09:30~15:00)排布; 时间解析失败时回退等距
+  const xf=pts.map(_minFrac);
+  const useTime=xf.every(f=>f>=0);
+  const pad=mini?2:6, top=mini?2:8, bot=mini?2:20;
+  const spanX=w-pad*2;
+  const xArr = useTime
+    ? pts.map((_,i)=> pad+xf[i]*spanX)
+    : pts.map((_,i)=> pts.length>1 ? pad+i/(pts.length-1)*spanX : w/2);
   let lo=Infinity, hi=-Infinity;
   pts.forEach(p=>{ lo=Math.min(lo,p.price,p.avg); hi=Math.max(hi,p.price,p.avg); });
   if(prevClose){ lo=Math.min(lo,prevClose); hi=Math.max(hi,prevClose); }
-  const pad=mini?2:6, top=mini?2:8, bot=mini?2:8;
   let range=hi-lo; if(range<=0) range=(hi||1)*0.01;
   lo-=range*0.05; hi+=range*0.05; range=hi-lo||1;
-  const X=(i)=> pts.length>1 ? pad+i/(pts.length-1)*(w-pad*2) : w/2;
   const Y=(v)=> top + (hi-v)/range*(h-top-bot);
   const drawLine=(arr,color,width)=>{
     ctx.beginPath();
-    ctx.moveTo(X(0), Y(arr[0]));
-    for(let i=1;i<arr.length;i++) ctx.lineTo(X(i), Y(arr[i]));
+    ctx.moveTo(xArr[0], Y(arr[0]));
+    for(let i=1;i<arr.length;i++) ctx.lineTo(xArr[i], Y(arr[i]));
     ctx.strokeStyle=color; ctx.lineWidth=width||1.5;
     ctx.lineJoin='round'; ctx.lineCap='round';
     ctx.stroke();
@@ -4230,8 +4250,32 @@ function paintMin(canvas, pts, prevClose, mini){
     ctx.beginPath(); ctx.moveTo(pad, Y(prevClose)); ctx.lineTo(w-pad, Y(prevClose)); ctx.stroke();
     ctx.setLineDash([]);
   }
-  drawLine(pts.map(p=>p.avg), '#f5c842', mini?1:1.6);   // 均价线(金)
+  drawLine(pts.map(p=>p.avg), '#f5c842', mini?1:1.6);    // 均价线(金)
   drawLine(pts.map(p=>p.price), '#4f9dff', mini?1.1:1.8); // 价格线(蓝)
+  if(!mini) paintMinAxes(ctx,w,h,pad,spanX);
+}
+
+// 展开面板分时图的底部时间轴 + 网格 (09:30 10:30 11:30 14:00 15:00)
+function paintMinAxes(ctx,w,h,pad,spanX){
+  const axisY=h-14;
+  ctx.strokeStyle='rgba(159,176,198,.18)'; ctx.lineWidth=1; ctx.setLineDash([]);
+  ctx.beginPath(); ctx.moveTo(pad,axisY); ctx.lineTo(w-pad,axisY); ctx.stroke();
+  // 纵向网格线
+  ctx.strokeStyle='rgba(159,176,198,.08)';
+  [0.25,0.5,0.75].forEach(f=>{
+    ctx.beginPath(); const x=pad+f*spanX; ctx.moveTo(x,1); ctx.lineTo(x,axisY); ctx.stroke();
+  });
+  // 时间标签
+  ctx.fillStyle='rgba(159,176,198,.82)'; ctx.font='10px monospace'; ctx.textBaseline='top';
+  [0,0.25,0.5,0.75,1].forEach(f=>{
+    const m=Math.round(f*240);
+    const clock = m<=120 ? 570+m : 660+m;           // 反向换算回时钟, 午休后从13:00续
+    const hh=('0'+Math.floor(clock/60)).slice(-2);
+    const mm=('0'+(clock%60)).slice(-2);
+    const x=pad+f*spanX;
+    ctx.textAlign = f<=0.05 ? 'left' : f>=0.95 ? 'right' : 'center';
+    ctx.fillText(hh+':'+mm, x, axisY+3);
+  });
 }
 
 function loadMinChart(code, symbol, prevClose){
