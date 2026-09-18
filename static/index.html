@@ -462,7 +462,7 @@
   #idxMinTip .imt-price{font-size:14px;font-weight:800;color:var(--accent);font-variant-numeric:tabular-nums}
   #idxMinTip .imt-chg{font-size:11px;font-weight:700;font-variant-numeric:tabular-nums}
   #idxMinTip .imt-up{color:var(--up)} #idxMinTip .imt-dn{color:var(--down)}
-  #idxMinTip canvas{display:block;width:100%;height:120px;border-radius:6px;background:#0f1219}
+  #idxMinTip canvas{display:block;width:100%;height:150px;border-radius:6px;background:#0f1219}
   #idxMinTip .imt-meta{font-size:10px;color:var(--sub);margin-top:4px;color:#7a8699}
   /* ===== 股票标记徽章 ===== */
   .mark-badge{display:inline-flex;align-items:center;justify-content:center;
@@ -4129,7 +4129,7 @@ function _showIdxMinTip(card, ev){
     chgEl.className='imt-chg'+(up?' imt-up':(dn?' imt-dn':''));
     chgEl.textContent=(pct>0?'+':(pct<0?'-':''))+(pct||0).toFixed(2)+'%';
     meta.textContent= pts.length? ('分时 · '+pts.length+' 点'+(pc? ' · 昨收 '+pc.toFixed(2):'')) : '该指数暂无分时数据';
-    try{ paintMin(canvas, pts, pc>0?pc:last, true, !!resp.is_index); }
+    try{ paintMin(canvas, pts, pc>0?pc:last, false); }
     catch(err){ meta.textContent='绘制错误: '+(err&&err.message); }
   }).catch(e=>{ if(_idxMinSym===sym){ meta.textContent='分时加载失败: '+(e&&e.message); } });
 }
@@ -4560,7 +4560,7 @@ function _minFrac(p){
 }
 
 // 统一绘制: 价格线(蓝) + 均价线(金) + 昨收虚线 + 时间轴
-function paintMin(canvas, pts, prevClose, mini, isIndex){
+function paintMin(canvas, pts, prevClose, mini){
   if(!canvas) return;
   const w=canvas.clientWidth=canvas.offsetWidth||0;
   const h=canvas.clientHeight=canvas.offsetHeight||0;
@@ -4584,12 +4584,10 @@ function paintMin(canvas, pts, prevClose, mini, isIndex){
     ? pts.map((_,i)=> lx+xf[i]*spanX)
     : pts.map((_,i)=> pts.length>1 ? lx+i/(pts.length-1)*spanX : w/2);
   let lo=Infinity, hi=-Infinity;
-  // 指数仅按价格取范围(无均价线); 个股把均价纳入范围, 防止均价线超出画面
-  if(isIndex){
-    pts.forEach(p=>{ lo=Math.min(lo,p.price); hi=Math.max(hi,p.price); });
-  } else {
-    pts.forEach(p=>{ lo=Math.min(lo,p.price,p.avg); hi=Math.max(hi,p.price,p.avg); });
-  }
+  pts.forEach(p=>{
+    if(p.price!=null){ lo=Math.min(lo,p.price); hi=Math.max(hi,p.price); }
+    if(p.avg!=null){ lo=Math.min(lo,p.avg); hi=Math.max(hi,p.avg); }
+  });
   if(prevClose){ lo=Math.min(lo,prevClose); hi=Math.max(hi,prevClose); }
   let range=hi-lo; if(range<=0) range=(hi||1)*0.01;
   lo-=range*0.05; hi+=range*0.05; range=hi-lo||1;
@@ -4607,7 +4605,8 @@ function paintMin(canvas, pts, prevClose, mini, isIndex){
     ctx.beginPath(); ctx.moveTo(lx, Y(prevClose)); ctx.lineTo(rx, Y(prevClose)); ctx.stroke();
     ctx.setLineDash([]);
   }
-  if(!isIndex) drawLine(pts.map(p=>p.avg), '#f5c842', mini?1:1.6);    // 均价线(金) 仅个股
+  // 均价线(金) 只要不全为空就绘制 (指数/个股均适用)
+  if(pts.every(p=>p.avg!=null)) drawLine(pts.map(p=>p.avg), '#f5c842', mini?1:1.4);
   drawLine(pts.map(p=>p.price), '#4f9dff', mini?1.1:1.8); // 价格线(蓝)
   if(!mini) paintMinAxes(ctx,w,h,lx,rx,spanX,prevClose,lo,hi,Y);
   // 记录坐标映射, 供悬停十字线反推价格/涨跌幅

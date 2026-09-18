@@ -10078,13 +10078,17 @@ def api_minute_data(symbol: str = ""):
         r.raise_for_status()
         payload = r.json()
         node = payload.get("data", {}).get(symbol, {}) or {}
-        # 指数不绘制 VWAP 均价线: 腾讯指数分时的成交额/量为累计值, 且其单位与点位不匹配,
-        # 强行累加求均价会得到 ~20 的伪均价, 反而把价格线上下区间撑大、整图趋平(见 trade plan)。
+        # 指数与个股分时数据的量能口径不同: 腾讯指数分时成交额/量为"累计值",
+        # 直接金额/量 求 VWAP 得不到点位量级(会得到 ~20)。因此指数均线改用
+        # "分钟成交量加权的分时价格均值", 使均线始终贴合价格曲线(形似同花顺指数均价线)。
         is_index = symbol.startswith(("sh000", "sz399"))
         raw = (node.get("data") or {}).get("data") or []
         parsed = []
         cum_amt = 0.0
         cum_vol = 0.0
+        prev_vol = 0.0   # 指数: 累计量差分求每分钟量
+        wsum = 0.0       # 指数: 价格*分钟量 的加权和
+        wvol = 0.0
         for ln in raw:
             parts = str(ln).split()
             if len(parts) < 2:
@@ -10098,13 +10102,18 @@ def api_minute_data(symbol: str = ""):
                 continue
             if price <= 0:
                 continue
-            if not is_index:
+            if is_index:
+                dvol = max(vol - prev_vol, 0.0)
+                prev_vol = max(prev_vol, vol)
+                if dvol > 0:
+                    wsum += price * dvol
+                    wvol += dvol
+                avg = round(wsum / wvol, 3) if wvol > 0 else price
+            else:
                 cum_amt += max(amt, 0.0)
                 cum_vol += max(vol, 0.0)
                 # 腾讯分时 volume 单位为手(100股), amount 为元 → 均价=金额/股数=金额/(手*100)
                 avg = round(cum_amt / (cum_vol * 100), 3) if cum_vol > 0 else price
-            else:
-                avg = None
             parsed.append({
                 "time": t,
                 "price": round(price, 3),
