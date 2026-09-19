@@ -887,6 +887,65 @@ def _fetch_kline_sina(symbol: str, datalen: int) -> list[dict]:
     return _apply_qfq(bars, factors)
 
 
+def _fetch_kline_scale(symbol: str, scale: int, datalen: int) -> list[dict]:
+    """按新浪 scale 参数拉取任意周期的前复权K线 (scale=240日K, 30=30分钟, 60=60分钟)。
+    用于缠论周期切换 (30分/日/周; 周线改由 daily 聚合)。不复权+qfq因子→前复权。"""
+    data: Any = None
+    for attempt in range(2):
+        with _SINA_KLINE_SEM:
+            try:
+                data = _get(SINA_KLINE, {"symbol": symbol, "scale": scale,
+                                         "ma": "no", "datalen": datalen}, timeout=10)
+            except Exception:  # noqa: BLE001
+                data = None
+        if isinstance(data, list) and data:
+            break
+        time.sleep(0.3 * (attempt + 1))
+    if not isinstance(data, list):
+        return []
+    bars: list[dict] = []
+    for d in data:
+        try:
+            bars.append({
+                "day": d.get("day"),
+                "open": float(d["open"]), "high": float(d["high"]),
+                "low": float(d["low"]), "close": float(d["close"]),
+                "volume": float(d["volume"]),
+            })
+        except (KeyError, ValueError, TypeError):
+            continue
+    if not bars:
+        return []
+    factors = _fetch_qfq_factors(symbol)
+    return _apply_qfq(bars, factors)
+
+
+def _agg_week(daily: list[dict]) -> list[dict]:
+    """日K -> 周K 聚合 (周一为周起始, 收盘取该周最后交易日)。"""
+    out: list[dict] = []
+    import datetime as _dt
+    for b in daily:
+        dstr = (b.get("day") or "")[:10]
+        try:
+            dd = _dt.datetime.strptime(dstr, "%Y-%m-%d")
+        except (ValueError, TypeError):
+            continue
+        wk = dd - _dt.timedelta(days=dd.weekday())
+        key = wk.date().isoformat()
+        if not out or out[-1]["day"][:10] != key:
+            out.append({
+                "day": key, "open": b["open"], "high": b["high"],
+                "low": b["low"], "close": b["close"], "volume": b.get("volume", 0),
+            })
+        else:
+            cur = out[-1]
+            cur["high"] = max(cur["high"], b["high"])
+            cur["low"] = min(cur["low"], b["low"])
+            cur["close"] = b["close"]
+            cur["volume"] += b.get("volume", 0)
+    return out
+
+
 def _fetch_kline_remote(symbol: str, datalen: int) -> list[dict]:
     """K线远程拉取(前复权):
       新浪(不复权+qfq因子本地算前复权) → 腾讯qfq → 东财fqt=1。
@@ -6213,6 +6272,44 @@ def api_stock_analyze(code: str = "", date: str = ""):
         "requested_date": as_of_date or None, # 用户请求的日期(可能与基准日不同, 如非交易日)
         "updated": bj_now(),
     }
+
+
+@app.get("/api/stock/chan")
+def api_stock_chan(code: str = "", period: str = "day"):
+    """缠论周期切换轻量接口: 返回指定周期的 bars + chan (仅缠论结构二次图用)。
+    period: 30m=30分钟(时长短一些) | day=日线(默认, ~244根) | week=周线(~60-100根)。
+    不影响主分析(日线)的计算口径, 主分析照常。"""
+    code = code.strip()
+    if not code:
+        return JSONResponse({"error": "code is required"}, status_code=400)
+    period = (period or "").strip().lower()
+    symbol = _to_symbol(code)
+
+    bars: list[dict] = []
+    if period == "30m":
+        # 30分K: 拉约5-6个交易日总量, 展示长短于日线(约180根≈4.5天)
+        bars = _fetch_kline_scale(symbol, 30, 280)[-180:]
+        lbl = "30分钟"
+    elif period == "week":
+        daily = fetch_kline(symbol, datalen=300)
+        bars = _agg_week(daily)[-100:]  # 约2年周线
+        lbl = "周线"
+    else:
+        period = "day"
+        daily = fetch_kline(symbol, datalen=250)
+        bars = daily[-244:]
+        lbl = "日线"
+    if not bars:
+        return JSONResponse({"error": f"找不到 {code} 的 {lbl} K线数据"}, status_code=404)
+
+    chgs = daily_changes(bars)
+    out_bars = [{
+        "day": b["day"], "close": b["close"], "open": b["open"],
+        "high": b["high"], "low": b["low"], "volume": b["volume"],
+        "chg": round(chgs[i], 2) if not math.isnan(chgs[i]) else 0,
+    } for i, b in enumerate(bars)]
+    chan = chan_analysis(bars)
+    return {"period": period, "label": lbl, "bars": out_bars, "chan": chan}
 
 
 # ============================================================

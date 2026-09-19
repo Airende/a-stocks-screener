@@ -39,6 +39,11 @@
   button:hover{filter:brightness(1.1)}
   button:disabled{opacity:.5;cursor:not-allowed}
   .ghost{background:var(--panel2);color:var(--txt)}
+  /* 缠论周期切换小按钮 (30分/日/周) */
+  .chan-pd{display:inline-flex;align-items:center;gap:4px}
+  .chan-pd .cpd{padding:2px 10px;font-size:11px;line-height:18px;border-radius:999px;background:var(--panel2);color:var(--sub);font-weight:600;border:1px solid var(--border);transition:.12s}
+  .chan-pd .cpd:hover{color:var(--txt)}
+  .chan-pd .cpd.on{background:var(--brand,#a06bff);border-color:var(--brand,#a06bff);color:#fff}
   .meta{font-size:12px;color:var(--sub)}
   .meta.cp-code{cursor:pointer;border-bottom:1px dashed var(--border);transition:color .15s}
   .meta.cp-code:hover{color:var(--accent);border-bottom-color:var(--accent)}
@@ -2769,20 +2774,11 @@ function renderAnalysis(d){
   const ch=d.chan||{};
   const chanChartHtml=(bars.length&&ch.ok)?buildChanChart(bars, ch):'';
   const chanHtml=ch.ok?`
-    <div class="sec-h" style="margin-top:16px;font-size:14px">缠论结构</div>
-    <div class="sa-row" style="margin-bottom:6px">
-      <span class="item">结构</span>
-      <span class="desc">${esc(ch.summary.structure)} · 笔 ${ch.summary.stroke_count} · 线段 ${ch.summary.segment_count} · 中枢 ${ch.summary.pivot_count}</span>
+    <div class="sec-h" style="margin-top:16px;font-size:14px;display:flex;align-items:center;gap:10px">缠论结构
+      <span id="chanPd">${chanPeriodBtns('day', d.code)}</span>
     </div>
-    <div class="sa-row" style="margin-bottom:6px">
-      <span class="item">位置</span>
-      <span class="desc">${esc(ch.summary.position)}</span>
-    </div>
-    <div class="sa-row" style="margin-bottom:6px">
-      <span class="item">最新信号</span>
-      <span class="desc">${esc(ch.summary.last_signal)}</span>
-    </div>
-    ${chanChartHtml}
+    <div id="chanSummary">${chanSummaryHtml(ch)}</div>
+    <div id="chanChart">${chanChartHtml}</div>
     <div style="font-size:12px;color:var(--sub);margin-top:6px;line-height:1.6">
       口径：笔=新笔定义(两分型间至少1根独立K线) · 线段=特征序列分型(简化, 不含缺口二次处理) · 中枢=笔中枢(连续三笔重叠区间的延伸) · 一类/二类点用 MACD 面积比较判背驰 · 三类点只看中枢突破与回抽
     </div>`:'';
@@ -3276,6 +3272,50 @@ function buildMiniChart(bars, pivots){
   `;
 }
 
+// ===== 缠论周期切换: 30分/日/周 二次图 (20260919) =====
+const _CHAN_PERIODS=[['30m','30分'],['day','日线'],['week','周线']];
+function chanPeriodBtns(active, code){
+  return '<span class="chan-pd">'+_CHAN_PERIODS.map(([v,lv])=>{
+    return `<button class="cpd ${v===active?'on':''}" data-pd="${v}" data-code="${esc(code)}" onclick="switchChanPeriod('${esc(code)}','${v}')">${lv}</button>`;
+  }).join('')+'</span>';
+}
+function chanSummaryHtml(ch){
+  if(!ch || !ch.ok || !ch.summary) return '';
+  const s=ch.summary;
+  return `<div class="sa-row" style="margin-bottom:6px">
+      <span class="item">结构</span>
+      <span class="desc">${esc(s.structure)} · 笔 ${s.stroke_count} · 线段 ${s.segment_count} · 中枢 ${s.pivot_count}</span>
+    </div>
+    <div class="sa-row" style="margin-bottom:6px">
+      <span class="item">位置</span>
+      <span class="desc">${esc(s.position)}</span>
+    </div>
+    <div class="sa-row" style="margin-bottom:6px">
+      <span class="item">最新信号</span>
+      <span class="desc">${esc(s.last_signal)}</span>
+    </div>`;
+}
+async function switchChanPeriod(code, period){
+  const chartEl=document.getElementById('chanChart');
+  const sumEl=document.getElementById('chanSummary');
+  const pdEl=document.getElementById('chanPd');
+  if(!chartEl) return;
+  chartEl.innerHTML='<div style="text-align:center;padding:20px;color:var(--sub)"><span class="spin"></span> 切换'+period+'…</div>';
+  try{
+    const r=await fetch('/api/stock/chan?code='+encodeURIComponent(code)+'&period='+encodeURIComponent(period));
+    if(!r.ok){ chartEl.innerHTML='<div class="empty">加载失败</div>'; return; }
+    const d=await r.json();
+    if(!d.chan || !d.chan.ok){ chartEl.innerHTML='<div class="empty">'+esc(d.chan?.reason||'该周期未形成有效结构')+'</div>'; return; }
+    if(sumEl) sumEl.innerHTML=chanSummaryHtml(d.chan);
+    chartEl.innerHTML=buildChanChart(d.bars, d.chan);
+    pdEl && pdEl.querySelectorAll('.cpd').forEach(b=>b.classList.toggle('on', b.dataset.pd===period));
+    // 新图十字光标/OHLC 悬浮绑定 (旧图已带 xhairBound, 重复调用安全)
+    bindChartInteractivity(saPanel);
+  }catch(e){
+    chartEl.innerHTML='<div class="empty">切换失败: '+esc(e.message)+'</div>';
+  }
+}
+
 // ===== 缠论结构图: K线 + 笔 + 线段 + 中枢 + 三类买卖点 (20260911) =====
 // chan 字段由后端 /api/stock/analyze 的 chan_analysis() 生成, 索引与 bars 一一对应
 function buildChanChart(bars, chan){
@@ -3344,8 +3384,11 @@ function buildChanChart(bars, chan){
            `<text x="${x.toFixed(1)}" y="${ty.toFixed(1)}" fill="${col}" font-size="10" font-weight="700" text-anchor="middle">${esc(s.label)}</text>`;
   }).join('');
   // 日期轴
-  const dateTxt=[0,Math.floor(n/2),n-1].filter((v,i,a)=>a.indexOf(v)===i).map(i=>
-    `<text x="${xi(i).toFixed(1)}" y="${h-4}" fill="#5a6a82" font-size="10" text-anchor="middle">${(bars[i].day||'').slice(5)}</text>`).join('');
+  const dateTxt=[0,Math.floor(n/2),n-1].filter((v,i,a)=>a.indexOf(v)===i).map(i=>{
+    const dstr=bars[i].day||'';
+    const lbl=dstr.includes(' ')?(dstr.split(' ')[1]||'').slice(0,5):dstr.slice(5);
+    return `<text x="${xi(i).toFixed(1)}" y="${h-4}" fill="#5a6a82" font-size="10" text-anchor="middle">${lbl}</text>`;
+  }).join('');
   const legend=`<text x="${padL}" y="12" fill="#9fb0c6" font-size="10">K线</text>`+
     `<text x="${padL+40}" y="12" fill="#e8eef6" font-size="10">— 笔</text>`+
     `<text x="${padL+90}" y="12" fill="#f5c842" font-size="10">— 线段</text>`+
