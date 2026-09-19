@@ -6277,7 +6277,7 @@ def api_stock_analyze(code: str = "", date: str = ""):
 @app.get("/api/stock/chan")
 def api_stock_chan(code: str = "", period: str = "day"):
     """缠论周期切换轻量接口: 返回指定周期的 bars + chan (仅缠论结构二次图用)。
-    period: 30m=30分钟(时长短一些) | day=日线(默认, ~244根) | week=周线(~60-100根)。
+    period: 30m=30分钟(时长短一些) | 60m=60分钟 | day=日线(默认, ~244根) | week=周线(~60-100根)。
     不影响主分析(日线)的计算口径, 主分析照常。"""
     code = code.strip()
     if not code:
@@ -6290,6 +6290,10 @@ def api_stock_chan(code: str = "", period: str = "day"):
         # 30分K: 拉约5-6个交易日总量, 展示长短于日线(约180根≈4.5天)
         bars = _fetch_kline_scale(symbol, 30, 280)[-180:]
         lbl = "30分钟"
+    elif period == "60m":
+        # 60分K: 一天约4根, 拉280根≈70交易日, 展示180根≈45天
+        bars = _fetch_kline_scale(symbol, 60, 280)[-180:]
+        lbl = "60分钟"
     elif period == "week":
         daily = fetch_kline(symbol, datalen=300)
         bars = _agg_week(daily)[-100:]  # 约2年周线
