@@ -44,6 +44,8 @@
   .chan-pd .cpd{padding:2px 10px;font-size:11px;line-height:18px;border-radius:999px;background:var(--panel2);color:var(--sub);font-weight:600;border:1px solid var(--border);transition:.12s}
   .chan-pd .cpd:hover{color:var(--txt)}
   .chan-pd .cpd.on{background:var(--brand,#a06bff);border-color:var(--brand,#a06bff);color:#fff}
+  /* 缠论结构整体外框 */
+  .chan-box{background:var(--panel2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-top:16px}
   .meta{font-size:12px;color:var(--sub)}
   .meta.cp-code{cursor:pointer;border-bottom:1px dashed var(--border);transition:color .15s}
   .meta.cp-code:hover{color:var(--accent);border-bottom-color:var(--accent)}
@@ -2774,13 +2776,15 @@ function renderAnalysis(d){
   const ch=d.chan||{};
   const chanChartHtml=(bars.length&&ch.ok)?buildChanChart(bars, ch):'';
   const chanHtml=ch.ok?`
-    <div class="sec-h" style="margin-top:16px;font-size:14px;display:flex;align-items:center;gap:10px">缠论结构
-      <span id="chanPd">${chanPeriodBtns('day', d.code)}</span>
-    </div>
-    <div id="chanSummary">${chanSummaryHtml(ch)}</div>
-    <div id="chanChart">${chanChartHtml}</div>
-    <div style="font-size:12px;color:var(--sub);margin-top:6px;line-height:1.6">
-      口径：笔=新笔定义(两分型间至少1根独立K线) · 线段=特征序列分型(简化, 不含缺口二次处理) · 中枢=笔中枢(连续三笔重叠区间的延伸) · 一类/二类点用 MACD 面积比较判背驰 · 三类点只看中枢突破与回抽
+    <div class="chan-box">
+      <div class="sec-h" style="margin:0 0 10px;font-size:14px;display:flex;align-items:center;gap:10px">缠论结构
+        <span id="chanPd">${chanPeriodBtns('day', d.code)}</span>
+      </div>
+      <div id="chanSummary">${chanSummaryHtml(ch)}</div>
+      <div id="chanChart">${chanChartHtml}</div>
+      <div style="font-size:12px;color:var(--sub);margin-top:8px;line-height:1.6">
+        口径：笔=新笔定义(两分型间至少1根独立K线) · 线段=特征序列分型(简化, 不含缺口二次处理) · 中枢=笔中枢(连续三笔重叠区间的延伸) · 一类/二类点用 MACD 面积比较判背驰 · 三类点只看中枢突破与回抽
+      </div>
     </div>`:'';
   // 所属板块 + 主营业务
   const boardHtml=(d.industry||d.concept)?`
