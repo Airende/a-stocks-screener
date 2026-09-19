@@ -454,6 +454,13 @@ _TENCENT_KLINE_URLS = [
 # 已可用的入口排在最后而白白多打两个被封入口)。20260911
 _TENCENT_KLINE_GOOD: str | None = None
 
+# 腾讯分钟K(mkline)入口: 用于缠论 30分/60分 备源 (20260919)。
+# web.ifzq.gtimg.cn 会 301; ifzq/proxy.finance.qq.com 可用。
+_TENCENT_MKLINE_URLS = [
+    "https://ifzq.gtimg.cn/appstock/app/kline/mkline",
+    "https://proxy.finance.qq.com/ifzqgtimg/appstock/app/kline/mkline",
+]
+
 
 def _fetch_kline_tencent(symbol: str, datalen: int = 40) -> list[dict]:
     """腾讯日K主源: 返回前复权(qfq) [{day,open,high,low,close,volume}]。
@@ -887,9 +894,50 @@ def _fetch_kline_sina(symbol: str, datalen: int) -> list[dict]:
     return _apply_qfq(bars, factors)
 
 
+def _fetch_kline_scale_tencent(symbol: str, scale: int, datalen: int) -> list[dict]:
+    """腾讯分钟K备用源: mkline 接口返回 m30/m60 数组。
+    格式: ["202609171500", open, close, high, low, volume, ...]; 成交量为手, 需×100 对齐新浪(股)。
+    20260919: 新浪分钟接口被反爬(456)时作为缠论 30分/60分 的兜底, 避免切换周期加载失败。"""
+    mkey = "m60" if scale >= 60 else ("m30" if scale >= 30 else f"m{scale}")
+    if scale not in (30, 60):
+        return []
+    for base in _TENCENT_MKLINE_URLS:
+        try:
+            data = _get(base, {"param": f"{symbol},{mkey},,{datalen}"}, timeout=10)
+        except Exception:  # noqa: BLE001
+            continue
+        node = {}
+        if isinstance(data, dict):
+            node = (data.get("data") or {}).get(symbol) or {}
+        rows = node.get(mkey) or node.get("m60") or node.get("m30") or []
+        if rows:
+            rows = rows[-datalen:]
+            out: list[dict] = []
+            for r in rows:
+                try:
+                    raw_day = (r[0] or "")
+                    # 腾讯分钟格式 "YYYYMMDDHHMM"(12位数字) → 对齐新浪 "YYYY-MM-DD HH:MM:SS"
+                    if len(raw_day) == 12 and raw_day.isdigit():
+                        raw_day = (f"{raw_day[0:4]}-{raw_day[4:6]}-{raw_day[6:8]} "
+                                   f"{raw_day[8:10]}:{raw_day[10:12]}:00")
+                    out.append({
+                        "day": raw_day,
+                        "open": float(r[1]), "close": float(r[2]),
+                        "high": float(r[3]), "low": float(r[4]),
+                        "volume": float(r[5]) * 100,
+                    })
+                except (IndexError, ValueError, TypeError):
+                    continue
+            if out:
+                return out
+    return []
+
+
 def _fetch_kline_scale(symbol: str, scale: int, datalen: int) -> list[dict]:
-    """按新浪 scale 参数拉取任意周期的前复权K线 (scale=240日K, 30=30分钟, 60=60分钟)。
-    用于缠论周期切换 (30分/日/周; 周线改由 daily 聚合)。不复权+qfq因子→前复权。"""
+    """拉取任意周期的前复权K线 (scale=240日K, 30=30分钟, 60=60分钟)。
+    用于缠论周期切换 (30分/日/周; 周线改由 daily 聚合)。不复权+qfq因子→前复权。
+    20260919: 新浪分钟接口(scale=30/60)被反爬返回空时, 自动回退腾讯 mkline(m30/m60),
+    避免缠论切换 30分/60分 加载失败(此前仅引新浪单一来源, 无备源)。"""
     data: Any = None
     for attempt in range(2):
         with _SINA_KLINE_SEM:
@@ -901,7 +949,10 @@ def _fetch_kline_scale(symbol: str, scale: int, datalen: int) -> list[dict]:
         if isinstance(data, list) and data:
             break
         time.sleep(0.3 * (attempt + 1))
-    if not isinstance(data, list):
+    if not isinstance(data, list) or not data:
+        # ---- 备源: 腾讯分钟K (20260919, 仅分钟周期走此兜底) ----
+        if scale in (30, 60):
+            return _fetch_kline_scale_tencent(symbol, scale, datalen)
         return []
     bars: list[dict] = []
     for d in data:
