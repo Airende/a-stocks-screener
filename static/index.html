@@ -1040,6 +1040,21 @@
   <div class="tab-pane" id="pane-chan">
     <div class="card" style="border-radius:12px">
       <div class="card-b" style="display:block;padding-top:14px">
+        <!-- 缠论专用搜索: 复用后端 /api/stock/search 与历史 /api/stock/history (与个股分析共享历史) -->
+        <div class="sa-box">
+          <div class="sa-box-inner">
+            <input class="sa-input" id="chanInput" type="text" placeholder="输入股票代码(002080) / 名称(中材科技) / 拼音首字母(zcjy)…" autocomplete="off" />
+            <button class="sa-search-btn" id="chanSearchBtn">搜索</button>
+          </div>
+          <div class="sa-dropdown" id="chanDropdown"></div>
+        </div>
+        <div class="sa-hist" id="chanHist">
+          <div class="sa-hist-h" id="chanHistToggle">
+            <span style="display:flex;align-items:center"><span class="sa-hist-arr">▼</span><span>历史记录</span><span style="font-size:11px;color:var(--sub);margin-left:6px">与个股分析共享</span></span>
+            <button class="ghost" id="chanHistClr" onclick="event.stopPropagation()" style="padding:2px 8px;font-size:10px;border-radius:4px">清空</button>
+          </div>
+          <div class="sa-hist-list" id="chanHistList"></div>
+        </div>
         <div id="chanTabPlaceholder" style="font-size:13px;color:var(--sub);padding:20px 0">请在「个股分析」标签页选择股票后，到此查看缠论笔/线段/中枢/三类买卖点结构</div>
         <div id="chanTabBox"></div>
       </div>
@@ -1166,6 +1181,8 @@ function moveChanToTab(){
   const ph=document.getElementById('chanTabPlaceholder');
   if(!box) return;
   _chanBoxEl=box;
+  // 进入该tab时也加载共享搜索历史 (20260920)
+  if(typeof loadChanHistory==='function') loadChanHistory();
   if(!_chanLastBox){ if(ph) ph.style.display='block'; box.innerHTML=''; return; }
   if(ph) ph.style.display='none';
   box.innerHTML=_chanLastBox;
@@ -1838,6 +1855,80 @@ function submitSearchNow(){
 }
 if($('#saSearchBtn')) $('#saSearchBtn').onclick = ()=>submitSearchNow();
 
+// ===== 缠论结构tab搜索 (20260920): 复用后端 /api/stock/search 与 /api/stock/history, 与个股分析共享搜索历史 =====
+const chanInput=$('#chanInput'), chanDD=$('#chanDropdown');
+let chanTimer=null;
+if(chanInput){
+  chanInput.addEventListener('input',()=>{
+    const q=chanInput.value.trim();
+    clearTimeout(chanTimer);
+    if(!q){ chanDD.classList.remove('show'); return; }
+    chanTimer=setTimeout(()=>searchStockChan(q),300);
+  });
+  chanInput.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){ chanDD.classList.remove('show'); chanInput.blur(); }
+    if(e.key==='Enter'){ e.preventDefault(); submitSearchNowChan(); }
+  });
+}
+document.addEventListener('click',e=>{
+  if(!e.target.closest('.sa-box')) chanDD.classList.remove('show');
+});
+async function searchStockChan(q){
+  try{
+    const r=await fetch('/api/stock/search',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({q})
+    });
+    const d=await r.json();
+    const items=d.items||[];
+    if(!items.length){ chanDD.classList.remove('show'); return; }
+    chanDD.innerHTML=items.map(it=>`<div class="sa-item" data-code="${it.code}"><span class="nm">${it.name}</span><span class="cd">${mkt(it.code)}</span></div>`).join('');
+    chanDD.classList.add('show');
+    chanDD.querySelectorAll('.sa-item').forEach(el=>{
+      el.onclick=()=>{ const code=el.dataset.code; chanInput.value=''; chanDD.classList.remove('show'); analyzeStock(code); };
+    });
+  }catch(e){}
+}
+let _chanSubmitTimer=null;
+function submitSearchNowChan(){
+  const q=chanInput.value.trim();
+  if(!q) return;
+  clearTimeout(_chanSubmitTimer);
+  _chanSubmitTimer = setTimeout(async()=>{
+    try{
+      const r=await fetch('/api/stock/search',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({q})
+      });
+      const d=await r.json();
+      const items=d.items||[];
+      // 1. 完全匹配代码或名称 → 直接分析
+      const codeExact = items.find(it=>it.code===q || it.code.toUpperCase()===q.toUpperCase());
+      if(codeExact){ chanInput.value=''; analyzeStock(codeExact.code); return; }
+      const nameExact = items.find(it=>it.name===q);
+      if(nameExact){ chanInput.value=''; analyzeStock(nameExact.code); return; }
+      // 2. 纯6位数字当代码
+      if(/^\d{6}$/.test(q)){ analyzeStock(q); return; }
+      // 3. 有联想 → 显示下拉让用户选
+      if(items.length){
+        chanDD.innerHTML=items.map(it=>`<div class="sa-item" data-code="${it.code}"><span class="nm">${it.name}</span><span class="cd">${mkt(it.code)}</span></div>`).join('');
+        chanDD.classList.add('show');
+        chanDD.querySelectorAll('.sa-item').forEach(el=>{ el.onclick=()=>{ const code=el.dataset.code; chanInput.value=''; chanDD.classList.remove('show'); analyzeStock(code); }; });
+        return;
+      }
+      // 4. 没找到
+      const box=document.getElementById('chanTabBox');
+      box.innerHTML='<div class="empty">未找到匹配的股票：'+esc(q)+'<br>请尝试输入代码 / 完整名称 / 拼音首字母</div>';
+    }catch(e){
+      const box=document.getElementById('chanTabBox');
+      box.innerHTML='<div class="empty">搜索失败: '+esc(e.message)+'</div>';
+    }
+  },120);
+}
+if($('#chanSearchBtn')) $('#chanSearchBtn').onclick=()=>submitSearchNowChan();
+
 // ===== 历史时点复盘: 基准日期选择 (20260906) =====
 const saDateInput = $('#saDate');
 if(saDateInput) saDateInput.max = new Date().toISOString().slice(0,10);
@@ -1881,6 +1972,12 @@ async function analyzeStock(code, date){
   // 20260906 支持历史时点复盘: date(YYYY-MM-DD)非空时按该日为最后一天分析
   saPanel.classList.add('show');
   saPanel.innerHTML='<div style="text-align:center;padding:30px"><span class="spin"></span>'+(date?('正在分析 '+esc(date)+' 时点数据…'):'正在拉取K线并分析技术指标…')+'</div>';
+  // 若用户在缠论tab发起分析, 同时在该tab显示加载态 (20260920)
+  if(isChanTabActive){
+    const box=document.getElementById('chanTabBox');
+    const ph=document.getElementById('chanTabPlaceholder');
+    if(box){ if(ph) ph.style.display='none'; box.innerHTML='<div style="text-align:center;padding:30px"><span class="spin"></span> 正在计算缠论结构…</div>'; }
+  }
   try{
     let url='/api/stock/analyze?code='+encodeURIComponent(code);
     if(date) url+='&date='+encodeURIComponent(date);
@@ -1892,7 +1989,7 @@ async function analyzeStock(code, date){
     // 并行绘制上试盘信号点 markers 到 K 线 SVG (不阻塞后续流程)
     // 历史时点模式下只画基准日及之前的信号 (20260906)
     applySSPMarkersToAnalysisChart(code, d.bars||[], d.is_historical ? d.as_of_date : null).catch(()=>{});
-    loadHistory();
+    loadHistory(); loadChanHistory();
   }catch(e){
     saPanel.innerHTML='<div class="empty">加载失败: '+e.message+'</div>';
   }
@@ -2058,80 +2155,93 @@ async function applySSPMarkersToAnalysisChart(code, bars, asOfDate){
   // 插入到 svg 顶部(第一个子元素之后, 确保在蜡烛体上层/背景下层? 需要在最上层, 放最后)
   svg.appendChild(g);
 }
-// 历史记录: 折叠切换 (状态存 localStorage, key='sa_hist_collapsed')
+// 历史记录: 折叠切换 (状态分别存 localStorage, 个股分析 / 缠论tab 各自独立折叠 20260920)
 function applyHistCollapsed(){
-  const saHist=$('#saHist');
-  if(!saHist) return;
-  try{
-    const collapsed = localStorage.getItem('sa_hist_collapsed')==='1';
-    saHist.classList.toggle('collapsed', collapsed);
-  }catch(e){}
+  const pairs=[['#saHist','sa_hist_collapsed'],['#chanHist','chan_hist_collapsed']];
+  pairs.forEach(([sel,key])=>{
+    const el=$(sel); if(!el) return;
+    try{ el.classList.toggle('collapsed', localStorage.getItem(key)==='1'); }catch(e){}
+  });
 }
-function toggleHist(){
-  const saHist=$('#saHist');
-  if(!saHist) return;
-  const collapsed = !saHist.classList.contains('collapsed');
-  saHist.classList.toggle('collapsed', collapsed);
-  try{ localStorage.setItem('sa_hist_collapsed', collapsed?'1':'0'); }catch(e){}
+function toggleWrapCollapse(wrapSel, key){
+  const wrap=$(wrapSel); if(!wrap) return;
+  const collapsed = !wrap.classList.contains('collapsed');
+  wrap.classList.toggle('collapsed', collapsed);
+  try{ localStorage.setItem(key, collapsed?'1':'0'); }catch(e){}
 }
 if($('#saHistToggle')) $('#saHistToggle').addEventListener('click', e=>{
   // 点清空按钮不触发折叠 (HTML里也 stopPropagation 双保险)
   if(e.target.closest('#saHistClr')) return;
-  toggleHist();
+  toggleWrapCollapse('#saHist','sa_hist_collapsed');
+});
+if($('#chanHistToggle')) $('#chanHistToggle').addEventListener('click', e=>{
+  if(e.target.closest('#chanHistClr')) return;
+  toggleWrapCollapse('#chanHist','chan_hist_collapsed');
 });
 // 历史记录: 加载 / 点击 / 清空 / 单条删除 / 超过20条收起
-async function loadHistory(){
-  const saHist=$('#saHist'), saHistList=$('#saHistList');
+// 个股分析 与 缠论tab 共用同一后端 /api/stock/history → 共享同一套搜索历史 (20260920)
+async function fillStockHistory(wrapEl, listEl, stateKey){
+  if(!wrapEl || !listEl) return;
   try{
     const r=await fetch('/api/stock/history');
     const d=await r.json();
     const items=d.items||[];
-    if(!items.length){ saHist.classList.add('hide'); return; }
-    saHist.classList.remove('hide');
+    if(!items.length){ wrapEl.classList.add('hide'); return; }
+    wrapEl.classList.remove('hide');
     const OVERFLOW_N=20; // 超过20条收起
     const overflow=items.length>OVERFLOW_N;
     // 渲染历史项(带删除按钮)
-    saHistList.innerHTML=items.map(it=>
+    listEl.innerHTML=items.map(it=>
       `<div class="sa-hist-item" data-code="${it.code}"><span class="sa-hist-name">${it.name}</span><span class="sa-hist-del" data-code="${it.code}">×</span></div>`
     ).join('');
     // 展开/收起按钮
-    let moreBtn=saHistList.querySelector('.sa-hist-more');
+    let moreBtn=listEl.querySelector('.sa-hist-more');
     if(overflow){
       if(!moreBtn){
         moreBtn=document.createElement('div');
         moreBtn.className='sa-hist-more';
-        saHistList.appendChild(moreBtn);
+        listEl.appendChild(moreBtn);
       }
       moreBtn.textContent='展开 '+(items.length-OVERFLOW_N)+' 条 ▼';
-      moreBtn.onclick=(e)=>{ e.stopPropagation(); saHistList.classList.toggle('expanded'); const exp=saHistList.classList.contains('expanded'); moreBtn.textContent=(exp?'收起 ▲':'展开 '+(items.length-OVERFLOW_N)+' 条 ▼'); };
+      moreBtn.onclick=(e)=>{ e.stopPropagation(); listEl.classList.toggle('expanded'); const exp=listEl.classList.contains('expanded'); moreBtn.textContent=(exp?'收起 ▲':'展开 '+(items.length-OVERFLOW_N)+' 条 ▼'); };
     }else if(moreBtn){ moreBtn.remove(); }
     // 收起状态: 超过20条时默认收起
-    saHistList.classList.toggle('overflow', overflow);
-    if(!overflow) saHistList.classList.remove('expanded');
+    listEl.classList.toggle('overflow', overflow);
+    if(!overflow) listEl.classList.remove('expanded');
     // 点击历史项 → 分析
-    saHistList.querySelectorAll('.sa-hist-item').forEach(el=>{
+    listEl.querySelectorAll('.sa-hist-item').forEach(el=>{
       el.onclick=(e)=>{
         if(e.target.classList.contains('sa-hist-del')) return; // 删除按钮不触发分析
         analyzeStock(el.dataset.code);
       };
     });
     // 删除单条
-    saHistList.querySelectorAll('.sa-hist-del').forEach(el=>{
+    listEl.querySelectorAll('.sa-hist-del').forEach(el=>{
       el.onclick=async(e)=>{
         e.stopPropagation();
-        const code=el.dataset.code;
-        await fetch('/api/stock/history/'+code,{method:'DELETE'});
-        loadHistory();
+        await fetch('/api/stock/history/'+el.dataset.code,{method:'DELETE'});
+        refreshAllHist();
       };
     });
     // 每次渲染完恢复折叠状态 (保证第一次进入也生效)
-    applyHistCollapsed();
+    try{ wrapEl.classList.toggle('collapsed', localStorage.getItem(stateKey)==='1'); }catch(e){}
   }catch(e){}
 }
+function refreshAllHist(){
+  fillStockHistory($('#saHist'), $('#saHistList'), 'sa_hist_collapsed');
+  fillStockHistory($('#chanHist'), $('#chanHistList'), 'chan_hist_collapsed');
+}
+async function loadHistory(){ fillStockHistory($('#saHist'), $('#saHistList'), 'sa_hist_collapsed'); }
+async function loadChanHistory(){ fillStockHistory($('#chanHist'), $('#chanHistList'), 'chan_hist_collapsed'); }
 $('#saHistClr').onclick=async()=>{
   if(!confirm('确认清空所有历史记录?')) return;
   await fetch('/api/stock/history',{method:'DELETE'});
-  loadHistory();
+  refreshAllHist();
+};
+if($('#chanHistClr')) $('#chanHistClr').onclick=async()=>{
+  if(!confirm('确认清空所有共享历史记录?')) return;
+  await fetch('/api/stock/history',{method:'DELETE'});
+  refreshAllHist();
 };
 function renderAnalysis(d){
   const isHold = getHoldState(d.code);
