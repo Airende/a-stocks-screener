@@ -913,8 +913,7 @@
   </div>
 
   <div class="main-tabs" id="mainTabs">
-    <div class="main-tab active" data-pane="pane-ma">均线形态筛选</div>
-    <div class="main-tab" data-pane="pane-cond">选股条件</div>
+    <div class="main-tab active" data-pane="pane-ma">筛选</div>
     <div class="main-tab" data-pane="pane-stock">个股分析</div>
     <div class="main-tab" data-pane="pane-chan">缠论结构</div>
     <div class="main-tab" data-pane="pane-marks">标记管理</div>
@@ -926,6 +925,11 @@
   <div class="tab-pane active" id="pane-ma">
     <div class="card" style="border-radius:12px">
       <div class="card-b" id="maBody" style="display:block">
+        <!-- 二级页签 (20260920): 均线形态 / 条件选股 二合一 -->
+        <div class="ckbar subnav" style="margin-bottom:10px;border-bottom:1px solid var(--border);padding-bottom:6px;gap:6px">
+          <div class="ma-tab active" data-sub="ma" id="subMaBtn" style="padding:6px 16px">均线形态</div>
+          <div class="ma-tab" data-sub="cond" id="subCondBtn" style="padding:6px 16px">条件选股</div>
+        </div>
         <div class="ckbar" style="margin-bottom:10px">
           <span class="meta" id="maUpdated">尚未筛选</span>
           <button class="ghost" id="maRunBtn">开始筛选</button>
@@ -1175,6 +1179,19 @@ function gotoStockAnalyze(code, name){
   try{ if(typeof saInput!=='undefined' && saInput){ saInput.value=name||code; } }catch(e){}
   if(typeof analyzeStock==='function'){ analyzeStock(code); }
 }
+// 二级页签 (20260920): "筛选"面板内 均线形态 / 条件选股 二合一
+let _subFilter='ma';
+function setFilterSub(sub){
+  _subFilter=sub;
+  const ma=document.getElementById('pane-ma');
+  const cond=document.getElementById('pane-cond');
+  ma.classList.toggle('active', sub==='ma');
+  cond.classList.toggle('active', sub==='cond');
+  document.getElementById('subMaBtn').classList.toggle('active', sub==='ma');
+  document.getElementById('subCondBtn').classList.toggle('active', sub==='cond');
+}
+document.getElementById('subMaBtn').onclick=()=>setFilterSub('ma');
+document.getElementById('subCondBtn').onclick=()=>setFilterSub('cond');
 // Tab切换
 document.querySelectorAll('.main-tab').forEach(t=>{
   t.onclick=()=>{
@@ -1182,6 +1199,8 @@ document.querySelectorAll('.main-tab').forEach(t=>{
     document.querySelectorAll('.tab-pane').forEach(x=>x.classList.remove('active'));
     t.classList.add('active');
     document.getElementById(t.dataset.pane).classList.add('active');
+    // "筛选"面板含二级页签, 切回时恢复二级面板与按钮状态 (20260920)
+    if(t.dataset.pane==='pane-ma' && typeof setFilterSub==='function') setFilterSub(_subFilter);
     // 切到标记管理 tab 时渲染列表
     if(t.dataset.pane==='pane-marks' && typeof renderMkTable==='function') renderMkTable();
     // 切到历史信号 tab 时加载归档数据 (20260906)
