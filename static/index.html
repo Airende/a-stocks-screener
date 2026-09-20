@@ -2782,9 +2782,34 @@ function renderAnalysis(d){
       </div>
       <div id="chanSummary">${chanSummaryHtml(ch)}</div>
       <div id="chanChart">${chanChartHtml}</div>
-      <div style="font-size:12px;color:var(--sub);margin-top:8px;line-height:1.6">
-        口径：笔=新笔定义(两分型间至少1根独立K线) · 线段=特征序列分型(简化, 不含缺口二次处理) · 中枢=笔中枢(连续三笔重叠区间的延伸) · 一类/二类点用 MACD 面积比较判背驰 · 三类点只看中枢突破与回抽
-      </div>
+      <details class="collapsible" style="margin-top:8px">
+        <summary>🎯 缠论一二三类买卖点 · 详细说明（点击展开）</summary>
+        <div class="col-body">
+          <div style="font-size:11.5px;color:var(--sub);line-height:1.7;margin-bottom:6px">买点=空头→多头转折的介入点；卖点=多头→空头转折的离场点。一/二类靠 <b>MACD 面积背驰</b> 判断力度，三类只看 <b>中枢突破与回抽</b>。</div>
+          <table>
+            <thead><tr><th style="width:14%">类型</th><th style="width:18%">含义</th><th>触发条件（本系统判定）</th><th style="width:22%">操作参考</th></tr></thead>
+            <tbody>
+              <tr><td><span class="pill up">一买</span><br>B1</td><td>下跌趋势末端</td><td>向下笔<b>创新低</b>，但该笔 MACD 绿柱面积显著衰减（&lt; 前一段的 90%）→ 底背驰</td><td>空头衰竭，左侧抄底，需等确认/放量</td></tr>
+              <tr><td><span class="pill up">二买</span><br>B2</td><td>一买后的二次确认</td><td>一买之后<b>首次回抽的向下笔不再创新低</b>（低点 &gt; 一买低点）</td><td>趋势反转更可靠，常用建仓点</td></tr>
+              <tr><td><span class="pill up">三买</span><br>B3</td><td>中枢突破不回抽</td><td>向上<b>离开中枢</b>（高点突破 ZG）后，回抽笔<b>低点仍在 ZG 之上</b>、未跌回中枢</td><td>强势延续，突破追涨 / 回抽加仓</td></tr>
+              <tr><td><span class="pill down">一卖</span><br>S1</td><td>上涨趋势末端</td><td>向上笔<b>创新高</b>，但该笔 MACD 红柱面积显著衰减 → 顶背驰</td><td>多头衰竭，左侧减仓 / 离场</td></tr>
+              <tr><td><span class="pill down">二卖</span><br>S2</td><td>一卖后的二次确认</td><td>一卖之后<b>首次反抽的向上笔不再创新高</b>（高点 &lt; 一卖高点）</td><td>趋势反转确立，清仓 / 反手</td></tr>
+              <tr><td><span class="pill down">三卖</span><br>S3</td><td>中枢破位不回抽</td><td>向下<b>离开中枢</b>（低点跌破 ZD）后，反抽笔<b>高点仍在 ZD 之下</b>、未拉回中枢</td><td>弱势破位，反弹离场 / 不抄底</td></tr>
+            </tbody>
+          </table>
+          <h5>📌 一图看懂层级关系</h5>
+          <div style="font-size:11.5px;line-height:1.9;color:var(--txt)">
+            <b>买：</b> <span style="color:var(--up)">一买</span>（背驰确认底部）→ <span style="color:var(--up)">二买</span>（回抽不破低，安全买点）→ <span style="color:var(--up)">三买</span>（突破中枢不回抽，强势追涨）<br>
+            <b>卖：</b> <span style="color:var(--down)">一卖</span>(顶背驰) → <span style="color:var(--down)">二卖</span>(反抽不创新高) → <span style="color:var(--down)">三卖</span>(跌破中枢不拉回)
+          </div>
+          <h5>⚠ 搭配纪律</h5>
+          <div style="font-size:11.5px;color:var(--sub);line-height:1.8">
+            · 一/二类点依赖背驰，需结合级别与量能共振，避免"背了又背"<br>
+            · 三类点最清晰，<b>优先看三买/三卖 + 中枢 ZG/ZD 位置</b>的突破与回抽<br>
+            · 图上标记为信号所在K线；同根K线多个同类点会合并显示（如"二买/三买"）
+          </div>
+        </div>
+      </details>
     </div>`:'';
   // 所属板块 + 主营业务
   const boardHtml=(d.industry||d.concept)?`
