@@ -430,6 +430,9 @@
 .ma-tab.grp-day.alt{color:#2fbf9f;background:linear-gradient(180deg,rgba(47,191,159,.12),var(--panel2));border-color:rgba(47,191,159,.28)}
 .ma-tab.grp-day.alt:hover{color:#fff}
 .ma-tab.grp-day.alt.active{background:linear-gradient(180deg,#2fbf9f,#1fae8f);color:#fff;border-color:#1fae8f}
+.ma-tab.grp-day.alt2{color:#35d98f;background:linear-gradient(180deg,rgba(53,217,143,.12),var(--panel2));border-color:rgba(53,217,143,.28)}
+.ma-tab.grp-day.alt2:hover{color:#fff}
+.ma-tab.grp-day.alt2.active{background:linear-gradient(180deg,#35d98f,#23b06c);color:#fff;border-color:#23b06c}
 .ma-tab.grp-week{color:#ff9d2e;background:linear-gradient(180deg,rgba(255,157,46,.13),var(--panel2));border-color:rgba(255,157,46,.28)}
 .ma-tab.grp-week:hover{color:#fff}
 .ma-tab.grp-week.active{background:linear-gradient(180deg,#ff9d2e,#e07b1f);color:#fff;border-color:#e07b1f}
@@ -3966,7 +3969,8 @@ function renderMATabs(){
     // 分组色 (20260918): 日线=grp-day(蓝青)/组内看跌=alt(同相青), 周线=grp-week(橙), 上试盘=ssp-tab(金)
     const grpCls = isSsp ? '' : (i < SSP_KIND_TAB_OFFSET-3 ? 'grp-day' : 'grp-week');
     const dayAlt = (!isSsp && i < SSP_KIND_TAB_OFFSET-3 && p[0].includes('向下')) ? ' alt' : '';
-    return `<div class="ma-tab ${i===maCurrentTab?'active':''} ${grpCls}${dayAlt}${isSsp?' ssp-tab':''}" title="${title||p[1]}" data-i="${i}">${DISP_MA_NAME[i]||p[0]}<span class="cnt">${c}</span></div>`;
+    const dayAlt2 = (!isSsp && i < SSP_KIND_TAB_OFFSET-3 && p[0].includes('背离')) ? ' alt2' : '';
+    return `<div class="ma-tab ${i===maCurrentTab?'active':''} ${grpCls}${dayAlt}${dayAlt2}${isSsp?' ssp-tab':''}" title="${title||p[1]}" data-i="${i}">${DISP_MA_NAME[i]||p[0]}<span class="cnt">${c}</span></div>`;
   }).join('');
   $('#maTabs').querySelectorAll('.ma-tab').forEach(t=>{
     t.onclick=()=>{
