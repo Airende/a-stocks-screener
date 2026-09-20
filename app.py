@@ -5957,35 +5957,62 @@ def _chan_signals(strokes: list[dict], pivots: list[dict], hist: list[float]) ->
             add(back["i1"], back["p1"], "S3", "三卖", "sell",
                 f"向下离开中枢后反抽不回中枢(高点{back['p1']:.2f} < ZD{pv['zd']:.2f})")
 
-    # ---- 一买/二买 (下跌背驰) / 一卖/二卖 (上涨背驰) ----
+    # 辅助: 取 stroke 索引 < k 的最近一个中枢(其形成区间 s1 < k), 用于判突破/盘整
+    def _prev_hub(pivots, k):
+        best = None
+        for p in pivots:
+            if p["s1"] < k and (best is None or p["s1"] > best["s1"]):
+                best = p
+        return best
+
+    # ---- 一买/二买 (下跌背驰·须破前中枢) / 盘整背驰买; 一卖/二卖 (上涨背驰·须破前中枢) / 盘整背驰卖 ----
+    # 20260920 细分: 严格缠论里, 一买应出现在"跌破前一个下跌中枢"之后(趋势末端)。
+    #   若背驰低点仍在前一中枢 ZD 之上(即中枢内部), 不算趋势一买, 只标"盘整背驰买点",
+    #   避免在中枢震荡中凭空标出一个趋势反转的一买。
     for k in range(len(strokes) - 2):
         s0, s1, s2 = strokes[k], strokes[k + 1], strokes[k + 2]
-        # 底背驰 → 一买
+        # 底背驰
         if s0["dir"] == "down" and s1["dir"] == "up" and s2["dir"] == "down" \
                 and s2["p1"] < s0["p1"] - _CHAN_EPS:
             a0 = _chan_area(hist, s0["i0"], s0["i1"], -1)
             a2 = _chan_area(hist, s2["i0"], s2["i1"], -1)
             if a0 > 0 and a2 < a0 * 0.9:
-                add(s2["i1"], s2["p1"], "B1", "一买", "buy",
-                    f"下跌创新低但MACD面积衰减(底背驰, {a2:.1f} < {a0:.1f})")
-                if k + 4 < len(strokes) and strokes[k + 4]["dir"] == "down" \
-                        and strokes[k + 4]["p1"] > s2["p1"]:
-                    s4 = strokes[k + 4]
-                    add(s4["i1"], s4["p1"], "B2", "二买", "buy",
-                        f"一买后首次回抽不创新低({s4['p1']:.2f} > {s2['p1']:.2f})")
-        # 顶背驰 → 一卖
+                prev = _prev_hub(pivots, k + 2)
+                if prev is not None and s2["p1"] < prev["zd"] - _CHAN_EPS:
+                    # 跌破前中枢 → 趋势一买
+                    add(s2["i1"], s2["p1"], "B1", "一买", "buy",
+                        f"跌破前中枢ZD{prev['zd']:.2f}创新低+MACD衰减(底背驰,{a2:.1f}<{a0:.1f})")
+                    if k + 4 < len(strokes) and strokes[k + 4]["dir"] == "down" \
+                            and strokes[k + 4]["p1"] > s2["p1"]:
+                        s4 = strokes[k + 4]
+                        add(s4["i1"], s4["p1"], "B2", "二买", "buy",
+                            f"一买后首次回抽不创新低({s4['p1']:.2f} > {s2['p1']:.2f})")
+                else:
+                    # 未破前中枢(中枢内) → 仅盘整背驰, 非趋势一买
+                    ref = f"前中枢ZD {prev['zd']:.2f}" if prev else "无前中枢"
+                    add(s2["i1"], s2["p1"], "B盘", "盘整背驰买", "buy",
+                        f"底背驰但未跌破前一中枢({ref}), 低点{s2['p1']:.2f}, 仅中枢内盘整背驰, 谨慎")
+        # 顶背驰
         if s0["dir"] == "up" and s1["dir"] == "down" and s2["dir"] == "up" \
                 and s2["p1"] > s0["p1"] + _CHAN_EPS:
             a0 = _chan_area(hist, s0["i0"], s0["i1"], 1)
             a2 = _chan_area(hist, s2["i0"], s2["i1"], 1)
             if a0 > 0 and a2 < a0 * 0.9:
-                add(s2["i1"], s2["p1"], "S1", "一卖", "sell",
-                    f"上涨创新高但MACD面积衰减(顶背驰, {a2:.1f} < {a0:.1f})")
-                if k + 4 < len(strokes) and strokes[k + 4]["dir"] == "up" \
-                        and strokes[k + 4]["p1"] < s2["p1"]:
-                    s4 = strokes[k + 4]
-                    add(s4["i1"], s4["p1"], "S2", "二卖", "sell",
-                        f"一卖后首次反抽不创新高({s4['p1']:.2f} < {s2['p1']:.2f})")
+                prev = _prev_hub(pivots, k + 2)
+                if prev is not None and s2["p1"] > prev["zg"] + _CHAN_EPS:
+                    # 突破前中枢 → 趋势一卖
+                    add(s2["i1"], s2["p1"], "S1", "一卖", "sell",
+                        f"突破前中枢ZG{prev['zg']:.2f}创新高+MACD衰减(顶背驰,{a2:.1f}<{a0:.1f})")
+                    if k + 4 < len(strokes) and strokes[k + 4]["dir"] == "up" \
+                            and strokes[k + 4]["p1"] < s2["p1"]:
+                        s4 = strokes[k + 4]
+                        add(s4["i1"], s4["p1"], "S2", "二卖", "sell",
+                            f"一卖后首次反抽不创新高({s4['p1']:.2f} < {s2['p1']:.2f})")
+                else:
+                    # 未突破前中枢(中枢内) → 仅盘整背驰, 非趋势一卖
+                    ref = f"前中枢ZG {prev['zg']:.2f}" if prev else "无前中枢"
+                    add(s2["i1"], s2["p1"], "S盘", "盘整背驰卖", "sell",
+                        f"顶背驰但未突破前一中枢({ref}), 高点{s2['p1']:.2f}, 仅中枢内盘整背驰, 谨慎")
 
     # 同一根K线可能同时满足多个同类买卖点(例如"二买"与"三买"落在同一低点),
     # 早期版本在这里直接丢弃后者, 导致图上"只显示部分买卖点"。
