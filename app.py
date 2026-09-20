@@ -8839,6 +8839,8 @@ def _startup():
     threading.Thread(target=_ssp_daily_runner, daemon=True).start()
     # 磁盘缓存清理: 启动清一次 + 常驻每天09:00清一次 (20260906)
     threading.Thread(target=_cache_cleaner_loop, daemon=True).start()
+    # 历史信号归档兜底: 交易日收盘后自动跑 选股+均线 扫描归档, 保证历史信号逐日连续 (20260921)
+    threading.Thread(target=_signal_archive_daily_runner, daemon=True).start()
 
 
 # ---------- 上试盘·每日定时更新 ----------
@@ -8858,6 +8860,41 @@ def _ssp_log(msg: str) -> None:
 def _is_workday(d):
     """周一=0 ~ 周五=4. 简化版(不剔除交易所休假日, 节假日少量/空量跑一次无害)"""
     return d.weekday() < 5
+
+
+# ---------- 历史信号归档兜底 · 每日定时 (20260921) ----------
+# A股收盘后自动跑 选股+均线 扫描并归档, 确保每个交易日都有一条历史信号记录,
+# 避免"当天没人打开页面/扫描未触发 → 该日从历史信号列表中缺失断档"的问题。
+_SIG_DAILY_HOUR = 15
+_SIG_DAILY_MINUTE = 30  # 收盘后半小时, 当日K线/均线已成形
+
+
+def _signal_archive_daily_runner():
+    """常驻线程: 工作日 15:30 触发一次 选股+均线 扫描归档 (上试盘由 _ssp_daily_runner 已在 16:30 处理)。
+
+    选股/均线扫描各自内部完成时都会调用 _archive_put 写入当日归档,
+    本线程只是"保证每天收盘后必然会触发一次扫描", 与手动/访问触发的扫描是幂等的。
+    """
+    import datetime as _dt
+    time.sleep(10)  # 先让启动预热的扫描跑一段
+    last_day = None
+    while True:
+        try:
+            now = _dt.datetime.now()
+            if (_is_workday(now)
+                and now.hour == _SIG_DAILY_HOUR
+                and now.minute == _SIG_DAILY_MINUTE
+                and last_day != now.date()):
+                last_day = now.date()
+                _ssp_log(f"[archive] 交易日收盘自动触发 选股+均线 扫描归档 ({now:%Y-%m-%d %H:%M})")
+                # 触发选股扫描 (内部完成后 _archive_put("screen", ...))
+                threading.Thread(target=_run_screen_thread, daemon=True).start()
+                # 触发均线扫描 (内部完成后 _archive_put("ma", ...)); 与选股串行由各自锁保护
+                threading.Thread(target=_run_ma_screen_thread, daemon=True).start()
+        except Exception as e:  # noqa: BLE001
+            _ssp_log(f"[archive] 每日归档线程异常: {e}")
+        # 20s tick, 对分钟级任务足够精确
+        time.sleep(20)
 
 def _ssp_daily_runner():
     """
