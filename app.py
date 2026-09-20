@@ -7703,8 +7703,11 @@ def _collect_day_signals(rec: dict, code6: str):
     """从单日归档记录 rec 中收集 code6 命中的形态 (均线 patterns + 上试盘池)"""
     hits = []
     patterns = ((rec.get("ma") or {}).get("patterns") or {})
+    # 兼容旧版归档: 20260920 周线归一化前存的是 周线B/周线C 两档, 现在统一并入"周线·埋伏"(标"伏")
+    _LEGACY_WEEK_FOLD = {"周线B·趋势回踩": "周线·埋伏", "周线C·底部反转": "周线·埋伏"}
     for pat, items in patterns.items():
-        glyph = _MA_SIG_GLYPH.get(pat)
+        display = _LEGACY_WEEK_FOLD.get(pat, pat)
+        glyph = _MA_SIG_GLYPH.get(display)
         if not glyph:
             continue
         for it in (items or []):
