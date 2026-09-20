@@ -3413,8 +3413,16 @@ function buildChanChart(bars, chan){
   };
   const strokeEl=(()=>{ const d=polyPath(chan.strokes,['i0','i1'],['p0','p1']);
     return d?`<path d="${d}" fill="none" stroke="#e8eef6" stroke-width="1.4" opacity="0.85"/>`:''; })();
-  const segEl=(()=>{ const d=polyPath(chan.segments,['i0','i1'],['p0','p1']);
-    return d?`<path d="${d}" fill="none" stroke="#f5c842" stroke-width="2.6" opacity="0.95"/>`:''; })();
+  // 线段: 已确认(特征序列分型定终点)画实线, 未确认/未走完(兜底终点)画虚线
+  const _segPoly=(list)=>{
+    const d=polyPath(list,['i0','i1'],['p0','p1']);
+    return d?`<path d="${d}" fill="none" stroke="#f5c842" stroke-width="2.6" opacity="0.95"/>`:''; };
+  const segEl=(()=>{
+    const segs=chan.segments||[];
+    const done=segs.filter(x=>x.confirmed!==false);
+    const pend=segs.filter(x=>x.confirmed===false);
+    return _segPoly(done)+_segPoly(pend).replace('stroke="#f5c842"','stroke="#f5c842" stroke-dasharray="7,5"');
+  })();
   // 当前价虚线
   const lastClose=bars[n-1].close;
   const priceLine=`<line x1="${padL}" y1="${y(lastClose).toFixed(1)}" x2="${w-padR}" y2="${y(lastClose).toFixed(1)}" stroke="rgba(255,255,255,.25)" stroke-width="1" stroke-dasharray="5,4"/>`+
@@ -3437,9 +3445,10 @@ function buildChanChart(bars, chan){
   const legend=`<text x="${padL}" y="12" fill="#9fb0c6" font-size="10">K线</text>`+
     `<text x="${padL+40}" y="12" fill="#e8eef6" font-size="10">— 笔</text>`+
     `<text x="${padL+90}" y="12" fill="#f5c842" font-size="10">— 线段</text>`+
-    `<text x="${padL+156}" y="12" fill="#a06bff" font-size="10">▭ 中枢</text>`+
-    `<text x="${padL+226}" y="12" fill="#ff4d4f" font-size="10">▲ 买点</text>`+
-    `<text x="${padL+286}" y="12" fill="#26a69a" font-size="10">▼ 卖点</text>`;
+    `<text x="${padL+150}" y="12" fill="#f5c842" font-size="10">┈ 未确认</text>`+
+    `<text x="${padL+212}" y="12" fill="#a06bff" font-size="10">▭ 中枢</text>`+
+    `<text x="${padL+282}" y="12" fill="#ff4d4f" font-size="10">▲ 买点</text>`+
+    `<text x="${padL+342}" y="12" fill="#26a69a" font-size="10">▼ 卖点</text>`;
   const cid='chan'+(++_chartSeq);
   _chartReg[cid]={bars, w, padL, padR, padT, padB, n, h, hi:yHi, lo:yLo};
   return `<div class="sa-chart" id="${cid}" style="height:${h}px">

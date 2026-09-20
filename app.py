@@ -5797,19 +5797,25 @@ def _chan_segments(pts: list[dict]) -> list[dict]:
                             "hi_i": hi_i, "lo_i": lo_i})
         seq = _chan_seq_merge(raw, up)
         end_idx = None
+        confirmed = False
         for j in range(1, len(seq) - 1):
             a, b, c = seq[j - 1], seq[j], seq[j + 1]
             if up and b["hi"] > a["hi"] and b["hi"] > c["hi"] \
                     and b["lo"] > a["lo"] and b["lo"] > c["lo"]:
                 end_idx = b["hi_i"]      # 向上线段终止于最高点
+                confirmed = True
                 break
             if (not up) and b["lo"] < a["lo"] and b["lo"] < c["lo"] \
                     and b["hi"] < a["hi"] and b["hi"] < c["hi"]:
                 end_idx = b["lo_i"]      # 向下线段终止于最低点
+                confirmed = True
                 break
         if end_idx is None or end_idx <= s:
+            # 兜底: 特征序列不足以构成分型(数据不足或线段未走完) → 线段"未确认"
             end_idx = min(s + 3, m - 1)
-        segs.append({"s": s, "e": end_idx, "dir": "up" if up else "down"})
+            confirmed = False
+        segs.append({"s": s, "e": end_idx, "dir": "up" if up else "down",
+                     "confirmed": confirmed})
         s = end_idx
     return segs
 
@@ -6118,7 +6124,8 @@ def chan_analysis(bars: list[dict], start_dir: str = "auto") -> dict:
 
     segs_out = [{"i0": pts[s["s"]]["i"], "p0": round(pts[s["s"]]["price"], 3),
                  "i1": pts[s["e"]]["i"], "p1": round(pts[s["e"]]["price"], 3),
-                 "dir": s["dir"]} for s in segs if s["e"] > s["s"]]
+                 "dir": s["dir"], "confirmed": s.get("confirmed", True)}
+                for s in segs if s["e"] > s["s"]]
 
     close = float(bars[-1]["close"])
     day = (bars[-1].get("day") or "")[:10]
