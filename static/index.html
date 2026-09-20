@@ -5639,6 +5639,7 @@ function fallbackCopy(text){
 loadMarks();
 bindMkTabs();
 const _kdCache = {};
+let _kdTimer = null, _kdPopup = null, _kdHideTimer = null;
 // 20260920: 历史信号反查缓存 (slow ~3s), 同一股票只请求一次
 const _histSigCache = {};
 function _kdRemove(){ if(_kdPopup){ _kdPopup.remove(); _kdPopup = null; } }
