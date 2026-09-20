@@ -2233,7 +2233,11 @@ async function applyHistSignalsToAnalysisChart(code, bars){
   const svgNS = 'http://www.w3.org/2000/svg';
   const svg = document.querySelector('#palm-stock-active .sa-chart svg, .tab-pane.active .sa-chart svg')
            || document.querySelector('#stockPanel .sa-chart svg') || document.querySelector('.sa-chart svg');
-  if(!svg || svg.getAttribute('width')!=='800') return;
+  // 个股分析K线的 svg 只有 viewBox 没有 width 属性, 需从 viewBox 解析画布宽 (20260921)
+  if(!svg) return;
+  const vb = svg.viewBox && svg.viewBox.baseVal ? svg.viewBox.baseVal : (svg.getAttribute('viewBox')||'').split(/[ ,]+/);
+  const vbW = svg.viewBox && svg.viewBox.baseVal ? svg.viewBox.baseVal.width : Number(vb[2]);
+  if(Math.round(vbW) !== 800) return;
   // 坐标映射 (与 applySSPMarkersToAnalysisChart 一致)
   const w=800, h=220, padL=8, padR=8, padT=12, padB=18;
   const n = bars.length;
