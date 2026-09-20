@@ -454,9 +454,9 @@
   .ma-th .sort-arrow{display:inline-block;width:12px;font-size:10px;color:var(--accent);margin-left:2px}
   .ma-th.active-sort{color:var(--accent)}
   .ma-grp-badge{display:inline-block;font-size:10px;color:var(--sub);background:var(--tag);border-radius:3px;padding:0 4px;margin-left:4px}
-  /* 日月共振/埋伏型标签 (20260920): 共振=金底, 周线回踩/底部反转=中性底色 */
-  .res-tag{display:inline-block;font-size:10px;font-weight:700;border-radius:3px;padding:0 4px;margin-left:4px;vertical-align:middle}
-  .res-tag.syn{color:#3c2c00;background:linear-gradient(180deg,#f5c842,#e0a038)}
+  /* 日周共振/埋伏型标签 (20260920): 共振=淡金(淡化), 周线回踩/底部反转=中性底色 */
+  .res-tag{display:inline-block;font-size:10px;font-weight:600;border-radius:3px;padding:0 4px;margin-left:4px;vertical-align:middle}
+  .res-tag.syn{color:#d8b84a;background:linear-gradient(180deg,rgba(245,200,66,.14),rgba(224,160,56,.10));border:1px solid rgba(245,200,66,.25)}
   .res-tag.amb{color:var(--sub);background:var(--tag)}
   .ma-dist{font-size:11px;color:var(--sub);margin:0 0 8px;padding:6px 10px;background:var(--panel2);border-radius:8px;line-height:1.7}
   .ma-dist-empty{color:var(--sub);opacity:.6}
@@ -4222,24 +4222,24 @@ function maRowHtml(s,i){
   // 包括: 周线A/B/C + 所有遵循周线一票否决的均线/背离tab
   const curPat = MA_PATS[maCurrentTab][0];
   const showWeekly = curPat.startsWith('周线') || !curPat.startsWith('上试盘');
-  // 日月共振 / 埋伏型 标记 (20260920 优化1&2)
-  //   日多头 tab: 该股又命中周A强主升 → 日月共振
-  //   周A tab: 该股同时也在日多头池 → 日月共振
+  // 日周共振 / 埋伏型 标记 (20260920 优化1&2)
+  //   日多头 tab: 该股又命中周A强主升 → 日周共振
+  //   周A tab: 该股同时也在日多头池 → 日周共振
   //   周B/周C: 埋伏/低吸型, 与日多头几乎不重叠, 单独标注其语义
   const _DAY_BULL_NAMES=['多头排列','粘合向上突破','多头排列向上发散'];
   const _isDayBull=(maData&&maData.patterns)?(code)=>_DAY_BULL_NAMES.some(n=>(maData.patterns[n]||[]).some(x=>x.code===code)):()=>false;
   const _has=(...ps)=>(s.weekly_pats||[]).some(p=>ps.includes(p));
   let resTag='';
   if(_DAY_BULL_NAMES.includes(curPat)&&_has('周线A·强势主升'))
-    resTag='日月共振';
+    resTag='日周共振';
   else if(curPat==='周线A·强势主升'&&_isDayBull(s.code))
-    resTag='日月共振';
+    resTag='日周共振';
   else if(curPat==='周线B·趋势回踩')
     resTag='周线回踩';
   else if(curPat==='周线C·底部反转')
     resTag='底部反转';
   const resTagHtml = resTag
-    ? `<span class="res-tag ${resTag==='日月共振'?'syn':'amb'}">${resTag==='日月共振'?'☀'+resTag:resTag}</span>`
+    ? `<span class="res-tag ${resTag==='日周共振'?'syn':'amb'}">${resTag}</span>`
     : '';
   let weeklyLine = '';
   if(showWeekly && s.w_ma20){
