@@ -7094,9 +7094,16 @@ def _run_ma_screen_thread():
             done[0] += 1
             if done[0] % 20 == 0 or done[0] == total:
                 _ma_state["progress"] = f"拉取K线 {done[0]}/{total}…"
+        # 日月共振加权 (20260920): 日多头 tab 内, 同一股票又命中"周线A·强势主升" → 叠加确认度加分置前
+        _DAY_BULL_PATTERNS = {"多头排列", "多头排列向上发散", "粘合向上突破"}
         for p in MA_PATTERNS:
             # 综合排序分: 买点强度×3 + 量价配合×2 + 趋势排列×2 + 活跃度×1 (见 _ma_quality_score)
-            results[p].sort(key=lambda x: -_ma_quality_score(x))
+            def _ratio_key(x, _p=p):
+                score = _ma_quality_score(x)
+                if _p in _DAY_BULL_PATTERNS and "周线A·强势主升" in (x.get("weekly_pats") or []):
+                    score += 3.0
+                return -score
+            results[p].sort(key=_ratio_key)
         out = {
             "patterns": {p: results[p] for p in MA_PATTERNS},
             "counts": {p: len(results[p]) for p in MA_PATTERNS},
