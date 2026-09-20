@@ -5793,6 +5793,16 @@ def _chan_segments(pts: list[dict]) -> list[dict]:
     return segs
 
 
+# 中枢单次允许的最大扩展倍数(相对当前中枢的区间宽度)。
+# 用途: 防止"延伸 + 取并集"正反馈把中枢一路吞并成单个超大中枢——
+#   某笔终点落在区间内→延伸, 同时并入分支把 ZD 下扩/ZG 上扩(取并集)→区间变大,
+#   于是更容易包住后续笔终点→继续延伸继续扩…… 最终整段行情缩成一个巨型中枢
+#   (中大力德日K曾实测 21 笔被并成 1 个 [62.77,90.88])。
+# 魔数含义: 单次并入后新区间宽度 ≤ 旧宽度 × CHAN_PIV_GROW 才允许并入, 超限则
+#   冻结旧中枢、以当前三笔另开新中枢。设为偏小值可出更细分的中枢, 设大=宽松。
+_CHAN_PIV_GROW = 1.5
+
+
 def _chan_pivots(strokes: list[dict]) -> list[dict]:
     """中枢: 连续三笔的重叠区间 ZG=三笔高点的最低者, ZD=三笔低点的最高者。
     延伸判据(20260911 修正): 用"笔的终点"是否仍在 [ZD,ZG] 内判断, 而不是用笔的
@@ -5800,33 +5810,56 @@ def _chan_pivots(strokes: list[dict]) -> list[dict]:
       "仍与中枢重叠"而并入, 中枢一路吞掉整段行情(实测出现过跨度 225/244 根),
       后续再也形成不了新中枢, 三类买卖点也就无从产生。
       终点离开区间且下一笔未回到区间内 → 中枢结束, 该笔即"离开笔"。
-    相邻中枢不得重叠(20260920 补): 按缠论, 相邻中枢的价格区间不应相互交叉 ——
-      若下一组三笔的重叠区间与前一中枢 [ZD,ZG] 相交, 说明它们只是同一更大级别
-      区间的震荡(中枢扩展), 应合并为同一中枢(取并集并扩展K线范围)而非另开一个,
-      否则图上会出现相邻中枢色带交叉重叠的现象。"""
+    相邻中枢用途(20260920 补): 若下一组三笔的重叠区间与前一中枢 [ZD,ZG] 相交,
+      说明多属同一更大级别区间的震荡(中枢扩展), 倾向合并为同一中枢而非另开一个,
+      否则图上会出现相邻中枢色带交叉重叠。但合并会取并集扩大区间 ——
+    扩展上限(20260920 改): 为防"延伸+取并集"正反馈把中枢无限放大成单个超大框
+    (中大力德 21 笔被并成 1 个), 单次并入把区间扩宽 ≤ 原宽 ×_CHAN_PIV_GROW 才并入,
+      超限则视为离开旧中枢、另开新中枢, 从而把图形切分为多个合理的分段中枢。"""
     pivots: list[dict] = []
     n = len(strokes)
+
+    def _span(p: dict) -> float:
+        return p["zg"] - p["zd"]
+
+    def _can_grow(p: dict, zd: float, zg: float) -> bool:
+        """并入后新区间宽度是否仍在允许扩展倍数内(防止正反馈放大)。"""
+        w = _span(p)
+        if w <= 0:
+            return True
+        nw = max(p["zg"], zg) - min(p["zd"], zd)
+        return nw <= w * _CHAN_PIV_GROW
 
     def _overlap(a: dict, b: dict) -> bool:
         return a["zd"] < b["zg"] and b["zd"] < a["zg"]
 
+    def _merge_with(l: dict, r: dict) -> None:
+        """把 r 并入 l(取并集并扩展K线范围), 并跟随 r 的离开状态。"""
+        l["zd"] = round(min(l["zd"], r["zd"]), 3)
+        l["zg"] = round(max(l["zg"], r["zg"]), 3)
+        l["i1"] = max(l["i1"], r["i1"])
+        l["s1"] = max(l["s1"], r["s1"])
+        l["ext"] = (l["s1"] - l["s0"] + 1) - 3
+        if r["status"] == "已离开":
+            l["status"] = "已离开"
+        elif l["status"] != "已离开" and r.get("leave"):
+            l["status"] = r["status"]
+        if r.get("leave"):
+            l["leave"] = r["leave"]
+
     def _merge_back() -> None:
         """从末尾向前(20260920 补): 当某个中枢被扩展/合并后区间变大, 可能与更早的
-        相邻中枢再次相交 → 级联继续向前合并, 保证任意相邻中枢价格区间互不相交。
-        例如 P1 吸收 P2 抬高区间后, 才与 P0 相交 —— 若只做一次合并会漏掉这种情况。"""
-        while len(pivots) >= 2 and _overlap(pivots[-2], pivots[-1]):
-            p1, p2 = pivots[-2], pivots.pop()
-            p1["zd"] = round(min(p1["zd"], p2["zd"]), 3)
-            p1["zg"] = round(max(p1["zg"], p2["zg"]), 3)
-            p1["i1"] = max(p1["i1"], p2["i1"])
-            p1["s1"] = max(p1["s1"], p2["s1"])
-            p1["ext"] = (p1["s1"] - p1["s0"] + 1) - 3
-            if p2["status"] == "已离开":
-                p1["status"] = "已离开"
-            elif p1["status"] != "已离开" and p2.get("leave"):
-                p1["status"] = p2["status"]
-            if p2.get("leave"):
-                p1["leave"] = p2["leave"]
+        相邻中枢再次相交 → 级联继续向前合并。20260920 追加扩展上限: 只有并入后
+        宽度仍在允许范围内才真正合并, 超限则保留两个相邻中枢(各框形态正常,
+        避免把一个超大跨度强制并同)。"""
+        while len(pivots) >= 2:
+            p1, p2 = pivots[-2], pivots[-1]
+            if not _overlap(p1, p2):
+                break
+            if not _can_grow(p1, p2["zd"], p2["zg"]):
+                break
+            pivots.pop()
+            _merge_with(p1, p2)
 
     i = 0
     while i + 2 < n:
@@ -5838,6 +5871,7 @@ def _chan_pivots(strokes: list[dict]) -> list[dict]:
             continue
         start_i = i
         enter = strokes[i - 1] if i > 0 else None
+        base_zd, base_zg = zd, zg
         # 延伸: 终点仍在区间内(或短暂冲出又拉回)则继续
         j = i + 3
         while j < n:
@@ -5848,8 +5882,9 @@ def _chan_pivots(strokes: list[dict]) -> list[dict]:
                 j += 2              # 短暂冲出又拉回 → 仍属中枢震荡
                 continue
             break                    # 离开且未回 → 中枢结束, 该笔即"离开笔"
-        # 与上一中枢价格区间相交 → 并入(中枢扩展), 不新开中枢
-        if pivots and zd < pivots[-1]["zg"] and pivots[-1]["zd"] < zg:
+        # 与上一中枢价格区间相交 且 扩展幅度在允许范围内 → 并入(中枢扩展), 不新开中枢
+        if pivots and _overlap(pivots[-1], {"zd": zd, "zg": zg}) \
+                and _can_grow(pivots[-1], zd, zg):
             last = pivots[-1]
             last["zg"] = round(max(last["zg"], zg), 3)
             last["zd"] = round(min(last["zd"], zd), 3)
@@ -5879,7 +5914,8 @@ def _chan_pivots(strokes: list[dict]) -> list[dict]:
             _merge_back()    # 扩展后可能与更早的中枢再次相交 → 级联向前合并
             i = j
             continue
-        # 区间与上一中枢不相交 → 新开一个中枢
+        # 与上一中枢不相交, 或扩展幅度超限 → 新开一个中枢
+        # (20260920: 超限说明强行并入会把它放大成超大框, 此时保持为分段中枢更合理)
         leave = strokes[j] if j < n else None
         ext = (j - 1) - start_i + 1 - 3
         if leave is not None:
@@ -5888,6 +5924,7 @@ def _chan_pivots(strokes: list[dict]) -> list[dict]:
             status = "延伸中"
         else:
             status = "新生"
+        _ = base_zd, base_zg  # 保留基准(异常/s0计算时可参考), 当前实现仅用于扩展上限外的保底
         pivots.append({"zg": round(zg, 3), "zd": round(zd, 3),
                        "i0": strokes[start_i]["i0"], "i1": strokes[j - 1]["i1"],
                        "s0": start_i, "s1": j - 1, "ext": ext,
