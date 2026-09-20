@@ -5799,49 +5799,106 @@ def _chan_pivots(strokes: list[dict]) -> list[dict]:
       最高/最低价 —— 否则突破中枢的那一笔(从区间内一路打到区间外)会被误判为
       "仍与中枢重叠"而并入, 中枢一路吞掉整段行情(实测出现过跨度 225/244 根),
       后续再也形成不了新中枢, 三类买卖点也就无从产生。
-      终点离开区间且下一笔未回到区间内 → 中枢结束, 该笔即"离开笔"。"""
+      终点离开区间且下一笔未回到区间内 → 中枢结束, 该笔即"离开笔"。
+    相邻中枢不得重叠(20260920 补): 按缠论, 相邻中枢的价格区间不应相互交叉 ——
+      若下一组三笔的重叠区间与前一中枢 [ZD,ZG] 相交, 说明它们只是同一更大级别
+      区间的震荡(中枢扩展), 应合并为同一中枢(取并集并扩展K线范围)而非另开一个,
+      否则图上会出现相邻中枢色带交叉重叠的现象。"""
     pivots: list[dict] = []
     n = len(strokes)
+
+    def _overlap(a: dict, b: dict) -> bool:
+        return a["zd"] < b["zg"] and b["zd"] < a["zg"]
+
+    def _merge_back() -> None:
+        """从末尾向前(20260920 补): 当某个中枢被扩展/合并后区间变大, 可能与更早的
+        相邻中枢再次相交 → 级联继续向前合并, 保证任意相邻中枢价格区间互不相交。
+        例如 P1 吸收 P2 抬高区间后, 才与 P0 相交 —— 若只做一次合并会漏掉这种情况。"""
+        while len(pivots) >= 2 and _overlap(pivots[-2], pivots[-1]):
+            p1, p2 = pivots[-2], pivots.pop()
+            p1["zd"] = round(min(p1["zd"], p2["zd"]), 3)
+            p1["zg"] = round(max(p1["zg"], p2["zg"]), 3)
+            p1["i1"] = max(p1["i1"], p2["i1"])
+            p1["s1"] = max(p1["s1"], p2["s1"])
+            p1["ext"] = (p1["s1"] - p1["s0"] + 1) - 3
+            if p2["status"] == "已离开":
+                p1["status"] = "已离开"
+            elif p1["status"] != "已离开" and p2.get("leave"):
+                p1["status"] = p2["status"]
+            if p2.get("leave"):
+                p1["leave"] = p2["leave"]
+
     i = 0
     while i + 2 < n:
         s3 = strokes[i:i + 3]
         zg = min(max(st["p0"], st["p1"]) for st in s3)
         zd = max(min(st["p0"], st["p1"]) for st in s3)
-        if zg > zd:
-            j = i + 3
-            while j < n:
-                if zd <= strokes[j]["p1"] <= zg:
-                    j += 1              # 终点仍在区间内 → 中枢震荡, 继续延伸
-                    continue
-                if j + 1 < n and zd <= strokes[j + 1]["p1"] <= zg:
-                    j += 2              # 短暂冲出又拉回 → 仍属中枢震荡
-                    continue
-                break                    # 离开且未回 → 中枢结束
-            # 中枢细分(20260914 补): 进入段 / 延伸笔数 / 离开段 / 状态
-            #   进入段 = 形成中枢前的那一笔; 延伸笔数 = 超出初始3笔的部分;
-            #   离开段 = 终点离开区间且未回抽的那一笔(若中枢一直延伸到数据末尾则为 None);
-            #   状态   = 新生(刚好3笔) / 延伸中(>3笔且未离开) / 已离开
-            enter = strokes[i - 1] if i > 0 else None
-            leave = strokes[j] if j < n else None
-            ext = (j - 1) - i + 1 - 3
-            if leave is not None:
-                status = "已离开"
-            elif ext > 0:
-                status = "延伸中"
-            else:
-                status = "新生"
-            pivots.append({"zg": round(zg, 3), "zd": round(zd, 3),
-                           "i0": strokes[i]["i0"], "i1": strokes[j - 1]["i1"],
-                           "s0": i, "s1": j - 1, "ext": ext,
-                           "kind": ("上涨中枢" if enter["dir"] == "up" else "下跌中枢") if enter else "—",
-                           "enter": ({"dir": enter["dir"], "i": enter["i0"],
-                                      "p": enter["p0"]} if enter else None),
-                           "leave": ({"dir": leave["dir"], "i": leave["i1"],
-                                      "p": leave["p1"]} if leave else None),
-                           "status": status})
-            i = j
-        else:
+        if zg <= zd:
             i += 1
+            continue
+        start_i = i
+        enter = strokes[i - 1] if i > 0 else None
+        # 延伸: 终点仍在区间内(或短暂冲出又拉回)则继续
+        j = i + 3
+        while j < n:
+            if zd <= strokes[j]["p1"] <= zg:
+                j += 1              # 终点仍在区间内 → 中枢震荡, 继续延伸
+                continue
+            if j + 1 < n and zd <= strokes[j + 1]["p1"] <= zg:
+                j += 2              # 短暂冲出又拉回 → 仍属中枢震荡
+                continue
+            break                    # 离开且未回 → 中枢结束, 该笔即"离开笔"
+        # 与上一中枢价格区间相交 → 并入(中枢扩展), 不新开中枢
+        if pivots and zd < pivots[-1]["zg"] and pivots[-1]["zd"] < zg:
+            last = pivots[-1]
+            last["zg"] = round(max(last["zg"], zg), 3)
+            last["zd"] = round(min(last["zd"], zd), 3)
+            last["i1"] = strokes[j - 1]["i1"]
+            last["s1"] = j - 1
+            last["ext"] = (last["s1"] - last["s0"] + 1) - 3
+            # 区间扩大后, 原先"离开"的笔可能再度落回区间内, 继续延伸
+            while j < n:
+                if last["zd"] <= strokes[j]["p1"] <= last["zg"]:
+                    j += 1
+                    last["i1"] = strokes[j - 1]["i1"]
+                    last["s1"] = j - 1
+                    last["ext"] = (last["s1"] - last["s0"] + 1) - 3
+                    continue
+                if j + 1 < n and last["zd"] <= strokes[j + 1]["p1"] <= last["zg"]:
+                    j += 2
+                    last["i1"] = strokes[j - 1]["i1"]
+                    last["s1"] = j - 1
+                    last["ext"] = (last["s1"] - last["s0"] + 1) - 3
+                    continue
+                break
+            leave = strokes[j] if j < n else None
+            last["leave"] = ({"dir": leave["dir"], "i": leave["i1"],
+                              "p": leave["p1"]} if leave else None)
+            last["status"] = ("已离开" if leave is not None
+                              else ("延伸中" if last["ext"] > 0 else "新生"))
+            _merge_back()    # 扩展后可能与更早的中枢再次相交 → 级联向前合并
+            i = j
+            continue
+        # 区间与上一中枢不相交 → 新开一个中枢
+        leave = strokes[j] if j < n else None
+        ext = (j - 1) - start_i + 1 - 3
+        if leave is not None:
+            status = "已离开"
+        elif ext > 0:
+            status = "延伸中"
+        else:
+            status = "新生"
+        pivots.append({"zg": round(zg, 3), "zd": round(zd, 3),
+                       "i0": strokes[start_i]["i0"], "i1": strokes[j - 1]["i1"],
+                       "s0": start_i, "s1": j - 1, "ext": ext,
+                       "kind": ("上涨中枢" if enter["dir"] == "up" else "下跌中枢") if enter else "—",
+                       "enter": ({"dir": enter["dir"], "i": enter["i0"],
+                                  "p": enter["p0"]} if enter else None),
+                       "leave": ({"dir": leave["dir"], "i": leave["i1"],
+                                  "p": leave["p1"]} if leave else None),
+                       "status": status})
+        _merge_back()        # 新中枢可能与本该合并的更早中枢相交 → 级联合并
+        i = j
     return pivots
 
 
