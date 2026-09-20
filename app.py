@@ -5704,19 +5704,34 @@ def _chan_fractals(merged: list[dict]) -> list[dict]:
 
 def _chan_strokes(fracs: list[dict]) -> list[dict]:
     """笔: 相邻顶底分型连线。新笔定义 —— 两分型(合并后)索引差 >= 4,
-    即两个分型之间至少有 1 根独立K线。同类型分型只保留更极端者。"""
+    即两个分型之间至少有 1 根独立K线。同类型分型只保留更极端者。
+    起笔方向(20260920 改): 首笔方向对齐整段整体趋势 —— 整体下跌从第 1 个顶分型
+      起笔(首笔向下), 整体上涨从第 1 个底分型起笔(首笔向上)。
+      原因: 若窗口起点正好落在一段主跌的"底分型"上, 旧逻辑首笔为上(上-下-上),
+      导致第一个下跌中枢的三笔重叠区被抬高到反弹高位 —— 中大力德日K首个中枢因此
+      画在 87(高位窄带) 而非真实密集区 83 附近。改为按真实下跌结构起笔后, 中枢会
+      落到"下跌途中横盘成交密集区", 更贴合缠论本意。"""
     if not fracs:
         return []
-    pts: list[dict] = [fracs[0]]
-    for f in fracs[1:]:
+    # 整体趋势方向: 用首尾分型价判定
+    overall_down = fracs[-1]["price"] < fracs[0]["price"]
+    start_idx = 0
+    if overall_down and fracs[0]["type"] != "top":
+        # 整体下跌但起点是底分型 → 跳到第一个顶分型, 使首笔向下
+        start_idx = next((i for i, f in enumerate(fracs) if f["type"] == "top"), 0)
+    elif not overall_down and fracs[0]["type"] != "bottom":
+        # 整体上涨但起点是顶分型 → 跳到第一个底分型, 使首笔向上
+        start_idx = next((i for i, f in enumerate(fracs) if f["type"] == "bottom"), 0)
+    pts: list[dict] = [fracs[start_idx]]
+    for f in fracs[start_idx + 1:]:
         last = pts[-1]
         if f["type"] == last["type"]:
             if (f["type"] == "top" and f["price"] >= last["price"]) or \
                (f["type"] == "bottom" and f["price"] <= last["price"]):
                 pts[-1] = f
             continue
-        if f["mi"] - last["mi"] < 4:
-            continue  # 不满足独立K线条件, 丢弃
+        if f["mi"] - last["mi"] < 3:
+            continue  # 不满足独立K线条件, 丢弃 (20260920: 新笔最小间隔 4→3 细分, 使下跌途中密集区可成枢)
         # 顶必须高于底, 否则视为无效转折
         if f["type"] == "top" and f["price"] <= last["price"]:
             continue
@@ -5873,11 +5888,17 @@ def _chan_pivots(strokes: list[dict]) -> list[dict]:
         enter = strokes[i - 1] if i > 0 else None
         base_zd, base_zg = zd, zg
         # 延伸: 终点仍在区间内(或短暂冲出又拉回)则继续
+        # 20260920 细分下跌(让下跌密集区单独成枢): 一笔向下的终点跌破中枢下沿 ZD,
+        #   说明价格在向下破位推进(而非仅区间内震荡), 立即终结本中枢 —— 否则这个高位
+        #   中枢会靠"反弹回 ZD-ZG 内"一直延伸, 把其后更低的密集区(如中大力德 83 一带)
+        #   整段吃进一个高位框里。破位即结束, 让后续更低的笔带重新成枢。
         j = i + 3
         while j < n:
             if zd <= strokes[j]["p1"] <= zg:
                 j += 1              # 终点仍在区间内 → 中枢震荡, 继续延伸
                 continue
+            if strokes[j]["dir"] == "down" and strokes[j]["p1"] < zd:
+                break               # 向下笔终点跌破 ZD → 下跌破位, 中枢结束
             if j + 1 < n and zd <= strokes[j + 1]["p1"] <= zg:
                 j += 2              # 短暂冲出又拉回 → 仍属中枢震荡
                 continue
@@ -5899,6 +5920,8 @@ def _chan_pivots(strokes: list[dict]) -> list[dict]:
                     last["s1"] = j - 1
                     last["ext"] = (last["s1"] - last["s0"] + 1) - 3
                     continue
+                if strokes[j]["dir"] == "down" and strokes[j]["p1"] < last["zd"]:
+                    break
                 if j + 1 < n and last["zd"] <= strokes[j + 1]["p1"] <= last["zg"]:
                     j += 2
                     last["i1"] = strokes[j - 1]["i1"]
