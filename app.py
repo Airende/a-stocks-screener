@@ -7668,6 +7668,54 @@ def api_history(date: str = ""):
 
 
 # ============================================================
+# 个股历史信号反查 API (20260920): 按股票代码反查归档, 供 K线悬浮图标注用
+# 形态名 → (一字简称, 主题色), 颜色需与前端均线tab分组色保持一致的语义
+# ============================================================
+_MA_SIG_GLYPH = {
+    "多头排列":          ("多", "#ff6b5e"),   # 日线看多·红
+    "多头排列向上发散":  ("发", "#ff6b5e"),
+    "粘合向上突破":      ("突", "#ff6b5e"),
+    "粘合向下突破":      ("破", "#2fbf9f"),   # 日线看空·青
+    "空头排列向下发散":  ("空", "#2fbf9f"),
+    "日线背离":          ("背", "#9aa3af"),   # 背离·中性灰
+    "周线A·强势主升":    ("强", "#4da3ff"),   # 周线·蓝
+    "周线·埋伏":         ("伏", "#4da3ff"),
+}
+
+
+def _stock_code6(code: str) -> str:
+    """提取6位数字代码 (兼容 sh600519 / 600519 / sz000001 等形态)"""
+    return "".join(ch for ch in str(code) if ch.isdigit())[-6:]
+
+
+@app.get("/api/stock/hist-signals")
+def api_stock_hist_signals(code: str = ""):
+    """按股票代码反查历史归档：返回 {date: [{name, ch, color}...]} (日期新→旧)。
+    只统计归档快照中确实收录的形态 (每个形态前100只)。"""
+    code6 = _stock_code6(code)
+    result = {}
+    if code6:
+        for date in _archive_dates():
+            rec = _archive_get(date)
+            if not rec:
+                continue
+            hits = []
+            patterns = ((rec.get("ma") or {}).get("patterns") or {})
+            for pat, items in patterns.items():
+                if pat not in _MA_SIG_GLYPH:
+                    continue
+                for it in (items or []):
+                    if _stock_code6(it.get("code", "")) == code6:
+                        ch, color = _MA_SIG_GLYPH[pat]
+                        hits.append({"name": pat, "ch": ch, "color": color})
+                        break  # 同一形态该股只记一次
+            if hits:
+                result[date] = hits
+    sdates = sorted(result.keys(), reverse=True)
+    return {"dates": [{"date": d, "signals": result[d]} for d in sdates]}
+
+
+# ============================================================
 # 顶栏指数快照 (上证/深证/创业板 + 行情研判)
 # ============================================================
 _MARKET_SNAP_CACHE: dict = {"ts": 0.0, "data": None}
