@@ -6046,9 +6046,9 @@ function _kdPlace(pop, anchor){
   }
   pop.style.left = x + 'px'; pop.style.top = y + 'px';
 }
-function kdMultiChart(bars, histSigs){
+function kdMultiChart(bars){
   // 悬停预览三面板 (20260906): K线+三均线 / 成交量副图(判断放量缩量) / KDJ副图
-  // 20260920: 加入按日期对齐的历史形态信号标注 (红"多"/青"破"/蓝"强" 等一字简称)
+  // 20260920: 返回 {div, c1, sig} 使调用方先渲染K线、再异步注入历史形态信号标记
   // 三个面板共享同一 x 轴映射, 均注册进 _chartReg 复用十字光标+自定义悬浮
   const w=560, padL=6, padR=52;
   const n=bars.length;
@@ -6090,34 +6090,34 @@ function kdMultiChart(bars, histSigs){
   const grid1=[0,0.5,1].map(f=>{ const v=hi-f*rng1, yy=yFn1(v);
     return `<line x1="${padL}" y1="${yy.toFixed(1)}" x2="${w-padR}" y2="${yy.toFixed(1)}" stroke="rgba(255,255,255,.05)"/>`+
            `<text x="${w-padR+3}" y="${(yy+3).toFixed(1)}" fill="#5a6a82" font-size="9">${v.toFixed(2)}</text>`; }).join('');
-  // 20260920: 历史形态信号标注, 按 bars[i].day 与归档日期对齐, 绘于对应K线上方
-  // 同日多信号并排显示; 字形小(9px)但带描边可读; 颜色沿用对应形态分组色
-  const sigMarks=(()=>{
+  // 20260920: 历史形态信号标注 (红"多"/青"破"/蓝"强"/金"观" 等一字简称), 由调用方异步注入
+  // sig 关闭 xi/yFn1/n/bars 映射, kdAddSigs 据 histSigs 渲染 <text> 挂到 #${cid1}_sig
+  const sigLayerId='kd'+(++_chartSeq)+'_sig';
+  const sig = (histSigs, escFn)=>{               // escFn 供特殊字符转义
     if(!histSigs) return '';
     let out='';
     for(let i=0;i<n;i++){
       const day=(bars[i].day||'').slice(0,10);
       const sigs=histSigs[day];
       if(!sigs || !sigs.length) continue;
-      const chCount=sigs.length;
-      const segW=10, totW=Math.max(chCount-1,0)*segW;
+      const segW=10, totW=Math.max(sigs.length-1,0)*segW;
       let cx=xi(i)-totW/2;
       const y=Math.max(1, yFn1(bars[i].high)-6);       // 置于该K线最高价上方
       sigs.forEach(s=>{
-        out+=`<text x="${cx.toFixed(1)}" y="${y.toFixed(1)}" font-size="9" font-weight="700"
-          text-anchor="middle" fill="${s.color||'#fff'}" stroke="rgba(15,22,35,.9)" stroke-width="2.6" paint-order="stroke" title="${esc(s.name||'')} ${day}">${esc(s.ch||'')}</text>`;
+        out+=`<text x="${cx.toFixed(1)}" y="${y.toFixed(1)}" font-size="8" font-weight="700"
+          text-anchor="middle" fill="${s.color||'#fff'}" stroke="rgba(15,22,35,.9)" stroke-width="2.6" paint-order="stroke" title="${escFn(s.name||'')} ${day}">${escFn(s.ch||'')}</text>`;
         cx+=segW;
       });
     }
     return out;
-  })();
+  };
   const cid1='kd'+(++_chartSeq);
   _chartReg[cid1]={bars, w, h:h1, padL, padR, n,
     tipFn:(b)=>{ const c=(b.chg!=null&&!isNaN(b.chg));
       return `<b>${esc(b.day||'')}</b><br>开 ${b.open} · 高 ${b.high}<br>低 ${b.low} · 收 <b>${b.close}</b> ${c?'<span style="color:'+(b.chg>=0?'#ff4d4f':'#26a69a')+'">'+(b.chg>=0?'+':'')+b.chg.toFixed(2)+'%</span>':''}`; }};
   // 20260906 修复: maPath 返回完整path元素, 直接输出(此前又包了一层<path d=...>导致均线不渲染)
   const p1=`<div class="sa-chart" id="${cid1}" style="height:${h1}px"><svg viewBox="0 0 ${w} ${h1}" width="${w}" height="${h1}">
-    ${grid1}${candles}${sigMarks}
+    ${grid1}${candles}<g id="${sigLayerId}"></g>
     ${maPath(ma5,'#f5c842',1)}
     ${maPath(ma10,'#4f9dff',1)}
     ${maPath(ma20,'#a06bff',1)}
@@ -6166,7 +6166,14 @@ function kdMultiChart(bars, histSigs){
   // ---- 底部日期轴并入KDJ面板 ----
   const dates=[0,Math.floor(n/2),n-1].map(i=>`<text x="${xi(i).toFixed(1)}" y="${h3-1}" fill="#5a6a82" font-size="8" text-anchor="middle">${(bars[i].day||'').slice(2)}</text>`).join('');
   const p3final=`<div class="sa-chart" id="${cid3}" style="height:${h3}px;margin-top:2px"><svg viewBox="0 0 ${w} ${h3}" width="${w}" height="${h3}">${ref80}${ref20}${line(K,'#e8eef6',1)}${line(D,'#f5c842',1)}${line(J,'#a06bff',1)}<text x="${padL}" y="9" fill="#e8eef6" font-size="9">K</text><text x="${padL+12}" y="9" fill="#f5c842" font-size="9">D</text><text x="${padL+24}" y="9" fill="#a06bff" font-size="9">J</text>${dates}</svg></div>`;
-  return p1+p2+p3final;
+  return {div: p1+p2+p3final, c1: cid1, sig};   // sig: 闭包注入历史信号标记
+}
+// 20260920: 把某股的历史形态信号标记注入到已渲染的K线面板1 (K线先显示, 信号异步补)
+function kdAddSigs(c1id, sig, m){
+  const g = document.getElementById(c1id+'_sig');
+  if(!g) return;
+  const html = sig ? sig(m, esc) : '';
+  g.innerHTML = html;
 }
 // 浮窗标记按钮: 点击切换忽略 (×) (20260907)
 async function popupToggleIgnore(code, name){
@@ -6227,18 +6234,10 @@ async function showKlinePreview(code, anchor){
     if(_kdPopup !== pop) return;  // 鼠标已移走, 丢弃过期弹框
     const d = _kdCache[code];
     const bars = d.bars;
-    // 20260920: 拉取该股历史信号(按日期), 供K线标注
-    const histSigs = await (async()=>{
-      try{
-        const r = await fetch('/api/stock/hist-signals?code=' + encodeURIComponent(code));
-        const j = await r.json();
-        if(!j.dates) return null;
-        const m = {};
-        (j.dates||[]).forEach(dd => { m[dd.date] = dd.signals; });
-        return m;  // {date: [{name,ch,color}...]}
-      }catch(e){ return null; }
-    })();
-    if(_kdPopup !== pop) return;  // 等待历史信号期间鼠标已移走
+    // 20260920: 先渲染K线, 历史信号异步加载后注入, 不阻塞浮窗显示
+    const q=kdMultiChart(bars);
+    const renderMarkup = q && q.div ? {html:q.div, c1:q.c1, sig:q.sig} : {html:(q||''), c1:'', sig:null};
+    if(_kdPopup !== pop) return;
     const last = bars[bars.length-1];
     const chgTxt = `<span style="color:${(last.chg||0)>=0?'var(--up)':'var(--down)'}">${(last.chg||0)>=0?'+':''}${(+last.chg||0).toFixed(2)}%</span>`;
     // 右上角标记符号按钮 (20260907): " 留意 / * 关注 / ! 特别关注, 点击切换
@@ -6255,9 +6254,19 @@ async function showKlinePreview(code, anchor){
         <div>${d.name ? esc(d.name)+' ' : ''}<span class="meta cp-code"  onclick="openTHS('${code}')">${code}</span> ${chgTxt}
         <span class="meta" style="margin-left:6px">近半年日K · 三均线 · 量 · KDJ</span></div>
         <div class="kd-mk-bar">${mkBtns}${ignoreBtn}</div>
-      </div>` + kdMultiChart(bars, histSigs);
+      </div>` + renderMarkup.html;
     _kdPlace(pop, anchor);
     bindChartInteractivity(pop);  // 三个面板各自绑定十字光标+悬浮 (20260906)
+    // 20260920: K线先渲染, 历史信号异步加载后注入对应日期K线上方 (标注小字, 不阻塞浮窗)
+    (async()=>{
+      try{
+        const r = await fetch('/api/stock/hist-signals?code=' + encodeURIComponent(code));
+        const j = await r.json();
+        if(!j.dates || !renderMarkup.sig) return;
+        const m = {}; (j.dates||[]).forEach(dd => { m[dd.date] = dd.signals; });
+        kdAddSigs(renderMarkup.c1, renderMarkup.sig, m);
+      }catch(e){ /* 标注失败不影响K线显示 */ }
+    })();
   }catch(e){
     if(_kdPopup === pop) pop.innerHTML = '<div class="empty">加载失败</div>';
   }
