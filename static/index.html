@@ -899,6 +899,7 @@
     <div class="main-tab active" data-pane="pane-ma">均线形态筛选</div>
     <div class="main-tab" data-pane="pane-cond">选股条件</div>
     <div class="main-tab" data-pane="pane-stock">个股分析</div>
+    <div class="main-tab" data-pane="pane-chan">缠论结构</div>
     <div class="main-tab" data-pane="pane-marks">标记管理</div>
     <div class="main-tab" data-pane="pane-history">历史信号</div>
 
@@ -1035,6 +1036,16 @@
     </div>
   </div>
 
+  <!-- 缠论结构 (独立 tab, 20260920): 结构图+摘要+周期切换 仅在此展示 -->
+  <div class="tab-pane" id="pane-chan">
+    <div class="card" style="border-radius:12px">
+      <div class="card-b" style="display:block;padding-top:14px">
+        <div id="chanTabPlaceholder" style="font-size:13px;color:var(--sub);padding:20px 0">请在「个股分析」标签页选择股票后，到此查看缠论笔/线段/中枢/三类买卖点结构</div>
+        <div id="chanTabBox"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- Tab5: 标记管理 -->
   <div class="tab-pane" id="pane-marks">
     <div class="card" style="border-radius:12px">
@@ -1142,7 +1153,28 @@ document.querySelectorAll('.main-tab').forEach(t=>{
     if(t.dataset.pane==='pane-marks' && typeof renderMkTable==='function') renderMkTable();
     // 切到历史信号 tab 时加载归档数据 (20260906)
     if(t.dataset.pane==='pane-history' && typeof loadHistoryDates==='function' && !histLoaded) loadHistoryDates();
+    // 切到缠论结构 tab 时把最近一次分析结果的缠论框搬到此处 (20260920)
+    if(t.dataset.pane==='pane-chan' && typeof moveChanToTab==='function') moveChanToTab();
   };
+});
+// 缠论结构tab: 目标容器 / 当前是否处于该tab (供分析与切换共用, 20260920)
+let _chanBoxEl=null;
+let isChanTabActive=false;
+function moveChanToTab(){
+  isChanTabActive=true;
+  const box=document.getElementById('chanTabBox');
+  const ph=document.getElementById('chanTabPlaceholder');
+  if(!box) return;
+  _chanBoxEl=box;
+  if(!_chanLastBox){ if(ph) ph.style.display='block'; box.innerHTML=''; return; }
+  if(ph) ph.style.display='none';
+  box.innerHTML=_chanLastBox;
+  // 新图十字光标/OHLC 悬浮绑定 (旧图已带 xhairBound, 重复调用安全)
+  if(typeof bindChartInteractivity==='function') bindChartInteractivity(box);
+}
+// 切换到其它tab时记录"缠论tab已离开", 下次切回/新分析时复用 (20260920)
+document.querySelectorAll('.main-tab').forEach(t=>{
+  t.addEventListener('click',()=>{ isChanTabActive=(t.dataset.pane==='pane-chan'); },{capture:true});
 });
 const fmtPct = v=>{
   if(v==null||isNaN(v)) return '—';
@@ -2812,6 +2844,9 @@ function renderAnalysis(d){
         </div>
       </details>
     </div>`:'';
+  // 若用户当前已切到缠论tab, 直接把框搬到tab里实时显示; 否则存入全局, 切tab时再搬 (20260920)
+  _chanLastBox=chanHtml;
+  if(isChanTabActive && typeof moveChanToTab==='function') moveChanToTab();
   // 所属板块 + 主营业务
   const boardHtml=(d.industry||d.concept)?`
     <div class="sa-row" style="margin-bottom:6px">
@@ -3176,7 +3211,6 @@ function renderAnalysis(d){
     ${boardHtml}${bizHtml}
     <div class="sa-grid">${gridHtml}</div>
     ${chartHtml}
-    ${chanHtml}
     ${vpSystemHtml}
     ${bsHtml}
     <div class="sec-h" style="margin-top:16px;font-size:14px">技术分析</div>
@@ -3308,6 +3342,8 @@ const _CHAN_PERIODS=[['30m','30分'],['day','日线'],['week','周线']];
 const _CHAN_START_BTNS=[['auto','自动'],['down','下·上·下'],['up','上·下·上']];
 let _chanStartDir=(function(){ try{ return sessionStorage.getItem('chanStartDir')||'auto'; }catch(e){ return 'auto'; } })();
 let _chanPeriod='day';
+// 最近一次个股分析生成的缠论结构框(独立tab展示用, 20260920)
+let _chanLastBox='';
 function chanPeriodBtns(active, code){
   return '<span class="chan-pd">'
     +_CHAN_PERIODS.map(([v,lv])=>{
@@ -3352,7 +3388,7 @@ async function switchChanPeriod(code, period){
     pdEl && pdEl.querySelectorAll('.cpd[data-pd]').forEach(b=>b.classList.toggle('on', b.dataset.pd===period));
     pdEl && pdEl.querySelectorAll('.cpd[data-sd]').forEach(b=>b.classList.toggle('on', b.dataset.sd===_chanStartDir));
     // 新图十字光标/OHLC 悬浮绑定 (旧图已带 xhairBound, 重复调用安全)
-    bindChartInteractivity(saPanel);
+    bindChartInteractivity(_chanBoxEl && _chanBoxEl.isConnected ? _chanBoxEl : saPanel);
   }catch(e){
     chartEl.innerHTML='<div class="empty">切换失败: '+esc(e.message)+'</div>';
   }
