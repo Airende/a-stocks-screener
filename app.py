@@ -6548,7 +6548,7 @@ def api_stock_chan(code: str = "", period: str = "day", start_dir: str = "auto")
 # ============================================================
 MA_PATTERNS = ["多头排列", "多头排列向上发散", "粘合向上突破", "空头排列向下发散", "粘合向下突破",
                "KDJ底背离", "MACD底背离",
-               "周线A·强势主升", "周线B·趋势回踩", "周线C·底部反转"]
+               "周线A·强势主升", "周线·埋伏"]
 
 _ma_state = {"data": None, "running": False, "error": None, "progress": "",
              "ts": 0.0, "lock": threading.Lock(),
@@ -6697,7 +6697,7 @@ def _aggregate_weekly(bars: list[dict]) -> list[dict]:
     return [weeks[k] for k in sorted(weeks.keys())]
 
 
-WEEKLY_PATTERNS = ["周线A·强势主升", "周线B·趋势回踩", "周线C·底部反转"]
+WEEKLY_PATTERNS = ["周线A·强势主升", "周线·埋伏"]
 
 # 需遵循周线一票否决的形态 (作为"底仓逻辑", 除上试盘外所有均线/背离tab均适用)
 PATTERNS_NEED_WEEKLY_VETO = {
@@ -6848,6 +6848,11 @@ def classify_weekly_ma_pattern(bars: list[dict]) -> tuple[list[str], dict]:
                     if vol_avg20 > 0 and vols[-1] > vol_avg20 * 1.5:
                         if low52 > 0 and c / low52 > 1.2:
                             hits.append("周线C·底部反转")
+
+    # 归一化 (20260920): 周线后两个tab合并为"周线·埋伏", 若同时命中B/C取一次即可
+    if "周线B·趋势回踩" in hits or "周线C·底部反转" in hits:
+        hits = [h for h in hits if h not in ("周线B·趋势回踩", "周线C·底部反转")]
+        hits.append("周线·埋伏")
 
     return hits, snapshot
 

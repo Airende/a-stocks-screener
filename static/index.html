@@ -3876,7 +3876,7 @@ function buildEquityCurve(curve){
 }
 
 
-// ===== 均线形态筛选模块（均线形态 7 tab + 周线形态 3 tab + 上试盘策略 3 tab，共13 tab） =====
+// ===== 均线形态筛选模块（均线形态 7 tab + 周线形态 2 tab + 上试盘策略 3 tab，共12 tab；20260920 周线B/C合并为周·埋伏） =====
 const MA_PATS=[
   ['多头排列','MA5>MA10>MA20>MA60，四线今日均>5日前，收盘≥MA10，多头排列持续≥5日（稳健型）'],
   ['粘合向上突破','近3日MA5/MA10/MA20间距<1.5%(粘合)，现转为多头排列，突破启动'],
@@ -3885,20 +3885,19 @@ const MA_PATS=[
   ['空头排列向下发散','MA5<MA10<MA20，三线同步下行，间距扩大，弱势下降趋势'],
   ['KDJ底背离','近20日价格创新低但KDJ的J值未创新低（动能未跟随下行），潜在反转信号'],
   ['MACD底背离','近20日价格创新低但MACD的DIF未创新低（空头动能减弱），潜在反转信号'],
-  // 周线均线形态 (A/B/C三类 + 一票否决)
+  // 周线均线形态 (A + 埋伏二合一, 20260920 原B/C合并为'周线·埋伏')
   ['周线A·强势主升','周线多头排列(MA5>MA10>MA20) + MA20连续4周上行 + 收盘>MA10 + 距52周高回撤<15%；否决：收盘<MA20/MA20向下/空头排列/52周位<0.5'],
-  ['周线B·趋势回踩','周线MA20与MA60均向上 + 收盘≥MA20且距MA20在0~+5% + 距52周高回撤<25%（上升趋势中回踩20周线低吸）'],
-  ['周线C·底部反转','周线MA20由平转升 + 近4周MA5上穿MA10金叉 + 收盘>MA20 + 放量(>20周均量×1.5) + 距52周低涨>20%（底部反转初期）'],
+  ['周线·埋伏','周线低位埋伏(原B趋势回踩+C底部反转合并)：B=上升趋势中回踩20周线低吸(MA20/MA60向上+收盘≥MA20距MA20在0~+5%+距52周高回撤<25%)；C=底部反转初期(MA20由平转升+近4周金叉+放量>20周均量×1.5+距52周低涨>20%)'],
   // 上试盘策略 3 个池子（对应说明书 A/B/C 三栏）
   ['上试盘·新信号','A池：今日刚出现长上影试盘日，观察不买；待后续放量突破再入场'],
   ['上试盘·观察池','B池：10日确认窗口内，未破信号日最低价、未放量突破的股票，附待突破价'],
   ['上试盘·已确认','C池：今日刚放量×1.01突破试盘高点 + 量比≥2 + 沪深300在MA20上方，当日收盘买入'],
 ];
-const SSP_KIND_TAB_OFFSET = 10; // tabIndex 10/11/12 对应 A/B/C 池
+const SSP_KIND_TAB_OFFSET = 9; // tabIndex 9/10/11 对应 A/B/C 池 (20260920 周线B/C合并后上试盘顺移)
 // 子tab显示名 (20260918): 单字前缀·精简名, 表达分组 日/周/试; 仅用于渲染文本, 内部匹配仍用 p[0] 原名(后端 counts 按原名)
 const DISP_MA_NAME=[
   '日·多头排列','日·粘合上突','日·多头发散','日·粘合下突','日·空头发散','日·KDJ背离','日·MACD背离',
-  '周·强势主升','周·趋势回踩','周·底部反转',
+  '周·强势主升','周·埋伏',
   '试·新信号','试·观察池','试·已确认'
 ];
 let maCurrentTab=0;
@@ -3971,9 +3970,10 @@ function renderMATabs(){
     const isSsp = _isSspTab(i);
     const title = isSsp ? `上试盘策略 ${['A池·新信号','B池·观察','C池·已确认买入'][i-SSP_KIND_TAB_OFFSET]||''}` : '';
     // 分组色 (20260918): 日线=grp-day(蓝青)/组内看跌=alt(同相青), 周线=grp-week(橙), 上试盘=ssp-tab(金)
-    const grpCls = isSsp ? '' : (i < SSP_KIND_TAB_OFFSET-3 ? 'grp-day' : 'grp-week');
-    const dayAlt = (!isSsp && i < SSP_KIND_TAB_OFFSET-3 && p[0].includes('向下')) ? ' alt' : '';
-    const dayAlt2 = (!isSsp && i < SSP_KIND_TAB_OFFSET-3 && p[0].includes('背离')) ? ' alt2' : '';
+    // 20260920: 周线B/C合并后共2个周线tab, 边界 i < OFFSET-2(=7) 为日线
+    const grpCls = isSsp ? '' : (i < SSP_KIND_TAB_OFFSET-2 ? 'grp-day' : 'grp-week');
+    const dayAlt = (!isSsp && i < SSP_KIND_TAB_OFFSET-2 && p[0].includes('向下')) ? ' alt' : '';
+    const dayAlt2 = (!isSsp && i < SSP_KIND_TAB_OFFSET-2 && p[0].includes('背离')) ? ' alt2' : '';
     return `<div class="ma-tab ${i===maCurrentTab?'active':''} ${grpCls}${dayAlt}${dayAlt2}${isSsp?' ssp-tab':''}" title="${title||p[1]}" data-i="${i}">${DISP_MA_NAME[i]||p[0]}<span class="cnt">${c}</span></div>`;
   }).join('');
   $('#maTabs').querySelectorAll('.ma-tab').forEach(t=>{
@@ -4225,7 +4225,7 @@ function maRowHtml(s,i){
   // 日周共振 / 埋伏型 标记 (20260920 优化1&2)
   //   日多头 tab: 该股又命中周A强主升 → 日周共振
   //   周A tab: 该股同时也在日多头池 → 日周共振
-  //   周B/周C: 埋伏/低吸型, 与日多头几乎不重叠, 单独标注其语义
+  //   周·埋伏: 低位埋伏/低吸型(原B回踩+C底部反转合并), 与日多头几乎不重叠
   const _DAY_BULL_NAMES=['多头排列','粘合向上突破','多头排列向上发散'];
   const _isDayBull=(maData&&maData.patterns)?(code)=>_DAY_BULL_NAMES.some(n=>(maData.patterns[n]||[]).some(x=>x.code===code)):()=>false;
   const _has=(...ps)=>(s.weekly_pats||[]).some(p=>ps.includes(p));
@@ -4234,10 +4234,8 @@ function maRowHtml(s,i){
     resTag='日周共振';
   else if(curPat==='周线A·强势主升'&&_isDayBull(s.code))
     resTag='日周共振';
-  else if(curPat==='周线B·趋势回踩')
-    resTag='周线回踩';
-  else if(curPat==='周线C·底部反转')
-    resTag='底部反转';
+  else if(curPat==='周线·埋伏')
+    resTag='周线埋伏';
   const resTagHtml = resTag
     ? `<span class="res-tag ${resTag==='日周共振'?'syn':'amb'}">${resTag}</span>`
     : '';
