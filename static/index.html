@@ -3304,10 +3304,20 @@ function buildMiniChart(bars, pivots){
 
 // ===== 缠论周期切换: 30分/日/周 二次图 (20260919) =====
 const _CHAN_PERIODS=[['30m','30分'],['day','日线'],['week','周线']];
+// 起笔方向切换 (20260920): auto=对齐整体趋势 / down=下-上-下 / up=上-下-上
+const _CHAN_START_BTNS=[['auto','自动'],['down','下·上·下'],['up','上·下·上']];
+let _chanStartDir=(function(){ try{ return sessionStorage.getItem('chanStartDir')||'auto'; }catch(e){ return 'auto'; } })();
+let _chanPeriod='day';
 function chanPeriodBtns(active, code){
-  return '<span class="chan-pd">'+_CHAN_PERIODS.map(([v,lv])=>{
-    return `<button class="cpd ${v===active?'on':''}" data-pd="${v}" data-code="${esc(code)}" onclick="switchChanPeriod('${esc(code)}','${v}')">${lv}</button>`;
-  }).join('')+'</span>';
+  return '<span class="chan-pd">'
+    +_CHAN_PERIODS.map(([v,lv])=>{
+      return `<button class="cpd ${v===active?'on':''}" data-pd="${v}" data-code="${esc(code)}" onclick="switchChanPeriod('${esc(code)}','${v}')">${lv}</button>`;
+    }).join('')
+    +'<span style="width:1px;height:14px;background:var(--border);margin:0 4px;align-self:center"></span>'
+    +_CHAN_START_BTNS.map(([v,lv])=>{
+      return `<button class="cpd ${v===_chanStartDir?'on':''}" data-sd="${v}" data-code="${esc(code)}" title="起点不同→笔不同→中枢位置不同, 选更贴合你看到的中枢" onclick="switchChanStartDir('${esc(code)}','${v}')" style="padding:2px 8px">${lv}</button>`;
+    }).join('')
+    +'</span>';
 }
 function chanSummaryHtml(ch){
   if(!ch || !ch.ok || !ch.summary) return '';
@@ -3330,20 +3340,28 @@ async function switchChanPeriod(code, period){
   const sumEl=document.getElementById('chanSummary');
   const pdEl=document.getElementById('chanPd');
   if(!chartEl) return;
+  _chanPeriod=period;
   chartEl.innerHTML='<div style="text-align:center;padding:20px;color:var(--sub)"><span class="spin"></span> 切换'+period+'…</div>';
   try{
-    const r=await fetch('/api/stock/chan?code='+encodeURIComponent(code)+'&period='+encodeURIComponent(period));
+    const r=await fetch('/api/stock/chan?code='+encodeURIComponent(code)+'&period='+encodeURIComponent(period)+'&start_dir='+encodeURIComponent(_chanStartDir));
     if(!r.ok){ chartEl.innerHTML='<div class="empty">加载失败</div>'; return; }
     const d=await r.json();
     if(!d.chan || !d.chan.ok){ chartEl.innerHTML='<div class="empty">'+esc(d.chan?.reason||'该周期未形成有效结构')+'</div>'; return; }
     if(sumEl) sumEl.innerHTML=chanSummaryHtml(d.chan);
     chartEl.innerHTML=buildChanChart(d.bars, d.chan);
-    pdEl && pdEl.querySelectorAll('.cpd').forEach(b=>b.classList.toggle('on', b.dataset.pd===period));
+    pdEl && pdEl.querySelectorAll('.cpd[data-pd]').forEach(b=>b.classList.toggle('on', b.dataset.pd===period));
+    pdEl && pdEl.querySelectorAll('.cpd[data-sd]').forEach(b=>b.classList.toggle('on', b.dataset.sd===_chanStartDir));
     // 新图十字光标/OHLC 悬浮绑定 (旧图已带 xhairBound, 重复调用安全)
     bindChartInteractivity(saPanel);
   }catch(e){
     chartEl.innerHTML='<div class="empty">切换失败: '+esc(e.message)+'</div>';
   }
+}
+async function switchChanStartDir(code, sd){
+  if(sd===_chanStartDir) return;
+  _chanStartDir=sd;
+  try{ sessionStorage.setItem('chanStartDir', sd); }catch(e){}
+  await switchChanPeriod(code, _chanPeriod);
 }
 
 // ===== 缠论结构图: K线 + 笔 + 线段 + 中枢 + 三类买卖点 (20260911) =====

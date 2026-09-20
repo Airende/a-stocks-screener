@@ -5702,26 +5702,32 @@ def _chan_fractals(merged: list[dict]) -> list[dict]:
     return out
 
 
-def _chan_strokes(fracs: list[dict]) -> list[dict]:
-    """笔: 相邻顶底分型连线。新笔定义 —— 两分型(合并后)索引差 >= 4,
+def _chan_strokes(fracs: list[dict], start_dir: str = "auto") -> list[dict]:
+    """笔: 相邻顶底分型连线。新笔定义 —— 两分型(合并后)索引差 >= 3,
     即两个分型之间至少有 1 根独立K线。同类型分型只保留更极端者。
-    起笔方向(20260920 改): 首笔方向对齐整段整体趋势 —— 整体下跌从第 1 个顶分型
-      起笔(首笔向下), 整体上涨从第 1 个底分型起笔(首笔向上)。
-      原因: 若窗口起点正好落在一段主跌的"底分型"上, 旧逻辑首笔为上(上-下-上),
-      导致第一个下跌中枢的三笔重叠区被抬高到反弹高位 —— 中大力德日K首个中枢因此
-      画在 87(高位窄带) 而非真实密集区 83 附近。改为按真实下跌结构起笔后, 中枢会
-      落到"下跌途中横盘成交密集区", 更贴合缠论本意。"""
+    起笔方向(20260920 改):
+      · auto  = 对齐整段整体趋势 —— 整体下跌从第 1 个顶分型起笔(首笔向下 下-上-下),
+                整体上涨从第 1 个底分型起笔(首笔向上 上-下-上)。
+      · down  = 强制首笔向下(下-上-下), 从第一个顶分型起笔。
+      · up    = 强制首笔向上(上-下-上), 从第一个底分型起笔。
+      原因: 不同的起笔点会改变笔带与三笔重叠区, 从而使中枢画在更高或更低的位置
+      二十叉中枢(如中大力德 87 vs 83)。手动允许切换, 让用户对照视觉中枢自己选。"""
     if not fracs:
         return []
-    # 整体趋势方向: 用首尾分型价判定
-    overall_down = fracs[-1]["price"] < fracs[0]["price"]
-    start_idx = 0
-    if overall_down and fracs[0]["type"] != "top":
-        # 整体下跌但起点是底分型 → 跳到第一个顶分型, 使首笔向下
+    if start_dir == "down":
+        # 强制首笔向下 → 从第一个顶分型起笔
         start_idx = next((i for i, f in enumerate(fracs) if f["type"] == "top"), 0)
-    elif not overall_down and fracs[0]["type"] != "bottom":
-        # 整体上涨但起点是顶分型 → 跳到第一个底分型, 使首笔向上
+    elif start_dir == "up":
+        # 强制首笔向上 → 从第一个底分型起笔
         start_idx = next((i for i, f in enumerate(fracs) if f["type"] == "bottom"), 0)
+    else:
+        # auto: 整体趋势方向(用首尾分型价判定), 对齐整体趋势
+        overall_down = fracs[-1]["price"] < fracs[0]["price"]
+        start_idx = 0
+        if overall_down and fracs[0]["type"] != "top":
+            start_idx = next((i for i, f in enumerate(fracs) if f["type"] == "top"), 0)
+        elif not overall_down and fracs[0]["type"] != "bottom":
+            start_idx = next((i for i, f in enumerate(fracs) if f["type"] == "bottom"), 0)
     pts: list[dict] = [fracs[start_idx]]
     for f in fracs[start_idx + 1:]:
         last = pts[-1]
@@ -6093,13 +6099,14 @@ def _chan_signals(strokes: list[dict], pivots: list[dict], hist: list[float]) ->
     return out
 
 
-def chan_analysis(bars: list[dict]) -> dict:
-    """对一段日K做缠论结构分析。bars 需含 day/open/high/low/close。"""
+def chan_analysis(bars: list[dict], start_dir: str = "auto") -> dict:
+    """对一段日K做缠论结构分析。bars 需含 day/open/high/low/close。
+    start_dir: 起笔方向 auto/down/up, 见 _chan_strokes。"""
     if not bars or len(bars) < 30:
         return {"ok": False, "reason": "K线不足30根"}
     merged = _chan_merge(bars)
     fracs = _chan_fractals(merged)
-    pts = _chan_strokes(fracs)
+    pts = _chan_strokes(fracs, start_dir)
     strokes = [{"i0": pts[k]["i"], "p0": round(pts[k]["price"], 3),
                 "i1": pts[k + 1]["i"], "p1": round(pts[k + 1]["price"], 3),
                 "dir": "up" if pts[k + 1]["price"] > pts[k]["price"] else "down"}
@@ -6150,7 +6157,7 @@ def chan_analysis(bars: list[dict]) -> dict:
 
 
 @app.get("/api/stock/analyze")
-def api_stock_analyze(code: str = "", date: str = ""):
+def api_stock_analyze(code: str = "", date: str = "", start_dir: str = "auto"):
     """个股深度分析: 基本信息 + 技术指标 + 量价关系
     20260906 新增历史时点复盘: 传 date(YYYY-MM-DD) 时, K线截断到该交易日,
     全部指标/买卖点/量价/KDJ体系按'以该日为最后一天'计算。"""
@@ -6420,7 +6427,7 @@ def api_stock_analyze(code: str = "", date: str = ""):
     # 公司简介 (主营业务等)
     profile = fetch_stock_profile(code)
     # 缠论结构: 对前端展示的同一段K线(244根)计算, 保证下标可直接映射到 x 轴 (20260911)
-    chan = chan_analysis(bars[-244:])
+    chan = chan_analysis(bars[-244:], start_dir=start_dir or "auto")
 
     return {
         "code": code,
@@ -6475,9 +6482,10 @@ def api_stock_analyze(code: str = "", date: str = ""):
 
 
 @app.get("/api/stock/chan")
-def api_stock_chan(code: str = "", period: str = "day"):
+def api_stock_chan(code: str = "", period: str = "day", start_dir: str = "auto"):
     """缠论周期切换轻量接口: 返回指定周期的 bars + chan (仅缠论结构二次图用)。
     period: 30m=30分钟(时长短一些) | 60m=60分钟 | day=日线(默认, ~244根) | week=周线(~60-100根)。
+    start_dir: 起笔方向 auto/down/up。
     不影响主分析(日线)的计算口径, 主分析照常。"""
     code = code.strip()
     if not code:
@@ -6512,8 +6520,8 @@ def api_stock_chan(code: str = "", period: str = "day"):
         "high": b["high"], "low": b["low"], "volume": b["volume"],
         "chg": round(chgs[i], 2) if not math.isnan(chgs[i]) else 0,
     } for i, b in enumerate(bars)]
-    chan = chan_analysis(bars)
-    return {"period": period, "label": lbl, "bars": out_bars, "chan": chan}
+    chan = chan_analysis(bars, start_dir=start_dir or "auto")
+    return {"period": period, "label": lbl, "bars": out_bars, "chan": chan, "start_dir": start_dir or "auto"}
 
 
 # ============================================================
