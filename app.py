@@ -6127,10 +6127,17 @@ def chan_analysis(bars: list[dict], start_dir: str = "auto") -> dict:
     hist = _chan_macd([float(b["close"]) for b in bars])
     signals = _chan_signals(strokes, pivots, hist)
 
+    segs_tmp = [s for s in segs if s["e"] > s["s"]]
+    # 线段确认显示规则(20260920): 只要该段已被后续线段接续(存在下一段, 即已被后面的
+    # 走势/分型确认而"走完"), 就强制视为已确认画实线; 只有最末一段(尚未被后续接续、
+    # 仍在延伸)才按其真实状态显示 —— 尚未确认则画虚线。
+    # 这样可消除"特征序列确认不到的中间段被判伪虚线、进而虚线后接实线"的跳变怪相。
     segs_out = [{"i0": pts[s["s"]]["i"], "p0": round(pts[s["s"]]["price"], 3),
                  "i1": pts[s["e"]]["i"], "p1": round(pts[s["e"]]["price"], 3),
-                 "dir": s["dir"], "confirmed": s.get("confirmed", True)}
-                for s in segs if s["e"] > s["s"]]
+                 "dir": s["dir"],
+                 "confirmed": True if k != len(segs_tmp) - 1
+                              else bool(s.get("confirmed", True))}
+                for k, s in enumerate(segs_tmp)]
 
     close = float(bars[-1]["close"])
     day = (bars[-1].get("day") or "")[:10]
