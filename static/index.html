@@ -64,6 +64,15 @@
   .card-h h2{margin:0;font-size:14px}
   .card-b{padding:0 16px 14px;font-size:13px;color:var(--sub);line-height:1.8}
   .cond{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
+  /* 选股条件折叠 (20260920) */
+  .cond-fold{background:var(--panel2);border:1px solid var(--border);border-radius:10px}
+  .cond-fold-h{display:flex;align-items:center;gap:8px;padding:9px 12px;font-size:13px;font-weight:700;color:var(--txt);cursor:pointer;user-select:none}
+  .cond-fold-h:hover{background:rgba(255,255,255,.03)}
+  .cond-fold-h .sa-hist-arr{transition:transform .15s;color:var(--sub)}
+  .cond-fold.collapsed .cond-fold-h .sa-hist-arr{transform:rotate(-90deg)}
+  .cond-fold.collapsed .cond-fold-body{display:none}
+  .cond-fold-n{font-size:11px;font-weight:400;color:var(--sub);margin-left:auto}
+  .cond-fold-body{padding:10px 12px 4px;border-top:1px solid var(--border)}
   .cond .g{background:var(--panel2);border-radius:8px;padding:10px 12px}
   .cond .gt{font-weight:700;color:var(--txt);margin-bottom:8px}
   .cond .gtype{font-size:11px;color:var(--gold);font-weight:400;margin-left:6px}
@@ -963,14 +972,23 @@
   <div class="tab-pane" id="pane-cond">
     <div class="card" style="border-radius:12px">
       <div class="card-b" id="condBody" style="display:block;padding-top:14px">
-        <div class="cond" id="condGrid"></div>
-        <div class="ckbar">
-          <span class="meta" id="condStatus">尚未筛选</span>
-          <span class="meta" id="condCnt">已勾选 0 项</span>
-          <button class="ghost" id="allBtn">全选</button>
-          <button class="ghost" id="noneBtn">全不选</button>
-          <button id="doneBtn">完成</button>
-          <span class="meta" style="color:var(--gold)">组内"满足其一"为或 · 组间为且 · 未勾选不约束 · A/D组为必选(须通过) · B/C组可选(允许差1)</span>
+        <div class="cond-fold" id="condFold">
+          <div class="cond-fold-h" id="condFoldToggle">
+            <span class="sa-hist-arr">▼</span>
+            <span>选股条件</span>
+            <span class="cond-fold-n" id="condFoldCnt">已勾选 0 项</span>
+          </div>
+          <div class="cond-fold-body">
+            <div class="cond" id="condGrid"></div>
+            <div class="ckbar">
+              <span class="meta" id="condStatus">尚未筛选</span>
+              <span class="meta" id="condCnt">已勾选 0 项</span>
+              <button class="ghost" id="allBtn">全选</button>
+              <button class="ghost" id="noneBtn">全不选</button>
+              <button id="doneBtn">完成</button>
+              <span class="meta" style="color:var(--gold)">组内"满足其一"为或 · 组间为且 · 未勾选不约束 · A/D组为必选(须通过) · B/C组可选(允许差1)</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -1521,7 +1539,16 @@ function getChecked(){ return [...document.querySelectorAll('#condGrid input[typ
 function updateCondCnt(){
   const n=getChecked().length;
   $('#condCnt').textContent=`已勾选 ${n}/${COND_ALL.length} 项`;
+  // 折叠标题上的计数同步 (20260920)
+  const fc=document.getElementById('condFoldCnt');
+  if(fc) fc.textContent=`已勾选 ${n}/${COND_ALL.length} 项`;
 }
+// 选股条件折叠交互 (20260920)
+(function(){
+  const fold=document.getElementById('condFold');
+  const tg=document.getElementById('condFoldToggle');
+  if(tg) tg.addEventListener('click',()=>{ fold.classList.toggle('collapsed'); });
+})();
 $('#condGrid').addEventListener('change',updateCondCnt);
 $('#allBtn').onclick=()=>renderConds(COND_ALL);
 $('#noneBtn').onclick=()=>renderConds([]);
