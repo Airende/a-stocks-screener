@@ -542,23 +542,9 @@
              line-height:1;vertical-align:baseline;margin:0;padding:0;
              cursor:pointer;user-select:none;opacity:.9;transition:transform .12s}
   .removed-x:hover{transform:scale(1.25)}
-  /* 持仓 (买卖点) 相关 */
+  /* 股票名单元格 */
   .nm-cell{position:relative;display:inline-flex;flex-direction:column;gap:1px;vertical-align:middle}
   .nm-cell .nm{position:relative;display:inline-block;align-self:flex-start;width:fit-content}
-  /* 左侧买卖 + 与右侧标记 + 共用 .mk-trigger.empty 样式: 默认隐藏, hover 名称时显现 */
-  .pos-plus{margin-right:0;font-weight:700;color:var(--sub);font-size:10px}
-  /* 表格操作列的 + 按钮 (无 mk-trigger): 保持可见的小按钮样式 */
-  .pos-plus:not(.mk-trigger){display:inline-flex;align-items:center;justify-content:center;
-    width:18px;height:18px;border-radius:4px;background:var(--panel2);border:1px solid var(--border);
-    color:var(--accent);font-size:13px;font-weight:700;cursor:pointer;line-height:1;vertical-align:middle;transition:.12s}
-  .pos-plus:not(.mk-trigger):hover{background:var(--accent);color:#fff;border-color:var(--accent);transform:scale(1.1)}
-  /* 持仓角标 bN: 无底色, 小字号, 行内富文本, 位于名称上方 */
-  .pos-badge{display:inline;font-size:10px;font-weight:400;color:var(--accent);
-             background:none;padding:0;margin-right:4px;line-height:1}
-  /* 持仓金额: 小字号, 行内, 位于名称上方; 无 "成本" 前缀 */
-  .pos-info{display:inline;font-size:10px;line-height:1.2;white-space:nowrap;font-weight:400}
-  /* 持仓信息行 (bN + 金额), 位于股票名称上方 */
-  .pos-top{display:flex;align-items:baseline;gap:2px;margin-bottom:1px;line-height:1}
   /* Toast 提示 (含撤销按钮) */
   .toast-wrap{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:10000;
               display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none}
@@ -1126,9 +1112,6 @@
           <div class="mk-tab" data-mk="star"><span class="mi-icon" style="color:#f5c842;font-weight:800">*</span> 关注 <span class="cnt">0</span></div>
           <div class="mk-tab" data-mk="quote"><span class="mi-icon" style="color:#e5e7eb;font-weight:800">"</span> 留意 <span class="cnt">0</span></div>
           <div class="mk-tab" data-mk="removed"><span class="mi-icon">✕</span> 已删除 <span class="cnt">0</span></div>
-          <div class="mk-tab" data-mk="holding" style="margin-left:12px;border-color:var(--accent);color:var(--accent)"><span class="mi-icon" style="font-weight:800">b</span> 持仓股票 <span class="cnt">0</span></div>
-          <div class="mk-tab" data-mk="closed"><span class="mi-icon" style="font-weight:800">✓</span> 已清仓 <span class="cnt">0</span></div>
-          <div class="mk-tab" data-mk="todayops" style="border-color:var(--gold);color:var(--gold)"><span class="mi-icon" style="font-weight:800">⌚</span> 今日操作 <span class="cnt">0</span></div>
         </div>
         <div class="tbl-wrap" id="mkTblWrap" style="border:none;border-radius:0;max-height:560px;overflow-y:auto">
           <table id="tblMk">
@@ -3463,12 +3446,10 @@ function renderAnalysis(d){
     if(mk){ saTriggerCh=mk.char; saTriggerColor=mk.color; saTriggerCls='mk-trigger '+mk.cls+(saMark.removed?' removed':''); saTriggerTitle=`${mk.label} · 点击修改`; }
   }
   const saNmSafe=(d.name||'').replace(/'/g,"\\'").replace(/"/g,'&quot;');
-  const saPlusBtn=`<span class="mk-trigger empty pos-plus"  onclick="event.stopPropagation();openTradeMenu('${d.code}','${saNmSafe}',${d.price||'null'},event)" oncontextmenu="event.stopPropagation();openTradeMenu('${d.code}','${saNmSafe}',${d.price||'null'},event);return false">+</span>`;
   const saMarkBtn=`<span class="${saTriggerCls}" style="color:${saTriggerColor};font-weight:800;cursor:pointer;margin:0;padding:0;display:inline;font-size:18px" onclick="event.stopPropagation();openMarkMenu('${d.code}','${saNmSafe}',event)" oncontextmenu="event.stopPropagation();openMarkMenu('${d.code}','${saNmSafe}',event);return false">${saTriggerCh}</span>`;
   saPanel.innerHTML=`
     <div class="sa-head-sticky">
     <div class="sa-head">
-      ${saPlusBtn}
       <a class="nm" data-code="${d.code}"  href="javascript:void(0)" style="text-decoration:none;cursor:pointer" onclick="gotoStockAnalyze('${d.code}','${d.name}')">${d.name}${saMarkBtn}</a>
       <span class="cd">${mkt(d.code)}</span>
       ${d.is_historical ? `<span class="sig-badge wait" style="font-size:12px" title="历史时点复盘: 全部指标按 ${d.as_of_date} 收盘计算">⏱ 基准日 ${d.as_of_date}${d.requested_date && d.requested_date!==d.as_of_date ? ` (请求${d.requested_date}, 非交易日已取最近)` : ''} <b style="cursor:pointer;text-decoration:underline" onclick="analyzeStock('${d.code}')">回到最新</b></span>` : ''}
@@ -5366,33 +5347,10 @@ async function loadMarks(){
 }
 function getMark(code){ return _MARKS[code]||null; }
 
-// ===== 持仓 (买卖点) =====
-const _POSITIONS = {};  // {code: {lots, avg_cost, total_cost, operations, ...}}
-
-async function loadPositions(){
-  try{
-    const r=await fetch('/api/positions');
-    const d=await r.json();
-    Object.assign(_POSITIONS, d.positions||{});
-    // 刷新表格中的持仓角标
-    if(typeof refreshPosBadges==='function') refreshPosBadges();
-    if(typeof refreshMkTabCounts==='function') refreshMkTabCounts();
-    if($('#pane-marks') && $('#pane-marks').classList.contains('active')){
-      if(mkCurrentTab==='holding') renderHoldingTable();
-      else if(mkCurrentTab==='closed') renderClosedTable();
-      else if(mkCurrentTab==='todayops') renderTodayOpsTable();
-      else renderMkTable();
-    }
-  }catch(e){ console.warn('loadPositions failed', e); }
-}
-function getPos(code){ return _POSITIONS[code]||null; }
-
-// 名称 + 内嵌标记字符 + 持仓角标 (富文本)
+// 名称 + 内嵌标记字符 (富文本)
 // 单击名称(非标记字符) → 跳转个股分析; 单击标记字符 → 弹标记菜单
-// 左侧 + 按钮 → 弹买卖菜单
 function markNameHtml(code, name, price){
   const m = _MARKS[code];
-  const p = _POSITIONS[code];
   const nm = esc(name||'—');
   let nameStyle = '';
   let removedX = '';   // 忽略/已删除股票: 名称后的绿色小叉叉 (20260906, 替代原删除线)
@@ -5415,210 +5373,7 @@ function markNameHtml(code, name, price){
   // 忽略/已删除: 绿色小叉叉, 点击交互与 * 等标记字符一致(弹出标记菜单) (20260906)
   if(m && m.removed) removedX = `<span class="removed-x" onclick="event.stopPropagation();openMarkMenu('${code}','${nmSafe}',event)" oncontextmenu="event.stopPropagation();openMarkMenu('${code}','${nmSafe}',event);return false">×</span>`;
   const trigStyle = `color:${triggerColor};font-weight:800;cursor:pointer;margin:0;padding:0;display:inline`;
-  // 持仓角标: bN (左上角, 无底色小字号) + 持仓金额[收益率] (左下角, 小字号)
-  let posBadge = '';
-  let posInfo = '';
-  if(p && p.lots > 0){
-    const lots = p.lots;
-    const avg = p.avg_cost || 0;
-    const cur = parseFloat(price) || 0;
-    const costVal = Math.round(avg * lots * 100);
-    if(cur > 0){
-      const mktVal = Math.round(cur * lots * 100);
-      const pnl = mktVal - costVal;
-      const pnlPct = avg > 0 ? ((cur - avg) / avg * 100) : 0;
-      const sign = pnl > 0 ? '+' : (pnl < 0 ? '' : '');
-      const color = pnl > 0 ? 'var(--up)' : (pnl < 0 ? 'var(--down)' : 'var(--sub)');
-      posInfo = `<div class="pos-info" style="color:${color}">${mktVal.toLocaleString()}[${sign}${pnlPct.toFixed(2)}%]</div>`;
-    } else {
-      posInfo = `<div class="pos-info" style="color:var(--sub)">${costVal.toLocaleString()}</div>`;
-    }
-    posBadge = `<span class="pos-badge" title="当前持仓 ${lots} 手 · 成本 ${avg.toFixed(2)}">b${lots}</span>`;
-  }
-  // 左侧买卖 + : 与右侧标记 + 共用 mk-trigger.empty 样式 (默认隐藏, hover 名称时显现)
-  const plusBtn = `<span class="mk-trigger empty pos-plus"  onclick="event.stopPropagation();openTradeMenu('${code}','${nmSafe}',${price||'null'},event)" oncontextmenu="event.stopPropagation();openTradeMenu('${code}','${nmSafe}',${price||'null'},event);return false">+</span>`;
-  // 持仓信息 (bN + 金额) 放在名称上方
-  const posTop = (posBadge||posInfo) ? `<div class="pos-top">${posBadge}${posInfo}</div>` : '';
-  return `<div class="nm-cell">${posTop}<a class="nm" data-code="${code}"  onclick="gotoStockAnalyze('${code}','${nmSafe}')" style="cursor:pointer;${nameStyle?' '+nameStyle:''}">${plusBtn}${nm}${removedX}<span class="${triggerCls}" style="${trigStyle}" onclick="event.stopPropagation();openMarkMenu('${code}','${nmSafe}',event)" oncontextmenu="event.stopPropagation();openMarkMenu('${code}','${nmSafe}',event);return false">${triggerCh}</span></a></div>`;
-}
-
-// ===== 买卖操作菜单 =====
-let _tradeMenuEl = null;
-function closeTradeMenu(){
-  if(_tradeMenuEl){ _tradeMenuEl.remove(); _tradeMenuEl=null; }
-  document.removeEventListener('click', _tradeDocClick);
-}
-function _tradeDocClick(ev){
-  if(_tradeMenuEl && !_tradeMenuEl.contains(ev.target) && !ev.target.classList.contains('pos-plus')) closeTradeMenu();
-}
-function openTradeMenu(code, name, price, ev){
-  if(ev){ ev.stopPropagation(); ev.preventDefault(); }
-  closeTradeMenu();
-  closeMarkMenu();
-  const rawName = (name||'').replace(/&quot;/g,'"').replace(/&#39;/g,"'");
-  let curPrice = parseFloat(price) || 0;
-  const p = _POSITIONS[code];
-  const holdLots = (p && p.lots) ? p.lots : 0;
-  const avgCost = (p && p.avg_cost) ? p.avg_cost : 0;
-  const isLimitUp = false; // 涨跌停由后端最终校验, 前端仅展示提示
-  // 涨跌停判断: 从当前价格反推不可行, 这里不预判, 由后端返回错误
-  const attr = s => String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');
-
-  _tradeMenuEl = document.createElement('div');
-  _tradeMenuEl.className='trade-menu';
-  _tradeMenuEl.innerHTML = `
-    <div class="trade-menu-title">
-      <span class="tm-title-text">${esc(rawName||code)} ${code}${curPrice>0?` · 现价 ${curPrice.toFixed(2)}`:''}</span>
-      <span style="cursor:pointer" onclick="closeTradeMenu()">✕</span>
-    </div>
-    <div class="trade-menu-body">
-      <div class="trade-row">
-        <label>手数</label>
-        <input type="number" class="trade-lots" id="tradeLots" min="1" step="1" placeholder="输入手数(1手=100股)" autocomplete="off">
-      </div>
-      <div class="trade-row">
-        <label>金额</label>
-        <span class="trade-amount" id="tradeAmount">—</span>
-      </div>
-      <div class="trade-btns">
-        <button class="trade-btn buy" id="tradeBuyBtn">买 入</button>
-        <button class="trade-btn sell" id="tradeSellBtn" ${holdLots<=0?'disabled':''}>卖 出</button>
-      </div>
-      <div class="trade-hint">
-        ${holdLots>0?`当前持仓 <b style="color:var(--accent)">${holdLots}</b> 手 · 成本 <b>${avgCost.toFixed(2)}</b>`:'当前无持仓'}<br>
-        买入价 = 当日收盘价 (涨停板不可买); 卖出价 = 当日收盘价 (跌停板不可卖)
-      </div>
-      <div class="trade-limit" id="tradeLimit" style="display:none"></div>
-    </div>
-  `;
-  document.body.appendChild(_tradeMenuEl);
-  // 定位
-  const rect = ev.currentTarget.getBoundingClientRect();
-  let left = rect.left;
-  let top = rect.bottom + 4;
-  const mw = _tradeMenuEl.offsetWidth, mh = _tradeMenuEl.offsetHeight;
-  if(left + mw > window.innerWidth - 4) left = window.innerWidth - mw - 4;
-  if(top + mh > window.innerHeight - 4) top = rect.top - mh - 4;
-  _tradeMenuEl.style.left = Math.max(4,left)+'px';
-  _tradeMenuEl.style.top = Math.max(4,top)+'px';
-  document.addEventListener('click', _tradeDocClick);
-
-  const lotsEl = _tradeMenuEl.querySelector('#tradeLots');
-  const amtEl = _tradeMenuEl.querySelector('#tradeAmount');
-  const buyBtn = _tradeMenuEl.querySelector('#tradeBuyBtn');
-  const sellBtn = _tradeMenuEl.querySelector('#tradeSellBtn');
-  const limEl = _tradeMenuEl.querySelector('#tradeLimit');
-
-  function updateAmount(){
-    const lots = parseInt(lotsEl.value||'0',10);
-    if(lots>0 && curPrice>0){
-      const amt = Math.round(curPrice * lots * 100);
-      amtEl.textContent = amt.toLocaleString() + ' 元';
-      amtEl.style.color = 'var(--gold)';
-    } else {
-      amtEl.textContent = '—';
-    }
-    // 卖出不超过持仓
-    if(holdLots>0 && lots>holdLots){
-      sellBtn.disabled = true;
-      sellBtn.title = `最多可卖 ${holdLots} 手`;
-    } else if(holdLots>0){
-      sellBtn.disabled = false;
-      sellBtn.title = '';
-    }
-  }
-  lotsEl.addEventListener('input', updateAmount);
-  lotsEl.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); } });
-  lotsEl.focus();
-
-  // 价格兜底: 若前端未传入价格, 从后端获取实时价
-  if(curPrice<=0){
-    fetch(`/api/spot/${code}`).then(r=>r.json()).then(d=>{
-      if(d.ok && d.price>0){
-        curPrice = d.price;
-        const titleEl = _tradeMenuEl.querySelector('.tm-title-text');
-        if(titleEl) titleEl.textContent = `${rawName||code} ${code} · 现价 ${curPrice.toFixed(2)}`;
-        updateAmount();
-      }
-    }).catch(()=>{});
-  }
-
-  buyBtn.onclick = async ()=>{
-    const lots = parseInt(lotsEl.value||'0',10);
-    if(lots<=0){ alert('请输入买入手数'); lotsEl.focus(); return; }
-    buyBtn.disabled = true; buyBtn.textContent='买入中…';
-    try{
-      const body = {code, name: rawName, lots, price: curPrice>0?curPrice:0};
-      const r = await fetch('/api/position/buy', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
-      const d = await r.json();
-      if(d.ok){
-        _POSITIONS[code] = d.position;
-        refreshPosBadges();
-        refreshMkTabCounts();
-        closeTradeMenu();
-        if($('#pane-marks') && $('#pane-marks').classList.contains('active')){
-          if(mkCurrentTab==='holding') renderHoldingTable();
-          else if(mkCurrentTab==='closed') renderClosedTable();
-        }
-      } else {
-        limEl.textContent = d.msg||'买入失败';
-        limEl.style.display='block';
-      }
-    }catch(e){ limEl.textContent='网络错误: '+e.message; limEl.style.display='block'; }
-    buyBtn.disabled=false; buyBtn.textContent='买 入';
-  };
-  sellBtn.onclick = async ()=>{
-    const lots = parseInt(lotsEl.value||'0',10);
-    if(lots<=0){ alert('请输入卖出手数'); lotsEl.focus(); return; }
-    if(lots>holdLots){ alert(`卖出手数(${lots})超过当前持仓(${holdLots}手)`); return; }
-    sellBtn.disabled = true; sellBtn.textContent='卖出中…';
-    try{
-      const body = {code, name: rawName, lots, price: curPrice>0?curPrice:0};
-      const r = await fetch('/api/position/sell', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
-      const d = await r.json();
-      if(d.ok){
-        _POSITIONS[code] = d.position;
-        refreshPosBadges();
-        refreshMkTabCounts();
-        closeTradeMenu();
-        if($('#pane-marks') && $('#pane-marks').classList.contains('active')){
-          if(mkCurrentTab==='holding') renderHoldingTable();
-          else if(mkCurrentTab==='closed') renderClosedTable();
-        }
-      } else {
-        limEl.textContent = d.msg||'卖出失败';
-        limEl.style.display='block';
-      }
-    }catch(e){ limEl.textContent='网络错误: '+e.message; limEl.style.display='block'; }
-    sellBtn.disabled=false; sellBtn.textContent='卖 出';
-  };
-}
-
-// 刷新所有已渲染表格中的持仓角标 (bN + 市值/收益率)
-function refreshPosBadges(){
-  // 找到所有 .nm-cell 容器, 重绘内部内容
-  document.querySelectorAll('.nm-cell').forEach(cell=>{
-    const plusBtn = cell.querySelector('.pos-plus');
-    const aNm = cell.querySelector('a.nm');
-    if(!aNm) return;
-    const dbl = aNm.getAttribute('onclick')||'';
-    const m = dbl.match(/gotoStockAnalyze\('(\d+)'/);
-    if(!m) return;
-    const code = m[1];
-    // 取原始名称: a 内文本节点
-    let name = '';
-    for(const node of aNm.childNodes){
-      if(node.nodeType===3){ name += node.nodeValue; }
-    }
-    name = name.trim();
-    // 取当前价: 优先从 + 按钮 onclick 中解析, 失败则从 _POSITIONS 缓存取
-    const pOnclick = (plusBtn&&plusBtn.getAttribute('onclick'))||'';
-    const pm = pOnclick.match(/openTradeMenu\('${code}','[^']*',([\d.]+|null),event\)/);
-    let price = (pm && pm[1]!=='null') ? parseFloat(pm[1]) : null;
-    if(!price && _POSITIONS[code] && _POSITIONS[code].price) price = _POSITIONS[code].price;
-    const html = markNameHtml(code, name, price);
-    cell.outerHTML = html;
-  });
+  return `<div class="nm-cell"><a class="nm" data-code="${code}"  onclick="gotoStockAnalyze('${code}','${nmSafe}')" style="cursor:pointer;${nameStyle?' '+nameStyle:''}">${nm}${removedX}<span class="${triggerCls}" style="${trigStyle}" onclick="event.stopPropagation();openMarkMenu('${code}','${nmSafe}',event)" oncontextmenu="event.stopPropagation();openMarkMenu('${code}','${nmSafe}',event);return false">${triggerCh}</span></a></div>`;
 }
 
 function markKey(ch){
@@ -5743,13 +5498,7 @@ function refreshMarkBadgesInTables(){
       if(node.nodeType===3){ name += node.nodeValue; }
     }
     name = name.trim();
-    // 取当前价: 优先从 + 按钮 onclick 中解析, 失败则从 _POSITIONS 缓存取
-    const plusBtn = cell.querySelector('.pos-plus');
-    const pOnclick = (plusBtn&&plusBtn.getAttribute('onclick'))||'';
-    const pm = pOnclick.match(/openTradeMenu\('${code}','[^']*',([\d.]+|null),event\)/);
-    let price = (pm && pm[1]!=='null') ? parseFloat(pm[1]) : null;
-    if(!price && _POSITIONS[code] && _POSITIONS[code].price) price = _POSITIONS[code].price;
-    const html = markNameHtml(code, name, price);
+    const html = markNameHtml(code, name);
     cell.outerHTML = html;
   });
 }
@@ -5758,16 +5507,10 @@ function refreshMarkBadgesInTables(){
 function refreshMkTabCounts(){
   const tabs = $('#mkTabs');
   if(!tabs) return;
-  const counts = {quote:0, star:0, bang:0, removed:0, holding:0, closed:0, todayops:0};
-  const today = new Date().toISOString().slice(0,10);
+  const counts = {quote:0, star:0, bang:0, removed:0};
   Object.values(_MARKS).forEach(m=>{
     if(m.removed) counts.removed++;
     else if(m.mark) counts[markKey(m.mark)] = (counts[markKey(m.mark)]||0)+1;
-  });
-  Object.values(_POSITIONS).forEach(p=>{
-    if(p.lots>0) counts.holding++;
-    else if(p.operations && p.operations.length) counts.closed++;
-    (p.operations||[]).forEach(o=>{ if(o.date===today) counts.todayops++; });
   });
   tabs.querySelectorAll('.mk-tab').forEach(t=>{
     const k = t.dataset.mk;
@@ -5788,12 +5531,7 @@ function bindMkTabs(){
   });
 }
 async function renderMkTable(){
-  // 持仓/已清仓/今日操作 tab 走独立渲染
-  if(mkCurrentTab==='holding'){ return renderHoldingTable(); }
-  if(mkCurrentTab==='closed'){ return renderClosedTable(); }
-  if(mkCurrentTab==='todayops'){ return renderTodayOpsTable(); }
   const tb = $('#tbodyMk'); if(!tb) return;
-  // 还原表头 (持仓/已清仓会改动表头)
   const thead = $('#tblMk thead');
   if(thead) thead.innerHTML = `<tr>
     <th style="width:40px">#</th>
@@ -5834,197 +5572,6 @@ async function renderMkTable(){
     }).join('');
   }catch(e){
     tb.innerHTML='<tr><td colspan="6" class="empty">加载失败: '+esc(e.message||e)+'</td></tr>';
-  }
-}
-
-// 持仓股票 tab 渲染
-async function renderHoldingTable(){
-  const tb = $('#tbodyMk'); if(!tb) return;
-  const thead = $('#tblMk thead');
-  if(thead) thead.innerHTML = `<tr>
-    <th style="width:40px">#</th>
-    <th class="l">股票</th>
-    <th>持仓(手)</th>
-    <th>成本价</th>
-    <th>现价</th>
-    <th>持仓市值</th>
-    <th>浮动盈亏</th>
-    <th>收益率</th>
-    <th>首次买入</th>
-    <th>操作</th>
-  </tr>`;
-  tb.innerHTML='<tr><td colspan="10" class="empty"><span class="spin"></span>加载中…</td></tr>';
-  try{
-    const r=await fetch('/api/positions/holding');
-    const d=await r.json();
-    const list = d.positions||[];
-    // 同步到本地缓存
-    list.forEach(p=>{ _POSITIONS[p.code] = {..._POSITIONS[p.code], ...p}; });
-    if(!list.length){
-      tb.innerHTML=`<tr><td colspan="10" class="empty">暂无持仓股票</td></tr>`;
-      return;
-    }
-    tb.innerHTML = list.map((s,i)=>{
-      const lots = s.lots||0;
-      const avg = s.avg_cost||0;
-      const price = s.price;
-      const mv = s.mark_value||0;
-      const pnl = s.unrealized_pnl||0;
-      const pnlPct = s.pnl_pct;
-      const pnlClr = pnl>=0?'var(--up)':'var(--down)';
-      const pnlPctClr = (pnlPct||0)>=0?'var(--up)':'var(--down)';
-      // 首次买入时间
-      const firstBuy = (s.operations||[]).find(o=>o.type==='buy');
-      const firstDate = firstBuy? firstBuy.time : (s.created_at||'—');
-      return `<tr>
-        <td>${i+1}</td>
-        <td class="l">
-          ${markNameHtml(s.code, s.name, price)}
-          <div class="code"><a class="cd-link"  href="https://stockpage.10jqka.com.cn/${s.code}/" target="_blank" rel="noopener" onclick="openStock('${s.code}','${s.name}',event)">${mkt(s.code)}</a></div>
-        </td>
-        <td><b style="color:var(--accent)">${lots}</b></td>
-        <td>${avg>0?avg.toFixed(2):'—'}</td>
-        <td>${price?price.toFixed(2):'—'}</td>
-        <td>${mv>0?mv.toLocaleString():'—'}</td>
-        <td style="color:${pnlClr};font-weight:600">${pnl>=0?'+':''}${pnl.toLocaleString()}</td>
-        <td style="color:${pnlPctClr};font-weight:600">${pnlPct!=null?(pnlPct>=0?'+':'')+pnlPct.toFixed(2)+'%':'—'}</td>
-        <td class="mk-time">${firstDate}</td>
-        <td>
-          <span class="pos-plus"  onclick="event.stopPropagation();openTradeMenu('${s.code}','${(s.name||'').replace(/'/g,"\\'")}',${price||'null'},event)">+</span>
-        </td>
-      </tr>`;
-    }).join('');
-  }catch(e){
-    tb.innerHTML='<tr><td colspan="10" class="empty">加载失败: '+esc(e.message||e)+'</td></tr>';
-  }
-}
-
-// 已清仓股票 tab 渲染
-async function renderClosedTable(){
-  const tb = $('#tbodyMk'); if(!tb) return;
-  const thead = $('#tblMk thead');
-  if(thead) thead.innerHTML = `<tr>
-    <th style="width:40px">#</th>
-    <th class="l">股票</th>
-    <th>买入时间</th>
-    <th>卖出时间</th>
-    <th>累计买入金额</th>
-    <th>累计卖出金额</th>
-    <th>已实现盈亏</th>
-    <th>收益率</th>
-    <th>操作</th>
-  </tr>`;
-  tb.innerHTML='<tr><td colspan="9" class="empty"><span class="spin"></span>加载中…</td></tr>';
-  try{
-    const r=await fetch('/api/positions/closed');
-    const d=await r.json();
-    const list = d.positions||[];
-    list.forEach(p=>{ _POSITIONS[p.code] = {..._POSITIONS[p.code], ...p}; });
-    if(!list.length){
-      tb.innerHTML=`<tr><td colspan="9" class="empty">暂无已清仓股票</td></tr>`;
-      return;
-    }
-    tb.innerHTML = list.map((s,i)=>{
-      const ops = s.operations||[];
-      const buys = ops.filter(o=>o.type==='buy');
-      const sells = ops.filter(o=>o.type==='sell');
-      const totalBuy = buys.reduce((a,o)=>a+(o.amount||0),0);
-      const totalSell = sells.reduce((a,o)=>a+(o.amount||0),0);
-      const realized = s.realized_pnl||0;
-      const retPct = totalBuy>0 ? (realized/totalBuy*100) : 0;
-      const pnlClr = realized>=0?'var(--up)':'var(--down)';
-      const retClr = retPct>=0?'var(--up)':'var(--down)';
-      const firstBuy = buys[0]? buys[0].time : '—';
-      const lastSell = sells.length? sells[sells.length-1].time : '—';
-      return `<tr>
-        <td>${i+1}</td>
-        <td class="l">
-          ${markNameHtml(s.code, s.name, s.price)}
-          <div class="code"><a class="cd-link"  href="https://stockpage.10jqka.com.cn/${s.code}/" target="_blank" rel="noopener" onclick="openStock('${s.code}','${s.name}',event)">${mkt(s.code)}</a></div>
-        </td>
-        <td class="mk-time">${firstBuy}</td>
-        <td class="mk-time">${lastSell}</td>
-        <td>${totalBuy>0?totalBuy.toLocaleString():'—'}</td>
-        <td>${totalSell>0?totalSell.toLocaleString():'—'}</td>
-        <td style="color:${pnlClr};font-weight:600">${realized>=0?'+':''}${realized.toLocaleString()}</td>
-        <td style="color:${retClr};font-weight:600">${retPct>=0?'+':''}${retPct.toFixed(2)}%</td>
-        <td>
-          <span class="del-btn" onclick="event.stopPropagation();openTradeMenu('${s.code}','${(s.name||'').replace(/'/g,"\\'")}',${s.price||'null'},event)">+</span>
-          <span class="del-btn" onclick="deletePosition('${s.code}')">🗑</span>
-        </td>
-      </tr>`;
-    }).join('');
-  }catch(e){
-    tb.innerHTML='<tr><td colspan="9" class="empty">加载失败: '+esc(e.message||e)+'</td></tr>';
-  }
-}
-
-async function deletePosition(code){
-  if(!confirm('确定删除该股票的全部持仓记录？此操作不可恢复。')) return;
-  try{
-    const r=await fetch('/api/position/'+encodeURIComponent(code),{method:'DELETE'});
-    const d=await r.json();
-    if(d.ok){
-      delete _POSITIONS[code];
-      refreshMkTabCounts();
-      if(mkCurrentTab==='closed') renderClosedTable();
-      else if(mkCurrentTab==='todayops') renderTodayOpsTable();
-      else refreshPosBadges();
-    } else { alert(d.msg||'删除失败'); }
-  }catch(e){ alert('网络错误: '+e.message); }
-}
-
-// 今日操作 tab 渲染
-async function renderTodayOpsTable(){
-  const tb = $('#tbodyMk'); if(!tb) return;
-  const thead = $('#tblMk thead');
-  if(thead) thead.innerHTML = `<tr>
-    <th style="width:40px">#</th>
-    <th class="l">股票</th>
-    <th>方向</th>
-    <th>手数</th>
-    <th>价格</th>
-    <th>金额</th>
-    <th>已实现盈亏</th>
-    <th>时间</th>
-    <th>操作</th>
-  </tr>`;
-  tb.innerHTML='<tr><td colspan="9" class="empty"><span class="spin"></span>加载中…</td></tr>';
-  try{
-    const r=await fetch('/api/positions/today');
-    const d=await r.json();
-    const list = d.operations||[];
-    if(!list.length){
-      tb.innerHTML=`<tr><td colspan="9" class="empty">今日暂无买卖操作</td></tr>`;
-      return;
-    }
-    tb.innerHTML = list.map((o,i)=>{
-      const isBuy = o.type==='buy';
-      const dirClr = isBuy?'var(--up)':'var(--down)';
-      const dirTxt = isBuy?'买入':'卖出';
-      const amt = o.amount||0;
-      const rpnl = o.realized_pnl;
-      const rpnlClr = (rpnl==null)?'var(--sub)':(rpnl>=0?'var(--up)':'var(--down)');
-      const rpnlTxt = (rpnl==null)?'—':((rpnl>=0?'+':'')+rpnl.toLocaleString());
-      return `<tr>
-        <td>${i+1}</td>
-        <td class="l">
-          <a class="nm" data-code="${o.code}"  onclick="gotoStockAnalyze('${o.code}','${(o.name||'').replace(/'/g,"\\'")}')" style="cursor:pointer">${esc(o.name||'—')}</a>
-          <div class="code"><a class="cd-link"  href="https://stockpage.10jqka.com.cn/${o.code}/" target="_blank" rel="noopener" onclick="openStock('${o.code}','${o.name}',event)">${mkt(o.code)}</a></div>
-        </td>
-        <td style="color:${dirClr};font-weight:600">${dirTxt}</td>
-        <td><b>${o.lots}</b></td>
-        <td>${o.price?o.price.toFixed(2):'—'}</td>
-        <td>${amt>0?amt.toLocaleString():'—'}</td>
-        <td style="color:${rpnlClr};font-weight:600">${rpnlTxt}</td>
-        <td class="mk-time">${o.time||'—'}</td>
-        <td>
-          <span class="del-btn" onclick="deleteOperation('${o.code}',${o.id})">🗑</span>
-        </td>
-      </tr>`;
-    }).join('');
-  }catch(e){
-    tb.innerHTML='<tr><td colspan="9" class="empty">加载失败: '+esc(e.message||e)+'</td></tr>';
   }
 }
 
@@ -6088,61 +5635,9 @@ function fallbackCopy(text){
   }catch(e){ /* ignore */ }
 }
 
-async function deleteOperation(code, opId){
-  try{
-    const r=await fetch(`/api/position/${encodeURIComponent(code)}/operation/${opId}`,{method:'DELETE'});
-    const d=await r.json();
-    if(d.ok){
-      const removed = d.removed||{};
-      const opTxt = (removed.type==='buy'?'买入':'卖出') + ' ' + (removed.lots||0) + '手';
-      if(d.position){
-        _POSITIONS[code] = {..._POSITIONS[code], ...d.position};
-      } else {
-        delete _POSITIONS[code];
-      }
-      refreshMkTabCounts();
-      refreshPosBadges();
-      if(mkCurrentTab==='todayops') renderTodayOpsTable();
-      else if(mkCurrentTab==='holding') renderHoldingTable();
-      else if(mkCurrentTab==='closed') renderClosedTable();
-      // 显示带撤销按钮的 toast
-      showToast(`已删除 ${opTxt} 操作`, {
-        undo: true,
-        duration: 6000,
-        onUndo: ()=> undoDelete(),
-      });
-    } else { alert(d.msg||'删除失败'); }
-  }catch(e){ alert('网络错误: '+e.message); }
-}
-
-async function undoDelete(){
-  try{
-    const r=await fetch('/api/position/undo',{method:'POST'});
-    const d=await r.json();
-    if(d.ok){
-      const code = d.position.code;
-      _POSITIONS[code] = {..._POSITIONS[code], ...d.position};
-      refreshMkTabCounts();
-      refreshPosBadges();
-      if(mkCurrentTab==='todayops') renderTodayOpsTable();
-      else if(mkCurrentTab==='holding') renderHoldingTable();
-      else if(mkCurrentTab==='closed') renderClosedTable();
-      showToast('已撤销删除，操作已恢复', {duration:2500});
-    } else {
-      alert(d.msg||'撤销失败');
-    }
-  }catch(e){ alert('网络错误: '+e.message); }
-}
-
-// 页面启动时加载标记 + 持仓 + 绑定标记管理 tab
+// 页面启动时加载标记 + 绑定标记管理 tab
 loadMarks();
-loadPositions();
 bindMkTabs();
-// ============================================================
-// 股票名称悬浮K线预览: 鼠标停在名称上弹出近半年日K迷你图
-// 事件委托绑定所有 a.nm, 无需逐个渲染函数接入; 每只股票前端缓存一次
-// ============================================================
-let _kdTimer = null, _kdPopup = null, _kdHideTimer = null;
 const _kdCache = {};
 // 20260920: 历史信号反查缓存 (slow ~3s), 同一股票只请求一次
 const _histSigCache = {};
@@ -6544,12 +6039,8 @@ function renderHistory(rec){
 $('#histRefreshBtn').onclick = () => { histCurrentDate = null; loadHistoryDates(); };
 const mkRf=$('#mkRefreshBtn'); if(mkRf) mkRf.onclick=()=>{
   loadMarks().then(()=>{
-    if(mkCurrentTab==='holding') renderHoldingTable();
-    else if(mkCurrentTab==='closed') renderClosedTable();
-    else if(mkCurrentTab==='todayops') renderTodayOpsTable();
-    else renderMkTable();
+    renderMkTable();
   });
-  loadPositions();
 };
 
 </script>
