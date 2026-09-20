@@ -7,7 +7,8 @@ PIDFILE="/workspace/.uvicorn.pid"
 
 start_server() {
     echo "[$(date '+%F %T')] starting uvicorn..." >> "$LOG"
-    nohup .venv/bin/python -m uvicorn app:app --host 127.0.0.1 --port 8000 > /workspace/uvicorn.log 2>&1 &
+    PY=".venv/bin/python"; [ -x "$PY" ] || PY="$(command -v python3 || command -v python)"
+    nohup "$PY" -m uvicorn app:app --host 127.0.0.1 --port 8000 > /workspace/uvicorn.log 2>&1 &
     echo $! > "$PIDFILE"
     sleep 2
     if kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
