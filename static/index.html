@@ -3878,6 +3878,12 @@ const MA_PATS=[
   ['上试盘·已确认','C池：今日刚放量×1.01突破试盘高点 + 量比≥2 + 沪深300在MA20上方，当日收盘买入'],
 ];
 const SSP_KIND_TAB_OFFSET = 10; // tabIndex 10/11/12 对应 A/B/C 池
+// 子tab显示名 (20260918): 单字前缀·精简名, 表达分组 日/周/试; 仅用于渲染文本, 内部匹配仍用 p[0] 原名(后端 counts 按原名)
+const DISP_MA_NAME=[
+  '日·多头排列','日·多头发散','日·粘合上突','日·空头发散','日·粘合下突','日·KDJ背离','日·MACD背离',
+  '周·强势主升','周·趋势回踩','周·底部反转',
+  '试·新信号','试·观察池','试·已确认'
+];
 let maCurrentTab=0;
 let maData=null;
 let sspData=null;   // 上试盘三池缓存 {new_signals,watch_pool,confirmed_pool,counts,mkt_filter,updated,running,progress,error}
@@ -3949,7 +3955,7 @@ function renderMATabs(){
     const title = isSsp ? `上试盘策略 ${['A池·新信号','B池·观察','C池·已确认买入'][i-SSP_KIND_TAB_OFFSET]||''}` : '';
     // 看跌形态(名称含"向下")加绿色标识 (20260906)
     const bearCls = (!isSsp && p[0].includes('向下')) ? ' bear' : '';
-    return `<div class="ma-tab ${i===maCurrentTab?'active':''} ${isSsp?'ssp-tab':''}${bearCls}" title="${title||p[1]}" data-i="${i}">${p[0]}<span class="cnt">${c}</span></div>`;
+    return `<div class="ma-tab ${i===maCurrentTab?'active':''} ${isSsp?'ssp-tab':''}${bearCls}" title="${title||p[1]}" data-i="${i}">${DISP_MA_NAME[i]||p[0]}<span class="cnt">${c}</span></div>`;
   }).join('');
   $('#maTabs').querySelectorAll('.ma-tab').forEach(t=>{
     t.onclick=()=>{
