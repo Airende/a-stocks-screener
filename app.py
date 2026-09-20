@@ -6555,6 +6555,54 @@ _ma_state = {"data": None, "running": False, "error": None, "progress": "",
              "atr_conds": ["e2"]}  # ATR过滤勾选项 (20260906): e1/e2/e3 多选满足其一
 _MA_CACHE_TTL = 300  # 5分钟
 
+# ============================================================
+# 盘中现价冻结 (20260920 稳定化)
+# 目的: 均线形态判定依赖"当日实时现价"(由 cache 命中时 _patch_today_bar_from_spot
+# 用最新 spot 实时覆盖)。现价逐笔波动会让均线贴价的边界股在多/空之间来回横跳，
+# 导致同一刷新点、两台电脑或两次刷新数量不一致。
+# 方案: 同一天盘中只采用第一次取到的现价作为当日 close 基准并冻结，之后多次刷新
+# 复用同一基准；收盘后不冻结，直接用最终收盘价。使判定结果可复现一致。
+# 仅作用于均线筛选线程, 不污染通用 fetch_kline / 个股分析缓存。
+# ============================================================
+_FROZEN_DATE = None                        # 冻结所属交易日 YYYY-MM-DD
+_FROZEN_CLOSE: dict[str, float] = {}       # symbol -> 当日冻结现价
+_FROZEN_LOCK = threading.Lock()
+
+
+def _frozen_today_price(symbol: str, cur_price: float | None, today_date: str) -> float | None:
+    """盘中冻结当日价: 首次取到记为基准, 之后复用。返回冻结后的 close。"""
+    global _FROZEN_DATE, _FROZEN_CLOSE
+    if cur_price is None or cur_price <= 0:
+        return cur_price
+    with _FROZEN_LOCK:
+        if _FROZEN_DATE != today_date:      # 新交易日, 重置冻结表
+            _FROZEN_DATE = today_date
+            _FROZEN_CLOSE = {}
+        if symbol not in _FROZEN_CLOSE:
+            _FROZEN_CLOSE[symbol] = float(cur_price)
+        return _FROZEN_CLOSE[symbol]
+
+
+def _apply_frozen_today_bar(bars: list[dict], symbol: str, today_date: str,
+                            frozen_enabled: bool) -> list[dict]:
+    """对均线筛选使用的 bars 冻结当日 close。
+    frozen_enabled=False(收盘后) 原样返回; 仅操作副本, 避免污染内存/文件缓存。"""
+    if not frozen_enabled or not bars:
+        return bars
+    last = bars[-1]
+    if (last.get("day") or "")[:10] != today_date:
+        return bars
+    cur = last.get("close")
+    if cur is None:
+        return bars
+    fz = _frozen_today_price(symbol, cur, today_date)
+    if fz == cur:
+        return bars
+    bars = bars.copy()                 # 克隆, 防止改写共享缓存引用
+    bars[-1] = dict(last)
+    bars[-1]["close"] = fz
+    return bars
+
 
 def classify_ma_pattern(bars: list[dict]) -> str | None:
     """分类均线形态, 返回形态名或None"""
@@ -6928,9 +6976,19 @@ def _run_ma_screen_thread():
         def process_stock(cand):
             symbol = _to_symbol(cand["code"])
             # 周线形态需52周≈260日数据, 取300日保证充足
-            bars = fetch_kline(symbol, datalen=300)
+            # K线失败自动重试(20260920 稳定化): 网络/反爬临时失败时重试, 减少随机漏判
+            bars = None
+            for _attempt in range(3):
+                try:
+                    bars = fetch_kline(symbol, datalen=300)
+                    if bars and len(bars) >= 70:
+                        break
+                except Exception:  # noqa: BLE001
+                    bars = None
             if not bars or len(bars) < 70:
                 return None
+            # 盘中冻结当日现价(20260920 稳定化): 均线判定跨刷新/跨电脑可复现一致
+            bars = _apply_frozen_today_bar(bars, symbol, today_iso, not after_close)
             pat = classify_ma_pattern(bars)  # 均线形态; 可能为None(此时仅可能命中背离tab)
             # 周线均线形态筛选 (A/B/C三类 + 一票否决)
             weekly_pats, weekly_snap = classify_weekly_ma_pattern(bars)
