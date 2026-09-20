@@ -8785,14 +8785,23 @@ _DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 _storage_backend = None   # None=未初始化; 初始化后: 'postgres' | 'sqlite' | 'supabase_rest' | 'file'
 _STORAGE_LOG_TAG = "[storage]"
 
+# ---- 多机共享兜底凭据 (20260920) ----
+# .env 不入 git, 其他电脑 clone 后没有 .env 会导致云端不启用、自选/标记只剩本地空数据。
+# 为保证"真正的跨电脑共享", 当环境变量缺失时内置走同一套 Supabase 云端 (anon key 为公开只读凭据)。
+# 优先级: 环境变量 > .env 文件 > 内置默认。想指向别的项目, 在 .env 里覆盖即可。
+_DEFAULT_SUPABASE_REF = "oxsqqngljiuvrfmbclio"
+_DEFAULT_SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im94c3Fxbmdsaml1dnJmbWJjbGlvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg2NjE2OTMsImV4cCI6MjEwNDIzNzY5M30.EZRVn3TewJ-R2PcSL4X67fxj2rOckiBXcw3kiaSJZIs"
+
 # Supabase REST API (HTTPS, 走沙箱代理, 绕过 5432 端口封锁):
-# 需要 SUPABASE_ANON_KEY; project ref 从 SUPABASE_PROJECT_REF 或 DATABASE_URL 提取。
-_SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "").strip()
+# 需要 SUPABASE_ANON_KEY; project ref 从 SUPABASE_PROJECT_REF / DATABASE_URL / 内置默认 提取。
+_SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "").strip() or _DEFAULT_SUPABASE_ANON
 _SUPABASE_PROJECT_REF = os.environ.get("SUPABASE_PROJECT_REF", "").strip()
 if not _SUPABASE_PROJECT_REF and _DATABASE_URL:
     _m = __import__("re").search(r"([a-z]{20})\.supabase\.co", _DATABASE_URL)
     if _m:
         _SUPABASE_PROJECT_REF = _m.group(1)
+if not _SUPABASE_PROJECT_REF:
+    _SUPABASE_PROJECT_REF = _DEFAULT_SUPABASE_REF
 _SUPABASE_REST_URL = (f"https://{_SUPABASE_PROJECT_REF}.supabase.co/rest/v1/kv_state"
                       if _SUPABASE_PROJECT_REF else "")
 
