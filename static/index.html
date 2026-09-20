@@ -6024,6 +6024,8 @@ bindMkTabs();
 // ============================================================
 let _kdTimer = null, _kdPopup = null, _kdHideTimer = null;
 const _kdCache = {};
+// 20260920: 历史信号反查缓存 (slow ~3s), 同一股票只请求一次
+const _histSigCache = {};
 function _kdRemove(){ if(_kdPopup){ _kdPopup.remove(); _kdPopup = null; } }
 function _kdCancelHide(){ if(_kdHideTimer){ clearTimeout(_kdHideTimer); _kdHideTimer = null; } }
 function _kdHide(){
@@ -6090,9 +6092,10 @@ function kdMultiChart(bars){
   const grid1=[0,0.5,1].map(f=>{ const v=hi-f*rng1, yy=yFn1(v);
     return `<line x1="${padL}" y1="${yy.toFixed(1)}" x2="${w-padR}" y2="${yy.toFixed(1)}" stroke="rgba(255,255,255,.05)"/>`+
            `<text x="${w-padR+3}" y="${(yy+3).toFixed(1)}" fill="#5a6a82" font-size="9">${v.toFixed(2)}</text>`; }).join('');
+  const cid1='kd'+(++_chartSeq);
   // 20260920: 历史形态信号标注 (红"多"/青"破"/蓝"强"/金"观" 等一字简称), 由调用方异步注入
   // sig 关闭 xi/yFn1/n/bars 映射, kdAddSigs 据 histSigs 渲染 <text> 挂到 #${cid1}_sig
-  const sigLayerId='kd'+(++_chartSeq)+'_sig';
+  const sigLayerId=cid1+'_sig';
   const sig = (histSigs, escFn)=>{               // escFn 供特殊字符转义
     if(!histSigs) return '';
     let out='';
@@ -6111,7 +6114,6 @@ function kdMultiChart(bars){
     }
     return out;
   };
-  const cid1='kd'+(++_chartSeq);
   _chartReg[cid1]={bars, w, h:h1, padL, padR, n,
     tipFn:(b)=>{ const c=(b.chg!=null&&!isNaN(b.chg));
       return `<b>${esc(b.day||'')}</b><br>开 ${b.open} · 高 ${b.high}<br>低 ${b.low} · 收 <b>${b.close}</b> ${c?'<span style="color:'+(b.chg>=0?'#ff4d4f':'#26a69a')+'">'+(b.chg>=0?'+':'')+b.chg.toFixed(2)+'%</span>':''}`; }};
@@ -6258,14 +6260,22 @@ async function showKlinePreview(code, anchor){
     _kdPlace(pop, anchor);
     bindChartInteractivity(pop);  // 三个面板各自绑定十字光标+悬浮 (20260906)
     // 20260920: K线先渲染, 历史信号异步加载后注入对应日期K线上方 (标注小字, 不阻塞浮窗)
+    // 同一股票历史信号缓存, 避免反复请求慢接口(~3s)
     (async()=>{
-      try{
-        const r = await fetch('/api/stock/hist-signals?code=' + encodeURIComponent(code));
-        const j = await r.json();
-        if(!j.dates || !renderMarkup.sig) return;
-        const m = {}; (j.dates||[]).forEach(dd => { m[dd.date] = dd.signals; });
-        kdAddSigs(renderMarkup.c1, renderMarkup.sig, m);
-      }catch(e){ /* 标注失败不影响K线显示 */ }
+      let m=null;
+      if(_histSigCache && code in _histSigCache) m=_histSigCache[code];
+      else{
+        try{
+          const r = await fetch('/api/stock/hist-signals?code=' + encodeURIComponent(code));
+          const j = await r.json();
+          if(j.dates){
+            m={}; (j.dates||[]).forEach(dd => { m[dd.date] = dd.signals; });
+            _histSigCache[code]=m;
+          }
+        }catch(e){}
+      }
+      if(!m || !renderMarkup.sig) return;
+      kdAddSigs(renderMarkup.c1, renderMarkup.sig, m);
     })();
   }catch(e){
     if(_kdPopup === pop) pop.innerHTML = '<div class="empty">加载失败</div>';
