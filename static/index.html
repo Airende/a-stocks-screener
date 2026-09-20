@@ -1986,6 +1986,8 @@ async function analyzeStock(code, date){
     const d=await r.json();
     _curAnalysis=d;
     renderAnalysis(d);
+    // 双向同步: 个股分析 / 缠论结构 显示同一只股票, 两个搜索框同步显示当前股票名 (20260920)
+    syncAnalysisViews(d);
     // 并行绘制上试盘信号点 markers 到 K 线 SVG (不阻塞后续流程)
     // 历史时点模式下只画基准日及之前的信号 (20260906)
     applySSPMarkersToAnalysisChart(code, d.bars||[], d.is_historical ? d.as_of_date : null).catch(()=>{});
@@ -1993,6 +1995,13 @@ async function analyzeStock(code, date){
   }catch(e){
     saPanel.innerHTML='<div class="empty">加载失败: '+e.message+'</div>';
   }
+}
+// 双Tab搜索同步 (20260920): 个股分析 / 缠论结构 搜索同一股票后, 两个搜索框同步显示当前股票名,
+// 缠论框由 renderAnalysis 经 _chanLastBox + moveChanToTab 在切换tab时保持同一只股票
+function syncAnalysisViews(d){
+  const nm = (d && d.name) ? d.name : (_curAnalysis ? (_curAnalysis.name||_curAnalysis.code) : '');
+  try{ if(saInput) saInput.value = nm; }catch(e){}
+  try{ if(chanInput) chanInput.value = nm; }catch(e){}
 }
 
 // ===== 上试盘: 在个股分析 K 线 SVG 上叠加标记 =====
