@@ -6547,7 +6547,7 @@ def api_stock_chan(code: str = "", period: str = "day", start_dir: str = "auto")
 # 均线形态筛选模块
 # ============================================================
 MA_PATTERNS = ["多头排列", "多头排列向上发散", "粘合向上突破", "空头排列向下发散", "粘合向下突破",
-               "KDJ底背离", "MACD底背离",
+               "日线背离",
                "周线A·强势主升", "周线·埋伏"]
 
 _ma_state = {"data": None, "running": False, "error": None, "progress": "",
@@ -6703,7 +6703,7 @@ WEEKLY_PATTERNS = ["周线A·强势主升", "周线·埋伏"]
 PATTERNS_NEED_WEEKLY_VETO = {
     "多头排列", "多头排列向上发散", "粘合向上突破",      # 日线向上形态
     "空头排列向下发散", "粘合向下突破",                  # 日线向下形态
-    "KDJ底背离", "MACD底背离",                          # 背离形态
+    "日线背离",                                           # 背离形态 (KDJ/MACD底背离合并, 20260920)
 }
 
 
@@ -7019,7 +7019,7 @@ def _run_ma_screen_thread():
                       or ("e2" in atr_conds and 3 <= atr_pct <= 8)
                       or ("e3" in atr_conds and atr_shrink))
                 ma_pass = ok
-            # 背离判定: KDJ底背离 / MACD底背离 → 独立 tab
+            # 背离判定: KDJ/MACD底背离 → 合并为"日线背离" tab (20260920 二合一)
             k_arr, d_arr, j_arr = calc_kdj(highs_a, lows_a, closes)
             dif_arr, _dea_arr, _hist_arr = calc_macd(closes)
             kdj_bottom = _calc_kdj_bottom_diverge(closes, highs_a, lows_a, j_arr)
@@ -7033,10 +7033,8 @@ def _run_ma_screen_thread():
                     pass  # 周线否决未通过, 剔除
                 else:
                     pats.append(pat)
-            if kdj_bottom and ("KDJ底背离" not in PATTERNS_NEED_WEEKLY_VETO or veto_pass):
-                pats.append("KDJ底背离")
-            if macd_bottom and ("MACD底背离" not in PATTERNS_NEED_WEEKLY_VETO or veto_pass):
-                pats.append("MACD底背离")
+            if (kdj_bottom or macd_bottom) and ("日线背离" not in PATTERNS_NEED_WEEKLY_VETO or veto_pass):
+                pats.append("日线背离")
             # 周线形态 (已通过否决条件, 直接加入)
             for wp in weekly_pats:
                 pats.append(wp)
