@@ -7208,6 +7208,8 @@ _SSP_STATE = {
     "confirmed_pool": [],     # 已确认买入 C 池（若今天出现确认信号）
     # 状态
     "running": False, "progress": "", "error": None,
+    "total": 0,               # 预筛候选池总数 (从多少只里筛)
+    "scanned": 0,             # 实际完成扫描数 (成功拉取并判定)
     "lock": threading.Lock(),
 }
 _SSP_CACHE_TTL = 1800  # 30分钟自动重扫; 用户也可手动点击"更新"
@@ -7419,6 +7421,9 @@ def _run_ssp_scan_thread():
             if amt < 1e8: continue
             cands.append({"code": code, "name": name, "row": r})
         total = len(cands)
+        with _SSP_STATE["lock"]:
+            _SSP_STATE["total"] = total
+            _SSP_STATE["scanned"] = 0
         _SSP_STATE["progress"] = f"预筛 {total} 只 · 环境判断中…"
         mkt_ok = _ssp_hs300_above_ma20()
         _SSP_STATE["mkt_filter"] = mkt_ok
@@ -7530,6 +7535,7 @@ def _run_ssp_scan_thread():
                 done[0] += 1
                 if done[0] % 40 == 0 or done[0] == total:
                     with _SSP_STATE["lock"]:
+                        _SSP_STATE["scanned"] = done[0]
                         _SSP_STATE["progress"] = f"扫描中 {done[0]}/{total}"
                 try:
                     r = fut.result(timeout=90)
@@ -7580,6 +7586,7 @@ def _run_ssp_scan_thread():
             _SSP_STATE["new_signals"] = new_sigs
             _SSP_STATE["watch_pool"] = watch_pool
             _SSP_STATE["confirmed_pool"] = confirmed_today
+            _SSP_STATE["scanned"] = done[0]
             _SSP_STATE["progress"] = f"完成 {done[0]}/{total} · 用时 {time.time()-t0:.1f}s"
     except Exception as e:
         with _SSP_STATE["lock"]:
@@ -7607,12 +7614,14 @@ def api_ssp_screen():
         running = _SSP_STATE["running"]; progress = _SSP_STATE["progress"]
         err = _SSP_STATE["error"]; updated = _SSP_STATE["updated"]
         mkt = bool(_SSP_STATE["mkt_filter"])
+        total0 = _SSP_STATE.get("total", 0); scanned0 = _SSP_STATE.get("scanned", 0)
         ns = list(_SSP_STATE["new_signals"]); wp = list(_SSP_STATE["watch_pool"])
         cp = list(_SSP_STATE["confirmed_pool"])
     counts = {"上试盘·新信号": len(ns), "上试盘·观察池": len(wp), "上试盘·已确认": len(cp)}
     # 20260906 用户改: 弱市仅横幅警示, 不再强制清空确认池(移除此前的兜底清空逻辑)
     return JSONResponse({"running": running, "progress": progress, "error": err,
                          "updated": updated, "mkt_filter": mkt,
+                         "total": total0, "scanned": scanned0,
                          "new_signals": ns, "watch_pool": wp, "confirmed_pool": cp,
                          "counts": counts})
 

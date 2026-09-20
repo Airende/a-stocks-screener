@@ -1307,7 +1307,7 @@ function syncStatusStrip(){
   // 均线 + 上试盘 合并显示在均线分组头部 (原顶部状态条已移除 20260918)
   const ma = maData || {}, sp = sspData || {};
   const maTxt = ma.updated ? (ma.updated + (ma.elapsed_sec?` · ${ma.elapsed_sec}s`:'')) : '尚未筛选';
-  const spTxt = sp.updated ? ('上试盘 · 更新 '+sp.updated) : '';
+  const spTxt = sp.updated ? ('上试盘 · 更新 '+sp.updated + (sp.total?` · 从 ${sp.total} 只筛选`:'')) : '';
   setStripItem('Ma', spTxt ? (maTxt+' ｜ '+spTxt) : maTxt, !!(ma.running||sp.running));
 }
 // ---- 表格分页 (均线表/主筛选表, 首屏50行, 加载更多) ----
@@ -4062,7 +4062,7 @@ function fetchSspData(autoPoll){
     } else {
       clearSspPoll();
       // 更新时间
-      $('#maUpdated').textContent = d.updated ? `上试盘扫描更新 ${d.updated}${d.progress?' · '+d.progress:''}` : ($('#maUpdated').textContent||'');
+      $('#maUpdated').textContent = d.updated ? `上试盘扫描更新 ${d.updated}${d.total?` · 从 ${d.total} 只筛选`:''}${d.progress?' · '+d.progress:''}` : ($('#maUpdated').textContent||'');
     }
   }).catch(()=>{});
 }
