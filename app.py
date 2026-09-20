@@ -5482,7 +5482,12 @@ def _build_search_index(force: bool = False):
         from pypinyin import lazy_pinyin
     except ImportError:
         lazy_pinyin = None
-    spot = fetch_spot_all()
+    # 行情源不可用(如新浪主源熔断且本地无股票池缓存)时返回空, 而非让调用方500
+    try:
+        spot = fetch_spot_all()
+    except Exception as e:  # noqa: BLE001
+        print(f"[search-index] 行情源暂不可用, 返回空索引: {type(e).__name__}: {e}", flush=True)
+        return
     items = []
     for r in spot:
         code = r.get("code", "")
