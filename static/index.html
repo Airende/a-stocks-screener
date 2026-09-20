@@ -921,6 +921,23 @@
     <div class="watch-panel" id="watchPanel" style="display:none"></div>
   </div>
 
+  <!-- ===== 自选盯盘: 与持仓盯盘逻辑一致, 独立列表 (20260920) ===== -->
+  <div id="watchBarSelf" class="watch-bar">
+    <div class="watch-head">
+      <span class="tt">自选盯盘</span>
+      <span class="agg" id="watchAggSelf"></span>
+      <div class="watch-add">
+        <div class="watch-search">
+          <input id="watchInputSelf" placeholder="输入代码/名称/拼音，如 002905、华阳、hyjt" maxlength="30" autocomplete="off">
+          <div class="sa-dropdown" id="watchDropdownSelf"></div>
+        </div>
+        <button id="watchAddBtnSelf">添加</button>
+      </div>
+    </div>
+    <div class="watch-wrap"><div class="watch-cards" id="watchCardsSelf"></div></div>
+    <div class="watch-panel" id="watchPanelSelf" style="display:none"></div>
+  </div>
+
   <div class="main-tabs" id="mainTabs">
     <div class="main-tab active" data-pane="pane-ma">均线形态筛选</div>
     <div class="main-tab" data-pane="pane-cond">选股条件</div>
@@ -4584,22 +4601,29 @@ async function loadIndicesRealtime(){
     }
   }catch(e){}
 }
-// ===== 自选股盯盘栏 (statusStrip 下方) · 后端持久化 (20260918) =====
-async function loadWatch(){
+// ===== 盯盘栏 (持仓hold / 自选self) · 后端持久化 (20260918) =====
+// 两人栏逻辑完全一致, 通过 _WBAR 配置隔离 DOM id/分时canvas前缀/接口scope/状态
+const _WBARS={
+  hold:{scope:'hold', t:0, agg:'watchAgg', cards:'watchCards', panel:'watchPanel', input:'watchInput', dd:'watchDropdown', btn:'watchAddBtn', data:null, active:null},
+  self:{scope:'self', t:1, agg:'watchAggSelf', cards:'watchCardsSelf', panel:'watchPanelSelf', input:'watchInputSelf', dd:'watchDropdownSelf', btn:'watchAddBtnSelf', data:null, active:null},
+};
+function _wbar(scope){ return _WBARS[scope]||_WBARS.hold; }
+function _watchMinId(bar, cd){ return 'minChart'+(bar.t?'_s.':'')+cd; }  // 分时canvas id 按栏加前缀, 防两栏同名冲突
+
+async function loadWatch(scope){
+  const bar=_wbar(scope);
   try{
-    const r=await fetch('/api/watchlist'); const d=await r.json();
-    _watchData=d;
-    renderWatch(d);
-    if(_activeWatchCode) renderWatchPanel(_activeWatchCode);
+    const r=await fetch('/api/watchlist?scope='+bar.scope); const d=await r.json();
+    bar.data=d;
+    renderWatch(d, bar);
+    if(bar.active) renderWatchPanel(bar.active, bar);
   }catch(e){}
 }
-let _watchData=null;      // 最近一次 /api/watchlist 响应
-let _activeWatchCode=null; // 当前展开研判面板的自选代码
 
 // ===== 自选拖拽排序: 长按600ms进入拖动, 松手提交新顺序到后端 =====
 let _wdDrag=null;
-function initWatchDrag(){
-  const cards=document.getElementById('watchCards');
+function initWatchDrag(bar){
+  const cards=document.getElementById(bar.cards);
   if(!cards || cards.__dragInit) return;
   cards.__dragInit=true;
   let timer=null, armed=false, dragging=false, dragEl=null;
@@ -4688,7 +4712,7 @@ function initWatchDrag(){
       else cards.insertBefore(dragEl, others[slot]);
       dragEl=null; armed=false; dragging=false;
       const order=Array.prototype.map.call(cards.querySelectorAll('.watch-card'),el=>el.dataset.code);
-      try{ const r=await fetch('/api/watchlist/order',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({order})}); if(r.ok){ const d=await r.json(); if(d.quotes) _watchData=d; } }catch(_){}
+      try{ const r=await fetch('/api/watchlist/order',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({order, scope:bar.scope})}); if(r.ok){ const d=await r.json(); if(d.quotes) bar.data=d; } }catch(_){}
     }
     clearShift();
     cards.classList.remove('dragging-active');
@@ -4708,8 +4732,9 @@ function initWatchDrag(){
   cards.addEventListener('pointerup',onUp);
   cards.addEventListener('pointercancel',cancel);
 }
-function renderWatch(d){
-  const cards=document.getElementById('watchCards'); const agg=document.getElementById('watchAgg');
+function renderWatch(d, bar){
+  if(!bar) bar=_WBARS.hold;
+  const cards=document.getElementById(bar.cards); const agg=document.getElementById(bar.agg);
   if(!cards) return;
   const q=d.quotes||[]; const s=d.sum||{up:0,down:0,flat:0};
   if(agg) agg.innerHTML=`今日 涨 <b class="up">${s.up}</b> · 跌 <b class="down">${s.down}</b> · 平 ${s.flat}`;
@@ -4739,14 +4764,14 @@ function renderWatch(d){
         '<span class="chg"></span>'+
         '<span class="sub"><span class="px"></span><span class="chgamt"></span></span>'+
         '<span class="nmwrap"><span class="nm"></span><span class="op"></span></span>';
-      el.querySelector('.rm').onclick=(e)=>{e.stopPropagation();delWatch(cd);};
-      el.onclick=()=>selectWatch(cd);
+      el.querySelector('.rm').onclick=(e)=>{e.stopPropagation();delWatch(cd, bar);};
+      el.onclick=()=>selectWatch(cd, bar);
       cards.appendChild(el);
     }
     // 就地更新 class 与文本 (canvas 不销毁, 由 drawMiniSparks 持续重绘)
     const pcl=x.chg_pct>0?'up':(x.chg_pct<0?'down':'flat');
     const alarm = x.limit==='up' ? 'alarm-limit-up' : (x.limit==='down' ? 'alarm-limit-down' : (x.spike==='spike' ? 'alarm-spike' : ''));
-    const sel = cd===_activeWatchCode ? (' selected sel-'+((x.op==='买入')?'buy':(x.op==='减仓'?'sell':(x.op==='规避'?'avoid':'watch')))) : '';
+    const sel = cd===bar.active ? (' selected sel-'+((x.op==='买入')?'buy':(x.op==='减仓'?'sell':(x.op==='规避'?'avoid':'watch')))) : '';
     // 拖拽/长按进行中: 保留 dragging/armed 等拖拽类, 避免 2s 刷新把卡踢出 fixed 中断拖拽
     if(!el.classList.contains('dragging') && !el.classList.contains('armed')){
       el.className='watch-card '+pcl+' '+alarm+' '+sel;
@@ -4768,45 +4793,51 @@ function renderWatch(d){
   });
   drawMiniSparks();
 }
-function selectWatch(code){
-  _activeWatchCode = (code===_activeWatchCode) ? null : code;
-  const panel=document.getElementById('watchPanel');
-  if(!_activeWatchCode){ panel.style.display='none'; panel.innerHTML=''; panel.dataset.code=''; }
-  else { renderWatchPanel(_activeWatchCode); reloadWatchCardsSelected(); }
-  renderWatch(_watchData||{quotes:[],sum:{}});
+function selectWatch(code, bar){
+  bar=(typeof bar==='string')?_wbar(bar):(bar||_WBARS.hold);
+  bar.active = (code===bar.active) ? null : code;
+  const panel=document.getElementById(bar.panel);
+  if(!panel) return;
+  if(!bar.active){ panel.style.display='none'; panel.innerHTML=''; panel.dataset.code=''; }
+  else { renderWatchPanel(bar.active, bar); reloadWatchCardsSelected(bar); }
+  renderWatch(bar.data||{quotes:[],sum:{}}, bar);
 }
-function reloadWatchCardsSelected(){
-  const cards=document.getElementById('watchCards');
-  if(!cards||!_watchData) return;
+function reloadWatchCardsSelected(bar){
+  if(!bar) bar=_WBARS.hold;
+  const cards=document.getElementById(bar.cards);
+  if(!cards||!bar.data) return;
   Array.prototype.forEach.call(cards.querySelectorAll('.watch-card'),el=>{
     const hasSel=el.classList.contains('selected');
     // 已由 renderWatch 统一处理; 占位
   });
 }
-function renderWatchPanel(code){
-  const panel=document.getElementById('watchPanel');
+function renderWatchPanel(code, bar){
+  if(!bar) bar=_WBARS.hold;
+  const panel=document.getElementById(bar.panel);
   if(!panel) return;
-  const d=_watchData; if(!d) return;
+  const d=bar.data; if(!d) return;
   const x=(d.quotes||[]).find(q=>q.code===code);
   if(!x){ panel.style.display='none'; panel.innerHTML=''; panel.dataset.code=''; return; }
   panel.style.display='block';
   // 骨架仅在切换自选时重建一次, 之后仅就地更新数值 → 避免每 2s 整体 innerHTML 重建导致
   // 分时 canvas 被销毁重建而闪烁。
   if(String(panel.dataset.code)!==String(code)){
-    buildWatchPanelSkeleton(panel, code, x);
+    buildWatchPanelSkeleton(panel, code, x, bar);
     panel.dataset.code=code;
   }
   updateWatchPanelValues(panel, d, x);
-  loadMinChart(code, x.symbol||'', x.prev_close);
+  loadMinChart(code, x.symbol||'', x.prev_close, bar);
 }
 // 面板静态骨架 (动态值用 data-f 标记, 供 updateWatchPanelValues 就地更新)
-function buildWatchPanelSkeleton(panel, code, x){
+function buildWatchPanelSkeleton(panel, code, x, bar){
   const cd=esc(x.code);
+  const minId=_watchMinId(bar||_WBARS.hold, cd);
+  const noId='minNoData'+((bar&&bar.t)?'_s.':'')+cd;
   panel.innerHTML=`
     <div class="wp-head">
       <span class="nm" data-f="name"></span><span class="cd" data-f="code"></span>
       <span class="st" data-f="strength"></span>
-      <span class="close" title="关闭" onclick="selectWatch('${cd}')">✕</span>
+      <span class="close" title="关闭" onclick="selectWatch('${cd}','${(bar&&bar.scope)||'hold'}')">✕</span>
     </div>
     <div class="wp-op txt"><span class="opbig" data-f="op"></span><span class="opwhy" data-f="opwhy"></span></div>
     <div class="tail-wrap" data-f="tailwrap">
@@ -4826,9 +4857,9 @@ function buildWatchPanelSkeleton(panel, code, x){
         <i class="l-avg"><span class="sq"></span>均价线</i>
         <i class="l-pc"><span class="sq"></span>昨收</i>
       </div>
-      <canvas id="minChart${cd}"></canvas>
+      <canvas id="${minId}"></canvas>
       <div class="mf" id="minFollow${cd}"><div class="mf-line"></div><div class="mf-bar"></div><div class="mf-tag mf-tag-l"></div><div class="mf-tag mf-tag-r"></div><div class="mf-tip"><span class="p"></span> <span class="pc"></span></div></div>
-      <div class="nodata" id="minNoData${cd}">分时加载中…</div>
+      <div class="nodata" id="${noId}">分时加载中…</div>
     </div>
     <div class="wp-grid">
       <div class="wp-cell"><div class="k">现价</div><div class="v" data-f="price"></div><div class="s" data-f="vpnote"></div></div>
@@ -5102,9 +5133,10 @@ function paintMinAxes(ctx,w,h,lx,rx,spanX,prevClose,lo,hi,Y){
   });
 }
 
-function loadMinChart(code, symbol, prevClose){
-  const canvas=document.getElementById('minChart'+code);
-  const nodata=document.getElementById('minNoData'+code);
+function loadMinChart(code, symbol, prevClose, bar){
+  bar=(typeof bar==='string')?_wbar(bar):(bar||_WBARS.hold);
+  const canvas=document.getElementById(_watchMinId(bar, code));
+  const nodata=document.getElementById('minNoData'+((bar&&bar.t)?'_s.':'')+code);
   if(!canvas) return;
   if(!symbol){ if(nodata){nodata.style.display='flex';nodata.textContent='无法获取分时';} return; }
   getMinData(symbol).then(c=>{
@@ -5191,16 +5223,17 @@ function drawMiniSparks(){
   });
 }
 
-async function delWatch(code){
+async function delWatch(code, bar){
+  bar=(typeof bar==='string')?_wbar(bar):(bar||_WBARS.hold);
   try{
-    const r=await fetch('/api/watchlist?code='+encodeURIComponent(code),{method:'DELETE'});
-    renderWatch(await r.json());
+    const r=await fetch('/api/watchlist?code='+encodeURIComponent(code)+'&scope='+bar.scope,{method:'DELETE'});
+    renderWatch(await r.json(), bar);
   }catch(e){}
 }
-(function initWatch(){
-  const inp=document.getElementById('watchInput'), btn=document.getElementById('watchAddBtn');
+function initWatchBar(bar){
+  const inp=document.getElementById(bar.input), btn=document.getElementById(bar.btn);
   if(!inp) return;
-  const dd=document.getElementById('watchDropdown');
+  const dd=document.getElementById(bar.dd);
   let _wt=null;
   const closeDD=()=>{ if(dd) dd.classList.remove('show'); };
   // 联想搜索: 输入/名称/拼音 -> POST /api/stock/search, 下拉展示 (与个股分析一致)
@@ -5245,14 +5278,18 @@ async function delWatch(code){
     const v=inp.value.trim(); if(!v) return;
     btn.disabled=true;
     try{
-      const r=await fetch('/api/watchlist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:v})});
+      const r=await fetch('/api/watchlist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:v, scope:bar.scope})});
       const d=await r.json();
-      if(d.error){ alert(d.error); } else { renderWatch(d); inp.value=''; }
+      if(d.error){ alert(d.error); } else { loadWatch(bar.scope); inp.value=''; }
     }catch(e){} finally{ btn.disabled=false; }
   };
   btn.onclick=doAdd;
-  initWatchDrag();
-  loadWatch();
+  initWatchDrag(bar);
+  loadWatch(bar.scope);
+}
+(function initWatchAll(){
+  initWatchBar(_WBARS.hold);
+  initWatchBar(_WBARS.self);
 })();
 // ===== 收盘后行情降频: 盘中2秒, 收盘后60秒 (避免无效高频请求) 20260918 =====
 function _isSessionOpen(){
@@ -5264,15 +5301,16 @@ function _isSessionOpen(){
 function _smartSpotInterval(){ return _isSessionOpen() ? 2000 : 60000; }
 function _scheduleSpotPoll(){
   if(_isSessionOpen()){
-    // 交易时段: 2s 刷新行情
-    loadWatch(); loadMarketSnap();
+    // 交易时段: 2s 刷新行情 (持仓+自选 两个盯盘栏)
+    loadWatch('hold'); loadWatch('self'); loadMarketSnap();
     setTimeout(_scheduleSpotPoll, _smartSpotInterval());
   } else {
     // 非交易时段: 完全不刷新行情, 仅低频检查是否已开盘 (无网络请求)
     setTimeout(_scheduleSpotPoll, 60000);
   }
 }
-loadWatch();
+loadWatch('hold');
+loadWatch('self');
 loadMarketSnap();
 initIdxMinTip();
 _scheduleSpotPoll();

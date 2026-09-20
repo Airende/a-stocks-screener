@@ -10143,9 +10143,19 @@ def _get_atr(symbol: str) -> tuple[float, float]:
 
 
 # ---------- 自选盯盘: 本地文件 + 云端双写, 多机按 updated_at 覆盖同步 ----------
-_WATCHLIST: list[str] = []          # 内存中的当前自选顺序
-_WATCH_LIST_UPDATED = ""            # 内存版本的时间戳 (YYYY-MM-DD HH:MM:SS)
-_WATCH_RESYNC_AT = 0.0              # 下次向云端重拉的时刻
+# 盯盘分栏: 持仓(hold) / 自选(self), 各自独立文件/云端键/内存状态
+# 二者逻辑完全一致, 只是存储与展示分离(20260920 新增自选盯盘栏)
+_WATCH_NS = {
+    "hold": {"file": os.path.join(_WATCHLIST_DIR, "watchlist.json"), "kv": "watchlist"},
+    "self": {"file": os.path.join(_WATCHLIST_DIR, "selflist.json"),  "kv": "selflist"},
+}
+_WLIST: dict[str, list[str]] = {}          # scope -> codes
+_WLIST_UPD: dict[str, str] = {}            # scope -> updated_at
+_WLIST_RESYNC: dict[str, float] = {}       # scope -> 下次云端重拉时刻
+for _k in _WATCH_NS:
+    _WLIST.setdefault(_k, [])
+    _WLIST_UPD.setdefault(_k, "")
+    _WLIST_RESYNC.setdefault(_k, 0.0)
 _WATCH_RESYNC_TTL = 5.0             # 云端重拉间隔(秒), 让别的电脑改动较快可见
 
 def _kv_cloud_ready() -> bool:
@@ -10169,10 +10179,11 @@ def _read_watch_file(path=None) -> dict:
         return {}
 
 
-def _write_watch_file(rec: dict) -> None:
+def _write_watch_file(rec: dict, path: str = None) -> None:
     try:
-        os.makedirs(os.path.dirname(_WATCHLIST_FILE), exist_ok=True)
-        with open(_WATCHLIST_FILE, "w", encoding="utf-8") as f:
+        path = path or _WATCH_NS["hold"]["file"]
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
             json.dump(rec, f, ensure_ascii=False, indent=2)
     except Exception:
         pass
@@ -10195,54 +10206,55 @@ def _ensure_watch_migrated() -> None:
         _kv_log(f"自选盯盘已从 cache 迁移到持久目录 data/ ({len(_watch_codes(legacy))} 只)")
 
 
-def _load_watchlist() -> list[str]:
-    """加载自选盯盘: 内存/云端/本地三层。
+def _load_watchlist(scope: str = "hold") -> list[str]:
+    """加载某个分栏的盯盘列表 (scope∈hold/self): 内存/云端/本地三层。
     高频读取命中内存; 每 _WATCH_RESYNC_TTL 秒向云端重拉一次以便多机同步;
-    云端与本地按整份列表 updated_at 较新者胜出 (自选是带顺序的列表, 采用整体覆盖式同步)。"""
-    global _WATCHLIST, _WATCH_LIST_UPDATED, _WATCH_RESYNC_AT
+    云端与本地按整份列表 updated_at 较新者胜出 (列表带顺序, 采用整体覆盖式同步)。"""
+    ns = _WATCH_NS.get(scope) or _WATCH_NS["hold"]
     now_t = time.time()
-    if now_t - _WATCH_RESYNC_AT <= _WATCH_RESYNC_TTL and _WATCH_LIST_UPDATED:
-        return list(_WATCHLIST)  # 缓存热期, 直接用内存
-    _WATCH_RESYNC_AT = now_t
+    if now_t - _WLIST_RESYNC[scope] <= _WATCH_RESYNC_TTL and _WLIST_UPD[scope]:
+        return list(_WLIST[scope])  # 缓存热期, 直接用内存
+    _WLIST_RESYNC[scope] = now_t
 
     cloud_ok = _kv_cloud_ready()
-    cloud = _kv_get("watchlist") if cloud_ok else None
+    cloud = _kv_get(ns["kv"]) if cloud_ok else None
     if isinstance(cloud, dict) and _watch_codes(cloud):
         cu = cloud.get("updated_at") or ""
-        if cu > _WATCH_LIST_UPDATED:
+        if cu > _WLIST_UPD[scope]:
             # 云端较新 -> 应用到内存并刷新本地镜像
-            _WATCHLIST = _watch_codes(cloud)
-            _WATCH_LIST_UPDATED = cu
-            _write_watch_file(cloud)
-        elif _WATCH_LIST_UPDATED > cu:
+            _WLIST[scope] = _watch_codes(cloud)
+            _WLIST_UPD[scope] = cu
+            _write_watch_file(cloud, ns["file"])
+        elif _WLIST_UPD[scope] > cu:
             # 本地内存较新 -> 推送云端
-            _kv_set("watchlist", {"codes": _WATCHLIST, "updated_at": _WATCH_LIST_UPDATED})
-        return list(_WATCHLIST)
+            _kv_set(ns["kv"], {"codes": _WLIST[scope], "updated_at": _WLIST_UPD[scope]})
+        return list(_WLIST[scope])
 
-    # 云端无数据(或未配置云端) -> 首次从本地迁移/读取
-    if not _WATCH_LIST_UPDATED:
-        _ensure_watch_migrated()
-        local = _read_watch_file()
+    # 云端无数据(或未配置云端) -> 首次从本地读取
+    if not _WLIST_UPD[scope]:
+        if scope == "hold":
+            _ensure_watch_migrated()
+        local = _read_watch_file(ns["file"])
         if _watch_codes(local):
-            _WATCHLIST = _watch_codes(local)
-            _WATCH_LIST_UPDATED = local.get("updated_at") or ""
-            if cloud_ok and _kv_set("watchlist", {"codes": _WATCHLIST, "updated_at": _WATCH_LIST_UPDATED}):
-                _kv_log("自选盯盘已从本地文件迁移上云")
-    return list(_WATCHLIST)
+            _WLIST[scope] = _watch_codes(local)
+            _WLIST_UPD[scope] = local.get("updated_at") or ""
+            if cloud_ok and _kv_set(ns["kv"], {"codes": _WLIST[scope], "updated_at": _WLIST_UPD[scope]}):
+                _kv_log(f"分栏{scope}盯盘已从本地文件迁移上云")
+    return list(_WLIST[scope])
 
 
-def _save_watchlist(codes: list[str]) -> None:
-    """保存自选盯盘: 更新内存 + 写本地镜像 + (云端模式下) 推送云端, 记录新时间戳"""
-    global _WATCHLIST, _WATCH_LIST_UPDATED, _WATCH_RESYNC_AT
+def _save_watchlist(codes: list[str], scope: str = "hold") -> None:
+    """保存某个分栏的盯盘列表: 更新内存 + 写本地镜像 + (云端模式下) 推送云端, 记录新时间戳"""
+    ns = _WATCH_NS.get(scope) or _WATCH_NS["hold"]
     codes = [str(c) for c in codes]
     upd = time.strftime("%Y-%m-%d %H:%M:%S")
-    _WATCHLIST = codes
-    _WATCH_LIST_UPDATED = upd
-    _WATCH_RESYNC_AT = time.time()
+    _WLIST[scope] = codes
+    _WLIST_UPD[scope] = upd
+    _WLIST_RESYNC[scope] = time.time()
     rec = {"codes": codes, "updated_at": upd}
-    _write_watch_file(rec)
-    if _kv_cloud_ready() and _kv_set("watchlist", rec):
-        _kv_log("自选盯盘已同步云端")
+    _write_watch_file(rec, ns["file"])
+    if _kv_cloud_ready() and _kv_set(ns["kv"], rec):
+        _kv_log(f"分栏{scope}盯盘已同步云端")
 
 
 def _normalize_wcode(raw: str) -> str:
@@ -10688,15 +10700,18 @@ def _watch_quote(codes: list[str]) -> dict:
 
 
 @app.get("/api/watchlist")
-def api_watchlist():
+def api_watchlist(scope: str = "hold"):
+    ns = scope if scope in _WATCH_NS else "hold"
     with _WATCH_LOCK:
-        codes = _load_watchlist()
+        codes = _load_watchlist(ns)
         data = _watch_quote(codes)
     return JSONResponse(data)
 
 
 @app.post("/api/watchlist")
 def api_watchlist_add(payload: dict):
+    scope = str(payload.get("scope", "hold"))
+    ns = scope if scope in _WATCH_NS else "hold"
     code = _normalize_wcode(payload.get("code", ""))
     if not code:
         return JSONResponse({"error": "无效股票代码"}, status_code=400)
@@ -10727,36 +10742,39 @@ def api_watchlist_add(payload: dict):
     if not name:
         return JSONResponse({"error": f"未在行情池中找到代码 {code}"}, status_code=404)
     with _WATCH_LOCK:
-        codes = _load_watchlist()
+        codes = _load_watchlist(ns)
         if code not in codes:
             codes.append(code)
-            _save_watchlist(codes)
+            _save_watchlist(codes, ns)
     return JSONResponse(_watch_quote(codes))
 
 
 @app.delete("/api/watchlist")
-def api_watchlist_del(code: str = ""):
+def api_watchlist_del(code: str = "", scope: str = "hold"):
+    ns = scope if scope in _WATCH_NS else "hold"
     c = _normalize_wcode(code)
     with _WATCH_LOCK:
-        codes = _load_watchlist()
+        codes = _load_watchlist(ns)
         if c in codes:
             codes.remove(c)
-            _save_watchlist(codes)
+            _save_watchlist(codes, ns)
         _WATCH_PREV.pop(c, None)
     return JSONResponse(_watch_quote(codes))
 
 
 @app.post("/api/watchlist/order")  # 重排自选顺序
 def api_watchlist_order(payload: dict):
+    scope = str(payload.get("scope", "hold"))
+    ns = scope if scope in _WATCH_NS else "hold"
     order = payload.get("order") or []
     codes = [str(x) for x in order if str(x).strip()]
     if not codes:
         return JSONResponse({"error": "缺少 order 数组"}, status_code=400)
     with _WATCH_LOCK:
-        cur = _load_watchlist()
+        cur = _load_watchlist(ns)
         # 仅保留仍存在的自选, 允许前端以任意顺序提交
         kept = codes + [c for c in cur if c not in codes]
-        _save_watchlist(kept)
+        _save_watchlist(kept, ns)
         data = _watch_quote(kept)
     return JSONResponse(data)
 
