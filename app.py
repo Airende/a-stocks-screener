@@ -9280,7 +9280,18 @@ def _archive_get(date: str) -> dict | None:
 
 
 def _archive_put(date: str, section: str, payload: dict) -> None:
-    """合并写入某日某模块的信号结果 (cloud + 本地镜像双写)"""
+    """合并写入某日某模块的信号结果 (cloud + 本地镜像双写)。
+
+    20260921: 交易日判断 —— 周末(六/日)或非法日期直接跳过,
+    避免在非交易日生成冗余快照 (K线无对应柱, 前端反查也画不出)。
+    """
+    try:
+        d = datetime.strptime(date, "%Y-%m-%d").date()
+        # 校验为真实存在的有效日期 (strptime 已保证格式 & 年月日合法, 再按星期判断)
+    except ValueError:
+        return
+    if d.weekday() >= 5:  # 周六=5, 周日=6
+        return
     rec = _archive_get(date) or {}
     rec[section] = payload
     rec["date"] = date
