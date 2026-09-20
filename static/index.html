@@ -2225,16 +2225,24 @@ async function applySSPMarkersToAnalysisChart(code, bars, asOfDate){
 // bars 与 buildMiniChart / applySSPMarkers 使用同一批; 标记按 bars[i].day 与归档日期对齐
 async function applyHistSignalsToAnalysisChart(code, bars){
   if(!bars || !bars.length) return;
-  const r = await fetch('/api/stock/hist-signals?code='+encodeURIComponent(code));
-  if(!r.ok) return;
-  const res = await r.json();
-  const dates = (res && res.dates) || [];
-  if(!dates.length) return;
-  const svgNS = 'http://www.w3.org/2000/svg';
   const svg = document.querySelector('#palm-stock-active .sa-chart svg, .tab-pane.active .sa-chart svg')
            || document.querySelector('#stockPanel .sa-chart svg') || document.querySelector('.sa-chart svg');
-  // 个股分析K线的 svg 只有 viewBox 没有 width 属性, 需从 viewBox 解析画布宽 (20260921)
   if(!svg) return;
+  // 加载提示 (20260921b): 让用户区分"加载中"与"无信号"; 完成后删除/替换
+  const hint = document.createElementNS('http://www.w3.org/2000/svg','text');
+  hint.setAttribute('x','10'); hint.setAttribute('y','12');
+  hint.setAttribute('font-size','9'); hint.setAttribute('fill','#6b7d95');
+  hint.textContent='信号加载中…';
+  svg.appendChild(hint);
+  let loaded=false;
+  try{
+    const r = await fetch('/api/stock/hist-signals?code='+encodeURIComponent(code));
+    if(!r.ok) return;
+    const res = await r.json();
+    const dates = (res && res.dates) || [];
+    if(!dates.length){ hint.textContent='无信号'; loaded=true; return; }
+    const svgNS = 'http://www.w3.org/2000/svg';
+  // 个股分析K线的 svg 只有 viewBox 没有 width 属性, 需从 viewBox 解析画布宽 (20260921)
   const vb = svg.viewBox && svg.viewBox.baseVal ? svg.viewBox.baseVal : (svg.getAttribute('viewBox')||'').split(/[ ,]+/);
   const vbW = svg.viewBox && svg.viewBox.baseVal ? svg.viewBox.baseVal.width : Number(vb[2]);
   if(Math.round(vbW) !== 800) return;
@@ -2254,6 +2262,7 @@ async function applyHistSignalsToAnalysisChart(code, bars){
   bars.forEach((b,i)=>{ if(b.day) dayIdx[b.day]=i; });
   const g = document.createElementNS(svgNS,'g');
   g.setAttribute('class','hist-signal-markers');
+  let drawn=0;
   for(const drow of dates){
     const day = drow.date;
     const idx = dayIdx[day];
@@ -2263,7 +2272,8 @@ async function applyHistSignalsToAnalysisChart(code, bars){
     const xs = xFn(idx);
     const ys = yFn(bars[idx].high);
     // 该日多信号竖向排列, 簇整体以K线最高价上方为中心向上/下延伸
-    const startY = ys - 3;
+    // 20260921b: 标识离K线更高价更远(间隙 -3 → -9), 避免贴柱
+    const startY = ys - 9;
     const step = 7;
     sigs.forEach((s, k)=>{
       const t = document.createElementNS(svgNS,'text');
@@ -2280,10 +2290,12 @@ async function applyHistSignalsToAnalysisChart(code, bars){
       t.textContent = s.ch || '';
       t.setAttribute('title', (day+' '+ (s.name||'')) );
       g.appendChild(t);
+      drawn++;
     });
   }
-  svg.appendChild(g);
-}
+  if(drawn){ svg.appendChild(g); hint.remove(); }
+  else hint.textContent='无信号';
+} catch(err){} }
 // 历史记录: 折叠切换 (状态分别存 localStorage, 个股分析 / 缠论tab 各自独立折叠 20260920)
 function applyHistCollapsed(){
   const pairs=[['#saHist','sa_hist_collapsed'],['#chanHist','chan_hist_collapsed']];
@@ -6176,7 +6188,8 @@ function kdMultiChart(bars){
       const sigs=histSigs[day];
       if(!sigs || !sigs.length) continue;
       // 20260921: 多信号竖向排 (自上而下), 簇以上方为起点向下延伸
-      const cy=Math.max(3, yFn1(bars[i].high)-4-(sigs.length-1)*3.5);
+      // 20260921b: 标识离K线最高价更远(间隙 -4 → -9), 避免贴柱
+      const cy=Math.max(3, yFn1(bars[i].high)-9-(sigs.length-1)*3.5);
       sigs.forEach((s,idx)=>{
         out+=`<text x="${xi(i).toFixed(1)}" y="${(cy+idx*7).toFixed(1)}" font-size="5" font-weight="700"
           text-anchor="middle" dominant-baseline="central" fill="${s.color||'#fff'}" stroke="rgba(15,22,35,.9)" stroke-width="1.6" paint-order="stroke" title="${escFn(s.name||'')} ${day}">${escFn(s.ch||'')}</text>`;
@@ -6324,7 +6337,8 @@ async function showKlinePreview(code, anchor){
     const ignoreBtn = `<span class="kd-mk-btn kd-mk-ignore${ignoreActive}" style="color:#4ade80" onclick="popupToggleIgnore('${code}','${mkName}')">×</span>`;
     pop.innerHTML = `<div style="padding:6px 10px 2px;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:space-between">
         <div>${d.name ? esc(d.name)+' ' : ''}<span class="meta cp-code"  onclick="openTHS('${code}')">${code}</span> ${chgTxt}
-        <span class="meta" style="margin-left:6px">近半年日K · 三均线 · 量 · KDJ</span></div>
+        <span class="meta" style="margin-left:6px">近半年日K · 三均线 · 量 · KDJ</span>
+        <span class="meta sig-status" id="${renderMarkup.c1}_status" style="margin-left:8px;color:#6b7d95">信号加载中…</span></div>
         <div class="kd-mk-bar">${mkBtns}${ignoreBtn}</div>
       </div>` + renderMarkup.html;
     _kdPlace(pop, anchor);
@@ -6332,6 +6346,8 @@ async function showKlinePreview(code, anchor){
     // 20260920: K线先渲染, 历史信号异步加载后注入对应日期K线上方 (标注小字, 不阻塞浮窗)
     // 同一股票历史信号缓存, 避免反复请求慢接口(~3s)
     (async()=>{
+      const stEl = document.getElementById(renderMarkup.c1+'_status');
+      const setSt = t => { if(stEl){ stEl.textContent = t; stEl.style.color = '#6b7d95'; } };
       let m=null;
       if(_histSigCache && code in _histSigCache) m=_histSigCache[code];
       else{
@@ -6344,8 +6360,13 @@ async function showKlinePreview(code, anchor){
           }
         }catch(e){}
       }
-      if(!m || !renderMarkup.sig) return;
+      if(!renderMarkup.sig || !renderMarkup.c1) return;
+      if(!m || !Object.keys(m).length){ setSt('无信号'); return; }
       kdAddSigs(renderMarkup.c1, renderMarkup.sig, m);
+      // 渲染后根据实际画出的标记决定状态 (可能多数日期无对应K线柱)
+      const g = document.getElementById(renderMarkup.c1+'_sig');
+      const cnt = g ? g.querySelectorAll('text').length : 0;
+      if(stEl) stEl.textContent = cnt ? '· '+cnt+'个信号' : '无信号';
     })();
   }catch(e){
     if(_kdPopup === pop) pop.innerHTML = '<div class="empty">加载失败</div>';
