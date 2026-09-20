@@ -73,6 +73,11 @@
   .cond .ck .hint{color:var(--sub);font-size:11px}
   .ckbar{margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
   .tag{display:inline-block;background:var(--tag);color:#bcd2f5;border-radius:4px;padding:1px 7px;font-size:11px;margin:1px 2px}
+  /* 缠论tab当前股票条 (20260920): 搜索组件下方展示当前搜索出的股票 */
+  #chanStockCur{display:none;align-items:center;gap:8px;margin-top:10px;padding:8px 12px;background:var(--panel);border:1px solid var(--border);border-radius:8px}
+  #chanStockCur .cur-lbl{font-size:11px;color:var(--sub);background:var(--tag);padding:1px 8px;border-radius:999px;white-space:nowrap}
+  #chanStockCur .cur-name{font-size:14px;font-weight:800;color:var(--txt);display:flex;align-items:baseline;gap:8px}
+  #chanStockCur .cur-code{font-size:12px;font-weight:600;color:var(--accent)}
   .tbl-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:12px}
   table{width:100%;border-collapse:collapse;font-size:13px;min-width:1100px}
   th,td{padding:9px 10px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--border)}
@@ -1055,7 +1060,8 @@
           </div>
           <div class="sa-hist-list" id="chanHistList"></div>
         </div>
-        <div id="chanTabPlaceholder" style="font-size:13px;color:var(--sub);padding:20px 0">请在「个股分析」标签页选择股票后，到此查看缠论笔/线段/中枢/三类买卖点结构</div>
+        <!-- 当前搜索股票 (20260920): 显示搜索/选择的股票名称 -->
+        <div id="chanStockCur"></div>
         <div id="chanTabBox"></div>
       </div>
     </div>
@@ -1178,13 +1184,11 @@ let isChanTabActive=false;
 function moveChanToTab(){
   isChanTabActive=true;
   const box=document.getElementById('chanTabBox');
-  const ph=document.getElementById('chanTabPlaceholder');
   if(!box) return;
   _chanBoxEl=box;
   // 进入该tab时也加载共享搜索历史 (20260920)
   if(typeof loadChanHistory==='function') loadChanHistory();
-  if(!_chanLastBox){ if(ph) ph.style.display='block'; box.innerHTML=''; return; }
-  if(ph) ph.style.display='none';
+  if(!_chanLastBox){ box.innerHTML=''; return; }
   box.innerHTML=_chanLastBox;
   // 新图十字光标/OHLC 悬浮绑定 (旧图已带 xhairBound, 重复调用安全)
   if(typeof bindChartInteractivity==='function') bindChartInteractivity(box);
@@ -1975,8 +1979,7 @@ async function analyzeStock(code, date){
   // 若用户在缠论tab发起分析, 同时在该tab显示加载态 (20260920)
   if(isChanTabActive){
     const box=document.getElementById('chanTabBox');
-    const ph=document.getElementById('chanTabPlaceholder');
-    if(box){ if(ph) ph.style.display='none'; box.innerHTML='<div style="text-align:center;padding:30px"><span class="spin"></span> 正在计算缠论结构…</div>'; }
+    if(box) box.innerHTML='<div style="text-align:center;padding:30px"><span class="spin"></span> 正在计算缠论结构…</div>';
   }
   try{
     let url='/api/stock/analyze?code='+encodeURIComponent(code);
@@ -2002,6 +2005,19 @@ function syncAnalysisViews(d){
   const nm = (d && d.name) ? d.name : (_curAnalysis ? (_curAnalysis.name||_curAnalysis.code) : '');
   try{ if(saInput) saInput.value = nm; }catch(e){}
   try{ if(chanInput) chanInput.value = nm; }catch(e){}
+  // 缠论tab: 搜索组件下方显示当前搜索出的股票名称 (20260920)
+  const curEl = document.getElementById('chanStockCur');
+  if(curEl){
+    if(nm){
+      const cd = (d && d.code) || (_curAnalysis && _curAnalysis.code) || '';
+      const mktCode = cd ? mkt(cd) : '';
+      curEl.style.display = 'flex';
+      curEl.innerHTML = `<span class="cur-lbl">当前股票</span><span class="cur-name">${esc(nm)}${mktCode?` <span class="cur-code">${esc(mktCode)}</span>`:''}</span>`;
+    }else{
+      curEl.style.display = 'none';
+      curEl.innerHTML = '';
+    }
+  }
 }
 
 // ===== 上试盘: 在个股分析 K 线 SVG 上叠加标记 =====
