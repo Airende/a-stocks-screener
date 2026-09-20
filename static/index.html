@@ -2034,6 +2034,8 @@ async function analyzeStock(code, date){
     // 并行绘制上试盘信号点 markers 到 K 线 SVG (不阻塞后续流程)
     // 历史时点模式下只画基准日及之前的信号 (20260906)
     applySSPMarkersToAnalysisChart(code, d.bars||[], d.is_historical ? d.as_of_date : null).catch(()=>{});
+    // 均线形态历史信号 一字简称+颜色 标识叠加到个股分析K线 (不阻塞、失败静默 20260921)
+    applyHistSignalsToAnalysisChart(code, d.bars||[]).catch(()=>{});
     loadHistory(); loadChanHistory();
   }catch(e){
     saPanel.innerHTML='<div class="empty">加载失败: '+e.message+'</div>';
@@ -2217,6 +2219,65 @@ async function applySSPMarkersToAnalysisChart(code, bars, asOfDate){
     }
   }
   // 插入到 svg 顶部(第一个子元素之后, 确保在蜡烛体上层/背景下层? 需要在最上层, 放最后)
+  svg.appendChild(g);
+}
+// 均线形态历史信号 → 个股分析 K 线上按日期叠加 一字简称+颜色 标记 (20260921)
+// bars 与 buildMiniChart / applySSPMarkers 使用同一批; 标记按 bars[i].day 与归档日期对齐
+async function applyHistSignalsToAnalysisChart(code, bars){
+  if(!bars || !bars.length) return;
+  const r = await fetch('/api/stock/hist-signals?code='+encodeURIComponent(code));
+  if(!r.ok) return;
+  const res = await r.json();
+  const dates = (res && res.dates) || [];
+  if(!dates.length) return;
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const svg = document.querySelector('#palm-stock-active .sa-chart svg, .tab-pane.active .sa-chart svg')
+           || document.querySelector('#stockPanel .sa-chart svg') || document.querySelector('.sa-chart svg');
+  if(!svg || svg.getAttribute('width')!=='800') return;
+  // 坐标映射 (与 applySSPMarkersToAnalysisChart 一致)
+  const w=800, h=220, padL=8, padR=8, padT=12, padB=18;
+  const n = bars.length;
+  if(n<2) return;
+  const hi = Math.max(...bars.map(b=>b.high));
+  const lo = Math.min(...bars.map(b=>b.low));
+  const rng = (hi-lo) || 1;
+  const plotW = w-padL-padR, plotH = h-padT-padB;
+  const xStep = plotW/n;
+  const yFn = v => padT + (hi-v)/rng*plotH;
+  const xFn = i => padL + i*xStep + xStep/2;
+  // 日期→bars 索引映射
+  const dayIdx = {};
+  bars.forEach((b,i)=>{ if(b.day) dayIdx[b.day]=i; });
+  const g = document.createElementNS(svgNS,'g');
+  g.setAttribute('class','hist-signal-markers');
+  for(const drow of dates){
+    const day = drow.date;
+    const idx = dayIdx[day];
+    if(idx===undefined) continue;   // 只在有对应K线柱的交易日画
+    const sigs = drow.signals || [];
+    if(!sigs.length) continue;
+    const xs = xFn(idx);
+    const ys = yFn(bars[idx].high);
+    // 该日多信号竖向排列, 簇整体以K线最高价上方为中心向上/下延伸
+    const startY = ys - 3;
+    const step = 7;
+    sigs.forEach((s, k)=>{
+      const t = document.createElementNS(svgNS,'text');
+      const ty = startY - k*step;
+      t.setAttribute('x', xs.toFixed(1));
+      t.setAttribute('y', ty.toFixed(1));
+      t.setAttribute('text-anchor','middle');
+      t.setAttribute('font-size','5');
+      t.setAttribute('font-weight','600');
+      t.setAttribute('fill', s.color || '#fff');
+      t.setAttribute('stroke', 'rgba(0,0,0,.9)');   // 深色描边保证5px小字可读
+      t.setAttribute('stroke-width','1.6');
+      t.setAttribute('paint-order','stroke');
+      t.textContent = s.ch || '';
+      t.setAttribute('title', (day+' '+ (s.name||'')) );
+      g.appendChild(t);
+    });
+  }
   svg.appendChild(g);
 }
 // 历史记录: 折叠切换 (状态分别存 localStorage, 个股分析 / 缠论tab 各自独立折叠 20260920)
