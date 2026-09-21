@@ -4723,6 +4723,9 @@ function renderWatch(d, bar){
       cards.innerHTML='<div class="watch-empty">还没有自选，输入股票代码后点「添加」开始盯盘</div>';
     return;
   }
+  // 有股票了, 先把空状态提示移除
+  const emptyHint=cards.querySelector('.watch-empty');
+  if(emptyHint) emptyHint.remove();
   // 增量更新: 复用已有卡片节点, 只移除已不在自选中的卡, 不整体重建 → 避免 2s 刷新时
   // mini 分时 canvas 被销毁重建导致的闪烁。
   const qcodes=new Set(q.map(x=>String(x.code)));
