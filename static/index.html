@@ -672,7 +672,7 @@
   .watch-add input:focus{border-color:var(--accent)}
   .watch-add button{padding:5px 12px;border:none;border-radius:6px;background:var(--accent);color:#06212e;
                     font-weight:700;font-size:12px;cursor:pointer}
-  /* 手动"刷新价格"次级按钮: 覆盖 watch-add 的主按钮样式, 显示为灰底描边 (20260921) */
+  /* 手动"同步"次级按钮: 覆盖 watch-add 的主按钮样式, 显示为灰底描边 (20260921) */
   .watch-add button.ghost{background:var(--panel2);color:var(--txt);border:1px solid var(--border)}
   .watch-add button.ghost:hover{background:var(--panel)}
   .watch-add button:disabled{opacity:.5;cursor:not-allowed}
@@ -902,7 +902,7 @@
           <input id="watchInput" placeholder="输入代码/名称/拼音，如 002905、华阳、hyjt" maxlength="30" autocomplete="off">
           <div class="sa-dropdown" id="watchDropdown"></div>
         </div>
-        <button id="watchRefreshBtn" class="ghost" title="手动刷新盯盘价格">刷新价格</button>
+        <button id="watchRefreshBtn" class="ghost" title="手动同步添加/删除的股票到云端">同步</button>
         <button id="watchAddBtn">添加</button>
       </div>
     </div>
@@ -920,7 +920,7 @@
           <input id="watchInputSelf" placeholder="输入代码/名称/拼音，如 002905、华阳、hyjt" maxlength="30" autocomplete="off">
           <div class="sa-dropdown" id="watchDropdownSelf"></div>
         </div>
-        <button id="watchRefreshBtnSelf" class="ghost" title="手动刷新盯盘价格">刷新价格</button>
+        <button id="watchRefreshBtnSelf" class="ghost" title="手动同步添加/删除的股票到云端">同步</button>
         <button id="watchAddBtnSelf">添加</button>
       </div>
     </div>
@@ -4605,6 +4605,14 @@ async function loadWatch(scope){
   }catch(e){}
 }
 
+// 手动同步"添加/删除的股票"到云端: POST /api/watchlist/sync 后重载价格。仅用户点击/页面加载时调用,
+// 不参与 2s 价格轮询 (20260921)
+async function syncWatch(scope){
+  try{ await fetch('/api/watchlist/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scope})}); }
+  catch(e){}
+  await loadWatch(scope);
+}
+
 // ===== 自选拖拽排序: 长按600ms进入拖动, 松手提交新顺序到后端 =====
 let _wdDrag=null;
 function initWatchDrag(bar){
@@ -5272,11 +5280,11 @@ function initWatchBar(bar){
     }catch(e){} finally{ btn.disabled=false; }
   };
   btn.onclick=doAdd;
-  // 手动"刷新价格"按钮: 重新拉取本盯盘栏实时价 (仅在用户点击时请求, 不参与自动轮询 20260921)
+  // 手动"同步"按钮: 把本栏添加/删除的股票同步到云端, 并重载价格 (仅在用户点击时请求 20260921)
   const rbtn=document.getElementById(bar.rbtn);
   if(rbtn) rbtn.onclick=async()=>{
     rbtn.disabled=true;
-    try{ await loadWatch(bar.scope); }
+    try{ await syncWatch(bar.scope); }
     catch(e){}
     finally{ rbtn.disabled=false; }
   };
@@ -5297,17 +5305,18 @@ function _isSessionOpen(){
 function _smartSpotInterval(){ return _isSessionOpen() ? 2000 : 60000; }
 function _scheduleSpotPoll(){
   if(_isSessionOpen()){
-    // 交易时段: 每 2s 仅刷新顶部指数行情; 持仓/自选盯盘不再自动拉取,
-    // 两个 /api/watchlist 只在页面加载或点击"刷新价格"按钮时调用 (20260921)
-    loadMarketSnap();
+    // 交易时段: 每 2s 刷新盯盘价格(持仓+自选)与顶部指数。
+    // 此轮询只拉价格(读本地/内存), 云端增删同步已改为手动, 不会在此自动触发 (20260921)
+    loadWatch('hold'); loadWatch('self'); loadMarketSnap();
     setTimeout(_scheduleSpotPoll, _smartSpotInterval());
   } else {
     // 非交易时段: 完全不刷新行情, 仅低频检查是否已开盘 (无网络请求)
     setTimeout(_scheduleSpotPoll, 60000);
   }
 }
-loadWatch('hold');
-loadWatch('self');
+// 首次加载: 各盯盘栏先做一次手动云端同步(拉取他机的增删), 再进入 2s 价格轮询
+syncWatch('hold');
+syncWatch('self');
 loadMarketSnap();
 initIdxMinTip();
 _scheduleSpotPoll();
