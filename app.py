@@ -10519,6 +10519,71 @@ def api_minute_data(symbol: str = ""):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@app.get("/api/kline")
+def api_kline(code: str = "", datalen: int = 122):
+    """个股悬浮预览的日K线数据 (20260921 新增: 之前 /api/kline 后端未实现, 浮窗K线不显示)。
+
+    返回 {code, symbol, name, bars}, bars 每条为
+    {day, open, high, low, close, volume, chg} (chg=当日涨跌幅%), 前端据此着色。
+    数据优先走本地/内存K线缓存(fetch_kline), 缓存不足时才远程拉取。
+    """
+    code = str(code or "").strip()
+    if not code:
+        return JSONResponse({"error": "缺少 code 参数"}, status_code=400)
+    datalen = int(datalen or 122)
+    try:
+        # 1. 推导新浪 symbol (兼容 "301282" / "sz301282")
+        symbol = _to_symbol(code)
+
+        # 2. 尽力取实时快照(仅用内存缓存, 避免每只股票都重拉全市场): 用于补全当日bar + 查名称
+        spot_data = _SPOT_MEM_CACHE.get("data") or None
+
+        # 3. 取K线 (已含当日bar; spot_data 传入可避免内部二次 fetch_spot_all)
+        bars = fetch_kline(symbol, datalen=datalen, spot_data=spot_data)
+
+        # 4. 取股票名称: 优先内存快照 → 本地股票池 → 无则空串
+        name = ""
+        all_rows = spot_data
+        if all_rows is None:
+            try:
+                all_rows = fetch_spot_all()
+            except Exception:  # noqa: BLE001
+                all_rows = None
+        code6 = symbol[-6:] if symbol[:2] in ("sh", "sz", "bj") else symbol
+        if all_rows:
+            for r in all_rows:
+                if code6 and str(r.get("code") or "") == code6:
+                    name = str(r.get("name") or "")
+                    break
+            if not name:
+                name = next((str(r.get("name") or "") for r in all_rows
+                             if symbol and str(r.get("symbol") or "") == symbol), "")
+
+        # 5. 补 chg 涨跌幅: 前复权序列中后一根相对前一根收盘的涨跌幅
+        out = []
+        prev_close = None
+        for b in bars:
+            close = b.get("close")
+            chg = 0.0
+            if isinstance(close, (int, float)) and prev_close:
+                chg = round((float(close) / prev_close - 1) * 100, 2)
+            if isinstance(close, (int, float)):
+                prev_close = float(close)
+            out.append({
+                "day": b.get("day", ""),
+                "open": b.get("open"),
+                "high": b.get("high"),
+                "low": b.get("low"),
+                "close": close,
+                "volume": b.get("volume", 0),
+                "chg": chg,
+            })
+
+        return {"code": code, "symbol": symbol, "name": name, "bars": out}
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 if __name__ == "__main__":
     import uvicorn
     # 云平台(Render/Railway)通过 PORT 环境变量指定端口, 默认 8000
