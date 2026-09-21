@@ -2748,29 +2748,33 @@ def calc_kdj_system(bars: list, closes: list, highs: list, lows: list,
     j_extreme_high = J_t > 100 or J_y > 100
     j_extreme_low = J_t < 0
 
-    # ---- 背离判定 (20日窗口) ----
-    if N >= 25:
-        idx_20_high = -1; peak_j_at_high = J_t
-        for i in range(N-20, N):
-            if highs[i] == max(highs[N-20:]):
-                idx_20_high = i; peak_j_at_high = j[i]; break
-        prev_peak_idx = -1; prev_peak_j = J_t
-        for i in range(max(0, idx_20_high-20), idx_20_high):
-            if highs[i] >= max(highs[max(0,idx_20_high-20):idx_20_high]) * 0.99 and not math.isnan(j[i]):
-                if j[i] > prev_peak_j: prev_peak_j = j[i]; prev_peak_idx = i
-        top_diverge = (idx_20_high > 0 and prev_peak_idx >= 0
-                       and closes[-1] >= max(closes[-20:]) * 0.99
+    # ---- 背离判定 (45日窗口, 拉长以纳入更早前高, 捕捉中材科技等浅/滞后背离) ----
+    WIN = 45
+    if N >= WIN + 5:
+        idx_high = -1; peak_j_at_high = J_t
+        for i in range(N-WIN, N):
+            if highs[i] == max(highs[N-WIN:]):
+                idx_high = i; peak_j_at_high = j[i]; break
+        # 前峰J: 取当前顶之前窗口内J的最高值(不要求价位接近),
+        # 以捕捉"价格上涨而J走弱"的顶背离本质 (中材科技 08-07 J=120.6 vs 今日J=102.5)
+        prev_peak_j = None
+        for i in range(max(0, idx_high-WIN), idx_high):
+            if not math.isnan(j[i]) and (prev_peak_j is None or j[i] > prev_peak_j):
+                prev_peak_j = j[i]
+        top_diverge = (idx_high > 0 and prev_peak_j is not None
+                       and closes[-1] >= max(closes[-WIN:]) * 0.99
                        and peak_j_at_high < prev_peak_j - 5)  # 阈值10→5 提高敏感度(识别浅背离)
-        idx_20_low = -1; trough_j_at_low = J_t
-        for i in range(N-20, N):
-            if lows[i] == min(lows[N-20:]):
-                idx_20_low = i; trough_j_at_low = j[i]; break
-        prev_trough_idx = -1; prev_trough_j = J_t
-        for i in range(max(0, idx_20_low-20), idx_20_low):
-            if lows[i] <= min(lows[max(0,idx_20_low-20):idx_20_low]) * 1.01 and not math.isnan(j[i]):
-                if j[i] < prev_trough_j: prev_trough_j = j[i]; prev_trough_idx = i
-        bottom_diverge = (idx_20_low > 0 and prev_trough_idx >= 0
-                          and closes[-1] <= min(closes[-20:]) * 1.01
+        idx_low = -1; trough_j_at_low = J_t
+        for i in range(N-WIN, N):
+            if lows[i] == min(lows[N-WIN:]):
+                idx_low = i; trough_j_at_low = j[i]; break
+        # 前谷J: 取当前底之前窗口内J的最低值(不要求价位接近)
+        prev_trough_j = None
+        for i in range(max(0, idx_low-WIN), idx_low):
+            if not math.isnan(j[i]) and (prev_trough_j is None or j[i] < prev_trough_j):
+                prev_trough_j = j[i]
+        bottom_diverge = (idx_low > 0 and prev_trough_j is not None
+                          and closes[-1] <= min(closes[-WIN:]) * 1.01
                           and trough_j_at_low > prev_trough_j + 5)
     else:
         top_diverge = False; bottom_diverge = False
