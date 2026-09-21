@@ -9487,7 +9487,7 @@ def api_mark_set(payload: dict):
     removed = payload.get("removed")
     note = payload.get("note")
     with _MARKS_LOCK:
-        now = time.strftime("%Y-%m-%d %H:%M:%S")
+        now = bj_now()  # 统一东八, 避免服务器UTC下 time.strftime 与云端历史时区不一致
         cur = _MARKS.get(code)
         if not cur:
             cur = {"code": code, "name": name, "mark": None, "removed": False,
@@ -9746,7 +9746,10 @@ def _save_watchlist(codes: list[str], scope: str = "hold") -> None:
     """保存某个分栏的盯盘列表: 更新内存 + 写本地镜像 + (云端模式下) 推送云端, 记录新时间戳"""
     ns = _WATCH_NS.get(scope) or _WATCH_NS["hold"]
     codes = [str(c) for c in codes]
-    upd = time.strftime("%Y-%m-%d %H:%M:%S")
+    # 时间戳统一用东八区 bj_now(): 服务器常为 UTC, 若用 time.strftime 会与云端历史
+    # (bj_now 写入的东八时间) 混用, 导致 updated_at 字符串比较失真 → 新写入被旧数据反覆盖
+    # (自选盯盘"添加后突然消失"的根因)
+    upd = bj_now()
     _WLIST[scope] = codes
     _WLIST_UPD[scope] = upd
     _WLIST_RESYNC[scope] = time.time()
