@@ -672,6 +672,9 @@
   .watch-add input:focus{border-color:var(--accent)}
   .watch-add button{padding:5px 12px;border:none;border-radius:6px;background:var(--accent);color:#06212e;
                     font-weight:700;font-size:12px;cursor:pointer}
+  /* 手动"刷新价格"次级按钮: 覆盖 watch-add 的主按钮样式, 显示为灰底描边 (20260921) */
+  .watch-add button.ghost{background:var(--panel2);color:var(--txt);border:1px solid var(--border)}
+  .watch-add button.ghost:hover{background:var(--panel)}
   .watch-add button:disabled{opacity:.5;cursor:not-allowed}
   .watch-wrap{overflow-x:hidden;padding-bottom:2px}
   .watch-cards{display:flex;flex-wrap:wrap;gap:8px 8px;row-gap:10px;align-content:flex-start}
@@ -899,6 +902,7 @@
           <input id="watchInput" placeholder="输入代码/名称/拼音，如 002905、华阳、hyjt" maxlength="30" autocomplete="off">
           <div class="sa-dropdown" id="watchDropdown"></div>
         </div>
+        <button id="watchRefreshBtn" class="ghost" title="手动刷新盯盘价格">刷新价格</button>
         <button id="watchAddBtn">添加</button>
       </div>
     </div>
@@ -916,6 +920,7 @@
           <input id="watchInputSelf" placeholder="输入代码/名称/拼音，如 002905、华阳、hyjt" maxlength="30" autocomplete="off">
           <div class="sa-dropdown" id="watchDropdownSelf"></div>
         </div>
+        <button id="watchRefreshBtnSelf" class="ghost" title="手动刷新盯盘价格">刷新价格</button>
         <button id="watchAddBtnSelf">添加</button>
       </div>
     </div>
@@ -4584,8 +4589,8 @@ async function loadIndicesRealtime(){
 // ===== 盯盘栏 (持仓hold / 自选self) · 后端持久化 (20260918) =====
 // 两人栏逻辑完全一致, 通过 _WBAR 配置隔离 DOM id/分时canvas前缀/接口scope/状态
 const _WBARS={
-  hold:{scope:'hold', t:0, agg:'watchAgg', cards:'watchCards', panel:'watchPanel', input:'watchInput', dd:'watchDropdown', btn:'watchAddBtn', data:null, active:null},
-  self:{scope:'self', t:1, agg:'watchAggSelf', cards:'watchCardsSelf', panel:'watchPanelSelf', input:'watchInputSelf', dd:'watchDropdownSelf', btn:'watchAddBtnSelf', data:null, active:null},
+  hold:{scope:'hold', t:0, agg:'watchAgg', cards:'watchCards', panel:'watchPanel', input:'watchInput', dd:'watchDropdown', btn:'watchAddBtn', rbtn:'watchRefreshBtn', data:null, active:null},
+  self:{scope:'self', t:1, agg:'watchAggSelf', cards:'watchCardsSelf', panel:'watchPanelSelf', input:'watchInputSelf', dd:'watchDropdownSelf', btn:'watchAddBtnSelf', rbtn:'watchRefreshBtnSelf', data:null, active:null},
 };
 function _wbar(scope){ return _WBARS[scope]||_WBARS.hold; }
 function _watchMinId(bar, cd){ return 'minChart'+(bar.t?'_s.':'')+cd; }  // 分时canvas id 按栏加前缀, 防两栏同名冲突
@@ -5267,6 +5272,14 @@ function initWatchBar(bar){
     }catch(e){} finally{ btn.disabled=false; }
   };
   btn.onclick=doAdd;
+  // 手动"刷新价格"按钮: 重新拉取本盯盘栏实时价 (仅在用户点击时请求, 不参与自动轮询 20260921)
+  const rbtn=document.getElementById(bar.rbtn);
+  if(rbtn) rbtn.onclick=async()=>{
+    rbtn.disabled=true;
+    try{ await loadWatch(bar.scope); }
+    catch(e){}
+    finally{ rbtn.disabled=false; }
+  };
   initWatchDrag(bar);
   loadWatch(bar.scope);
 }
@@ -5284,8 +5297,9 @@ function _isSessionOpen(){
 function _smartSpotInterval(){ return _isSessionOpen() ? 2000 : 60000; }
 function _scheduleSpotPoll(){
   if(_isSessionOpen()){
-    // 交易时段: 2s 刷新行情 (持仓+自选 两个盯盘栏)
-    loadWatch('hold'); loadWatch('self'); loadMarketSnap();
+    // 交易时段: 每 2s 仅刷新顶部指数行情; 持仓/自选盯盘不再自动拉取,
+    // 两个 /api/watchlist 只在页面加载或点击"刷新价格"按钮时调用 (20260921)
+    loadMarketSnap();
     setTimeout(_scheduleSpotPoll, _smartSpotInterval());
   } else {
     // 非交易时段: 完全不刷新行情, 仅低频检查是否已开盘 (无网络请求)
