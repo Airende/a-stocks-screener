@@ -755,17 +755,42 @@ def fetch_spot_all() -> list[dict]:
         page_size = 100
         pages = (total + page_size - 1) // page_size
 
-        def fetch_page(page: int) -> list[dict]:
-            data = _get(SINA_HQ, {"page": page, "num": page_size, "node": "hs_a"})
-            return data if isinstance(data, list) else []
+        # 新浪 getHQNodeData 存在间歇性 456 反爬(非确定性拒绝, 多次重试常能恢复)。
+        # _get() 对 456 是"确定性拒绝直接 break", 若直接复用它, 分页抓取会随机整页丢失,
+        # 保存的 universe 股票池就永久残缺 → 搜索索引缺股(如 002080 搜不到)。
+        # 这里用专用抓页函数: 对 456/空响应 延迟重试多次, 并二次补拉失败页。
+        def _sina_hq_page(page: int) -> list[dict]:
+            last = None
+            for k in range(6):  # 456 间歇, 重试多次促其解封
+                try:
+                    r = requests.get(SINA_HQ,
+                                     params={"page": page, "num": page_size, "node": "hs_a"},
+                                     headers=HEADERS, timeout=12)
+                    if r.status_code == 200 and r.text.strip().startswith("["):
+                        j = r.json()
+                        return j if isinstance(j, list) else []
+                    last = f"{r.status_code}:{r.text[:50]}"
+                except Exception as e:  # noqa: BLE001
+                    last = str(e)
+                time.sleep(0.4 + k * 0.35)
+            raise RuntimeError(f"page{page}: {last}")
 
         rows: list[dict] = []
-        futs = [_SPOT_POOL.submit(fetch_page, p) for p in range(1, pages + 1)]
+        futs = {_SPOT_POOL.submit(_sina_hq_page, p): p for p in range(1, pages + 1)}
+        failed: list[int] = []
         for f in as_completed(futs):
             try:
                 rows.extend(f.result())
             except Exception:  # noqa: BLE001
-                continue
+                failed.append(futs[f])
+        # 二次补拉仍失败的页, 尽量拼齐全市场(否则 universe 再次残缺)
+        if failed:
+            retry = [_SPOT_POOL.submit(_sina_hq_page, p) for p in failed]
+            for f in retry:
+                try:
+                    rows.extend(f.result())
+                except Exception:  # noqa: BLE001
+                    pass
         if len(rows) < 100:
             raise RuntimeError(f"新浪快照仅返回{len(rows)}条, 判定主源异常")
         # 保存股票池供容灾使用 (20260906)
@@ -5493,6 +5518,19 @@ def _build_search_index(force: bool = False):
     except Exception as e:  # noqa: BLE001
         print(f"[search-index] 行情源暂不可用, 返回空索引: {type(e).__name__}: {e}", flush=True)
         return
+    # 兜底: 新浪/腾讯备源在批量拉取时可能偶发漏掉个别票(如深市主板小号 000001/000002),
+    # 用本地完整股票池(universe_latest.json)补齐缺失的 代码+名称, 保证搜索不因行情漏票而缺股。
+    try:
+        _uni = _load_any_spot_universe()
+        _have = {str(r.get("code")) for r in spot if r.get("code")}
+        for _u in _uni:
+            _c2 = str(_u.get("code") or "")
+            _n2 = str(_u.get("name") or "")
+            if _c2 and _n2 and _c2 not in _have:
+                spot.append({"code": _c2, "name": _n2, "symbol": _u.get("symbol", "")})
+                _have.add(_c2)
+    except Exception:  # noqa: BLE001
+        pass
     items = []
     for r in spot:
         code = r.get("code", "")
