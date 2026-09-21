@@ -4491,6 +4491,8 @@ function renderMarketSnap(d){
   if(ovEl){ ovEl.textContent=sum.overall||'—'; ovEl.style.color=sum.color||'var(--txt)'; }
   const box=$('#idxCards'); if(!box) return;
   if(!cards.length){ box.innerHTML='<div class="empty">暂无指数数据</div>'; return; }
+  // 数据到位后, 先移除初始"加载指数数据…"等非卡片占位 (占位不是 .idx-card, 增量逻辑不会自动清)
+  Array.prototype.forEach.call(box.querySelectorAll('.idx-cards>div:not(.idx-card)'), el=>el.remove());
   // 增量更新: 复用已有 idx-card 节点, 仅更新文本/颜色/类, 不再整体重建
   // → 消除 1s 高频刷新时指数卡被销毁重建导致的持续闪烁, 且悬停分时图不再被刷新打断
   const keep=new Set();
