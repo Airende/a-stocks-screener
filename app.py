@@ -10404,7 +10404,7 @@ def api_minute_data(symbol: str = ""):
         return JSONResponse({"error": "缺少 symbol 参数"}, status_code=400)
     symbol = str(symbol).strip().lower()
     try:
-        url = "https://web.ifzq.gtimg.cn/appstock/app/minute/query"
+        url = "https://ifzq.gtimg.cn/appstock/app/minute/query"
         r = requests.get(url, params={"code": symbol}, headers=HEADERS, timeout=10)
         r.raise_for_status()
         payload = r.json()
