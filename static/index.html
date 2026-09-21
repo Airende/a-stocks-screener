@@ -898,7 +898,7 @@
       <span class="tt">持仓盯盘</span>
       <span class="agg" id="watchAgg"></span>
       <div class="watch-add">
-        <button id="watchRefreshBtn" class="ghost" title="手动同步添加/删除的股票到云端">同步</button>
+        <button id="watchRefreshBtn" class="ghost" title="从云端拉取最新列表覆盖本机">同步</button>
         <div class="watch-search">
           <input id="watchInput" placeholder="输入代码/名称/拼音，如 002905、华阳、hyjt" maxlength="30" autocomplete="off">
           <div class="sa-dropdown" id="watchDropdown"></div>
@@ -916,7 +916,7 @@
       <span class="tt">自选盯盘</span>
       <span class="agg" id="watchAggSelf"></span>
       <div class="watch-add">
-        <button id="watchRefreshBtnSelf" class="ghost" title="手动同步添加/删除的股票到云端">同步</button>
+        <button id="watchRefreshBtnSelf" class="ghost" title="从云端拉取最新列表覆盖本机">同步</button>
         <div class="watch-search">
           <input id="watchInputSelf" placeholder="输入代码/名称/拼音，如 002905、华阳、hyjt" maxlength="30" autocomplete="off">
           <div class="sa-dropdown" id="watchDropdownSelf"></div>
@@ -4627,7 +4627,7 @@ async function loadWatch(scope){
   }catch(e){}
 }
 
-// 手动同步"添加/删除的股票"到云端: POST /api/watchlist/sync 后重载价格。仅用户点击/页面加载时调用,
+// 手动"同步"按钮: 从云端拉取最新列表覆盖本机 (增/删/排序已由后端自动推送云端)。仅用户点击/页面加载时调用,
 // 不参与 2s 价格轮询 (20260921)
 async function syncWatch(scope){
   try{ await fetch('/api/watchlist/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scope})}); }

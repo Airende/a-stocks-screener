@@ -9780,6 +9780,33 @@ def _reconcile_watch_cloud(scope: str) -> list[str]:
     return list(_WLIST[scope])
 
 
+def _pull_watch_cloud(scope: str = "hold") -> list[str]:
+    """手动"同步"按钮 + 页面加载: 从云端拉取较新版本覆盖本机(内存+本地文件镜像)。
+    只做"云端覆盖本机", 不做本机推送(推送已由 _save_watchlist 自动完成)。"""
+    ns = _WATCH_NS.get(scope) or _WATCH_NS["hold"]
+    # 先确保本地列表已入内存
+    if not _WLIST_UPD.get(scope):
+        if scope == "hold":
+            _ensure_watch_migrated()
+        local = _read_watch_file(ns["file"])
+        if _watch_codes(local):
+            _WLIST[scope] = _watch_codes(local)
+            _WLIST_UPD[scope] = local.get("updated_at") or ""
+    if not _kv_cloud_ready():
+        return list(_WLIST[scope])
+    cloud = _kv_get(ns["kv"])
+    if isinstance(cloud, dict) and _watch_codes(cloud):
+        cu = cloud.get("updated_at") or ""
+        if cu > (_WLIST_UPD.get(scope) or ""):
+            # 云端较新 -> 拉取覆盖本机(内存+本地镜像)
+            _WLIST[scope] = _watch_codes(cloud)
+            _WLIST_UPD[scope] = cu
+            _write_watch_file(cloud, ns["file"])
+            _kv_log(f"分栏{scope}已从云端拉取覆盖本机({len(_WLIST[scope])}只)")
+    _WLIST_RESYNC[scope] = time.time()
+    return list(_WLIST[scope])
+
+
 def _load_watchlist(scope: str = "hold") -> list[str]:
     """加载某个分栏的盯盘列表 (scope∈hold/self)。价格轮询高频调用: 只读内存/本地文件,
     不自动访问云端; 跨机添加/删除的同步由手动触发(_reconcile_watch_cloud / sync接口)。"""
@@ -9797,8 +9824,9 @@ def _load_watchlist(scope: str = "hold") -> list[str]:
 
 
 def _save_watchlist(codes: list[str], scope: str = "hold") -> None:
-    """保存某个分栏的盯盘列表: 更新内存 + 写本地镜像, 记录新时间戳。
-    20260921: 添加/删除不再自动推送云端, 跨机同步改为手动(/api/watchlist/sync)。"""
+    """保存某个分栏的盯盘列表: 更新内存 + 写本地镜像 + 自动推送云端, 记录新时间戳。
+    20260921: 每次 增/删/排序 落盘即自动将最新列表推到云端(updated_at 用东八区新戳),
+    跨机"拉取覆盖本机"由手动/页面加载的 sync 触发(_pull_watch_cloud)。"""
     ns = _WATCH_NS.get(scope) or _WATCH_NS["hold"]
     codes = [str(c) for c in codes]
     # 时间戳统一用东八区 bj_now(): 服务器常为 UTC, 若用 time.strftime 会与云端历史
@@ -9810,6 +9838,12 @@ def _save_watchlist(codes: list[str], scope: str = "hold") -> None:
     _WLIST_RESYNC[scope] = time.time()
     rec = {"codes": codes, "updated_at": upd}
     _write_watch_file(rec, ns["file"])
+    # 自动推送云端 (增/删/排序都会走到这里, 无需再手动点上传)
+    if _kv_cloud_ready():
+        try:
+            _kv_set(ns["kv"], rec)
+        except Exception:
+            pass
 
 
 def _normalize_wcode(raw: str) -> str:
@@ -10334,18 +10368,19 @@ def api_watchlist_order(payload: dict):
     return JSONResponse(data)
 
 
-@app.post("/api/watchlist/sync")  # 手动同步添加/删除的股票到云端 (20260921)
+@app.post("/api/watchlist/sync")  # 手动"同步": 从云端拉取较新版本覆盖本机 (20260921)
 def api_watchlist_sync(payload: dict):
-    """手动执行跨机同步: 把本机对盯盘列表的增/删与云端对比, 采用较新的一方。
+    """手动执行跨机拉取: 从云端拉取较新版本覆盖本机。
+    本机 增/删/排序 已由 _save_watchlist 在落盘时自动推送云端, 无需再上传。
     scope 传 'hold'/'self' 同步单个分栏; 传 'all' 或省略则同步全部分栏。
     价格轮询时不会调用本接口, 仅页面加载或用户点"同步"时触发。"""
     scope = str(payload.get("scope", "all"))
     with _WATCH_LOCK:
         if scope in _WATCH_NS:
-            codes = _reconcile_watch_cloud(scope)
+            codes = _pull_watch_cloud(scope)
             return JSONResponse({"scope": scope, "codes": codes})
         # 'all': 同步全部, 返回各分栏列表
-        result = {s: _reconcile_watch_cloud(s) for s in _WATCH_NS}
+        result = {s: _pull_watch_cloud(s) for s in _WATCH_NS}
         return JSONResponse({"scope": "all", **{k: {"codes": v} for k, v in result.items()}})
 
 
