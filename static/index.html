@@ -2076,7 +2076,7 @@ async function applySSPMarkersToAnalysisChart(code, bars, asOfDate){
   if(asOfDate) signals = signals.filter(s => !s.day || s.day.slice(0,10) <= asOfDate);
   if(!signals.length) return;
   // buildMiniChart 使用的常量
-  const w=800, h=220, padL=8, padR=8, padT=12, padB=18;
+  const w=800, h=280, padL=8, padR=8, padT=40, padB=18;
   const n = bars.length;
   if(n<2) return;
   const hi = Math.max(...bars.map(b=>b.high));
@@ -2250,7 +2250,7 @@ async function applyHistSignalsToAnalysisChart(code, bars){
   const vbW = svg.viewBox && svg.viewBox.baseVal ? svg.viewBox.baseVal.width : Number(vb[2]);
   if(Math.round(vbW) !== 800) return;
   // 坐标映射 (与 applySSPMarkersToAnalysisChart 一致)
-  const w=800, h=220, padL=8, padR=8, padT=12, padB=18;
+  const w=800, h=280, padL=8, padR=8, padT=40, padB=18;
   const n = bars.length;
   if(n<2) return;
   const hi = Math.max(...bars.map(b=>b.high));
@@ -3473,7 +3473,7 @@ function renderAnalysis(d){
   bindChartInteractivity(saPanel);
 }
 function buildMiniChart(bars, pivots){
-  const w=800,h=220,padL=8,padR=8,padT=12,padB=18;
+  const w=800,h=280,padL=8,padR=8,padT=40,padB=18; // 顶部加高, 容纳信号/SSP/历史标识, 避免被裁剪
   const n=bars.length;
   if(n<2) return '';
   const hi=Math.max(...bars.map(b=>b.high));
@@ -3573,7 +3573,7 @@ function buildMiniChart(bars, pivots){
     }
   }
   return `
-    <div class="sa-chart" id="${cid}" style="height:220px">
+    <div class="sa-chart" id="${cid}" style="height:280px">
       <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:100%" preserveAspectRatio="none">
         ${gridLines}
         ${candles}
