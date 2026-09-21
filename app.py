@@ -2760,7 +2760,7 @@ def calc_kdj_system(bars: list, closes: list, highs: list, lows: list,
                 if j[i] > prev_peak_j: prev_peak_j = j[i]; prev_peak_idx = i
         top_diverge = (idx_20_high > 0 and prev_peak_idx >= 0
                        and closes[-1] >= max(closes[-20:]) * 0.99
-                       and peak_j_at_high < prev_peak_j - 10)
+                       and peak_j_at_high < prev_peak_j - 5)  # 阈值10→5 提高敏感度(识别浅背离)
         idx_20_low = -1; trough_j_at_low = J_t
         for i in range(N-20, N):
             if lows[i] == min(lows[N-20:]):
@@ -2809,7 +2809,7 @@ def calc_kdj_system(bars: list, closes: list, highs: list, lows: list,
         "J": f"{J_t:.1f}（{'极端超买>100' if J_t>100 else '极端超卖<0' if J_t<0 else '正常'}）",
         "cross": f"{'✅'+cross_pos if golden_cross else '⚠️高位死叉' if death_cross and K_t>80 else '无叉'}",
         "blunt": f"{'⚠️高位钝化(K≥80连续3日)' if high_blunt else '⚠️低位钝化' if low_blunt else '无钝化'}",
-        "diverge": f"{'⚠️顶背离(J峰值低≥10点)' if top_diverge else '底背离' if bottom_diverge else '无背离'}",
+        "diverge": f"{'⚠️顶背离(J峰值低≥5点)' if top_diverge else '底背离' if bottom_diverge else '无背离'}",
         "weekly": f"周J={wJ_t:.0f}（{'低位' if wJ_low else '高位超买' if wJ_high else '中性'}）{'周金叉✅' if w_golden else '周死叉⚠️' if w_death else ''}",
     }
     # B1: 低位金叉+双确认
