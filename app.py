@@ -8195,6 +8195,30 @@ def _is_limit_down(bar: dict, prev_close: float) -> bool:
     return pct <= -9.8
 
 
+def _spot_limit_threshold(code: str, name: str) -> float:
+    """返回该股实时涨跌幅达到即视为封板/跌停的阈值(%)：
+    创业板/科创板(30/688/301)=20%, 北交所(bj/8xx/9xx)=30%, ST=5%, 其余主板=10%"""
+    c = str(code or "")
+    n = str(name or "").upper()
+    if c.startswith(("sz30", "sh688", "sz301")):
+        return 19.5
+    if c.startswith("bj") or c[:2] in ("82", "83", "87", "88", "92"):
+        return 29.5
+    if "ST" in n:
+        return 4.8
+    return 9.8
+
+
+def _spot_is_limit_up(code: str = "", name: str = "", chg_pct: float = 0.0) -> bool:
+    """盘中实时封涨停判定(供盯盘): chg_pct 达到该板块阈值视为涨停"""
+    return chg_pct >= _spot_limit_threshold(code, name)
+
+
+def _spot_is_limit_down(code: str = "", name: str = "", chg_pct: float = 0.0) -> bool:
+    """盘中实时跌停判定(供盯盘)"""
+    return chg_pct <= -_spot_limit_threshold(code, name)
+
+
 def _run_backtest_single(symbol: str, bars: list, mode: str) -> list:
     """单只股票回测, 返回交易记录列表"""
     trades = []
