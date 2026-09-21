@@ -4491,18 +4491,38 @@ function renderMarketSnap(d){
   if(ovEl){ ovEl.textContent=sum.overall||'—'; ovEl.style.color=sum.color||'var(--txt)'; }
   const box=$('#idxCards'); if(!box) return;
   if(!cards.length){ box.innerHTML='<div class="empty">暂无指数数据</div>'; return; }
-  box.innerHTML=cards.map(idx=>{
+  // 增量更新: 复用已有 idx-card 节点, 仅更新文本/颜色/类, 不再整体重建
+  // → 消除 1s 高频刷新时指数卡被销毁重建导致的持续闪烁, 且悬停分时图不再被刷新打断
+  const keep=new Set();
+  cards.forEach(idx=>{
+    const sym=String(idx.symbol||''); keep.add(sym);
     const c=+idx.chg_pct||0;
     const up=c>0, dn=c<0;
     const clr=up?'var(--up)':(dn?'var(--down)':'var(--sub)');
     const sign=up?'+':(dn?'-':'');
     const amt=Math.abs(+idx.chg||0).toFixed(2);
-    return `<div class="idx-card" data-symbol="${esc(idx.symbol)}" data-name="${esc(idx.name)}">
-      <span class="idx-card-name" title="${esc(idx.name)}">${esc(idx.name)}</span>
-      <span class="idx-card-price ${up?'up':(dn?'down':'flat')}" style="color:${clr}">${sign==='+'?'+':''}${c.toFixed(2)}%</span>
-      <span class="idx-card-chg" style="color:${clr}">${idx.price.toFixed(2)} · ${sign==='+'?'+':'-'}${amt===0?'0.00':amt}</span>
-    </div>`;
-  }).join('');
+    let el=box.querySelector('.idx-card[data-symbol="'+sym+'"');
+    if(!el){
+      el=document.createElement('div');
+      el.className='idx-card';
+      el.setAttribute('data-symbol', sym);
+      el.innerHTML='<span class="idx-card-name"></span><span class="idx-card-price"></span><span class="idx-card-chg"></span>';
+      box.appendChild(el);
+    }
+    el.setAttribute('data-name', String(idx.name||sym));
+    const nmEl=el.querySelector('.idx-card-name');
+    nmEl.textContent=String(idx.name||sym); nmEl.title=String(idx.name||sym);
+    const pEl=el.querySelector('.idx-card-price');
+    pEl.className='idx-card-price '+(up?'up':(dn?'down':'flat'));
+    pEl.style.color=clr;
+    pEl.textContent=(up?'+':'')+c.toFixed(2)+'%';
+    const chgEl=el.querySelector('.idx-card-chg');
+    chgEl.style.color=clr;
+    chgEl.textContent=idx.price.toFixed(2)+' · '+(sign==='+'?'+':'-')+(amt===0?'0.00':amt);
+  });
+  Array.prototype.forEach.call(box.querySelectorAll('.idx-card'), el=>{
+    if(!keep.has(String(el.getAttribute('data-symbol')||''))) el.remove();
+  });
 }
 let _lastSnap = null;
 let _idxTickMs = 60000;  // 非交易时段默认 60s, 后端返回 trading=true 时切到 1s
