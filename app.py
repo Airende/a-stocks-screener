@@ -5450,7 +5450,7 @@ def _cache_cleaner_loop():
 # 个股分析模块
 # ============================================================
 _stock_search_cache = {"built_at": 0.0, "items": []}
-_SEARCH_TTL = 600  # 10分钟(之前1小时太长, 非交易时段抓到空数据会缓存死)
+_SEARCH_TTL = 1200  # 20分钟(联想) — 缓存命中仅 ~3ms; 重建(全市场拉取)较重, 故拉长间隔降低重建频率
 
 
 def _to_symbol(code: str) -> str:
@@ -5568,13 +5568,13 @@ def _do_stock_search(q: str) -> dict:
     """真正执行搜索逻辑(中文不再走URL,避免被代理层拦截报400)
     兜底: 正常走一次缓存后仍空, 强制重建一次再搜 (解决早上启动时抓到空缓存的问题)
     """
+    q = (q or "").strip().lower()
+    if not q:
+        return {"items": []}
     _build_search_index()
     # 防御: 索引为空说明快照源异常导致构建空/未落库 -> 强制重建一次, 防生成空索引
     if not _stock_search_cache["items"]:
         _build_search_index(force=True)
-    q = (q or "").strip().lower()
-    if not q:
-        return {"items": []}
     items = _stock_search_cache["items"]
 
     def _pick(hay: list) -> list:
@@ -9827,10 +9827,50 @@ def _load_watchlist(scope: str = "hold") -> list[str]:
     return list(_WLIST[scope])
 
 
+# ===== 云端推送异步化 (20260923): 自选 增/删/排序 的 Supabase 海外写不阻塞前端 =====
+# 本地落盘立即返回; 云端由后台单线程批量推送, "最新记录覆盖旧记录"(同一分栏只推最后状态),
+# 避免每次 add/del 等待 0.2~2s 的 Supabase 海外往返。
+_cloud_pending = {}               # kv_key -> rec (latest wins)
+_cloud_pushing = False
+_cloud_push_lock = threading.Lock()
+
+
+def _push_watch_cloud(ns_kv: str, rec: dict) -> None:
+    """把某个分栏的最新盯盘记录排入后台推送队列(异步, 不阻塞调用方)。"""
+    global _cloud_pushing
+    with _cloud_push_lock:
+        _cloud_pending[ns_kv] = rec   # 同栏多次写只保留最后一版, 防止线程堆积
+        if _cloud_pushing:
+            return
+        _cloud_pushing = True
+
+    def _worker():
+        try:
+            while True:
+                with _cloud_push_lock:
+                    if not _cloud_pending:
+                        _cloud_pushing = False
+                        return
+                    batch = dict(_cloud_pending)
+                    _cloud_pending.clear()
+                for k, v in batch.items():
+                    try:
+                        _kv_set(k, v)
+                    except Exception:  # noqa: BLE001
+                        pass            # 推送失败静默, 下次写入重试
+                time.sleep(0.3)
+        except Exception:                # noqa: BLE001
+            with _cloud_push_lock:
+                _cloud_pushing = False
+
+    threading.Thread(target=_worker, daemon=True, name="watch-cloud-push").start()
+
+
 def _save_watchlist(codes: list[str], scope: str = "hold") -> None:
     """保存某个分栏的盯盘列表: 更新内存 + 写本地镜像 + 自动推送云端, 记录新时间戳。
     20260921: 每次 增/删/排序 落盘即自动将最新列表推到云端(updated_at 用东八区新戳),
-    跨机"拉取覆盖本机"由手动/页面加载的 sync 触发(_pull_watch_cloud)。"""
+    20260923: 云端推送改为后台异步, 不再阻塞前端响应。跨机"拉取覆盖本机"仍由 sync 触发。
+    """
     ns = _WATCH_NS.get(scope) or _WATCH_NS["hold"]
     codes = [str(c) for c in codes]
     # 时间戳统一用东八区 bj_now(): 服务器常为 UTC, 若用 time.strftime 会与云端历史
@@ -9842,12 +9882,9 @@ def _save_watchlist(codes: list[str], scope: str = "hold") -> None:
     _WLIST_RESYNC[scope] = time.time()
     rec = {"codes": codes, "updated_at": upd}
     _write_watch_file(rec, ns["file"])
-    # 自动推送云端 (增/删/排序都会走到这里, 无需再手动点上传)
+    # 自动推送云端 (增/删/排序都会走到这里, 无需再手动点上传) —— 后台异步, 不阻塞响应
     if _kv_cloud_ready():
-        try:
-            _kv_set(ns["kv"], rec)
-        except Exception:
-            pass
+        _push_watch_cloud(ns["kv"], rec)
 
 
 def _normalize_wcode(raw: str) -> str:
@@ -10311,25 +10348,26 @@ def api_watchlist_add(payload: dict):
     # 校验该代码有效并取名称: 先查实时快照; 快照不全(备源只覆盖本地股票池)时
     # 用腾讯按前缀单测兜底, 避免 002080 等合法个股因快照缺失被误判为不存在
     name = ""
+    # 快路径(20260923): 优先腾讯单测按代码取名称 (~0.1s), 不再先扫描全市场快照(慢)。
     try:
-        for r in fetch_spot_all():
-            if str(r.get("code") or "") == code:
-                name = str(r.get("name") or "")
-                break
+        sym = _to_symbol(code)  # 默认按代码规则推导前缀
+        hits = _fetch_spot_tencent([sym])
+        if not hits:
+            prefix = "sh" if sym.startswith("sz") else "sz"
+            hits = _fetch_spot_tencent([prefix + code])
+            if not hits and not sym.startswith("bj"):
+                hits = _fetch_spot_tencent(["bj" + code])
+        if hits and str(hits[0].get("code") or "") == code:
+            name = str(hits[0].get("name") or "")
     except Exception:
         pass
     if not name:
+        # 慢路径兜底: 腾讯漏票时再查全市场快照
         try:
-            sym = _to_symbol(code)  # 默认按代码规则推导前缀
-            hits = _fetch_spot_tencent([sym])
-            if not hits:
-                # 前缀可能推导错, 尝试另一个常见前缀
-                prefix = "sh" if sym.startswith("sz") else "sz"
-                hits = _fetch_spot_tencent([prefix + code])
-                if not hits and not sym.startswith("bj"):
-                    hits = _fetch_spot_tencent(["bj" + code])
-            if hits and hits[0].get("code") == code:
-                name = str(hits[0].get("name") or "")
+            for r in fetch_spot_all():
+                if str(r.get("code") or "") == code:
+                    name = str(r.get("name") or "")
+                    break
         except Exception:
             pass
     if not name:
