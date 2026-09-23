@@ -839,7 +839,7 @@
   /* 股票代码悬浮K线预览弹框 (20260906): 可交互(十字光标/OHLC悬浮) */
   .kd-preview{position:fixed;z-index:10000;background:var(--panel);
               border:1px solid var(--border);border-radius:10px;
-              box-shadow:0 8px 24px rgba(0,0,0,.45);overflow:hidden;width:584px}
+              box-shadow:0 8px 24px rgba(0,0,0,.45);overflow:hidden;width:724px}
   .kd-preview.show{display:block}
   .kd-preview .sa-chart{border:none;border-radius:0;background:transparent}
   /* 窄屏适配: tab横向滚动 / 隐藏次要列 / 条件单列 */
@@ -5747,7 +5747,7 @@ function kdMultiChart(bars){
   // 悬停预览三面板 (20260906): K线+三均线 / 成交量副图(判断放量缩量) / KDJ副图
   // 20260920: 返回 {div, c1, sig} 使调用方先渲染K线、再异步注入历史形态信号标记
   // 三个面板共享同一 x 轴映射, 均注册进 _chartReg 复用十字光标+自定义悬浮
-  const w=560, padL=6, padR=52;
+  const w=700, padL=6, padR=52;
   const n=bars.length;
   if(n<2) return '';
   const xStep=(w-padL-padR)/n;
