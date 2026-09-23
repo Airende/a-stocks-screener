@@ -10593,6 +10593,10 @@ def api_kline(code: str = "", datalen: int = 122):
 
         # 3. 取K线 (已含当日bar; spot_data 传入可避免内部二次 fetch_spot_all)
         bars = fetch_kline(symbol, datalen=datalen, spot_data=spot_data)
+        # 20260923: fetch_kline 缓存命中会返回全量(选股按300根落盘), 这里截断为最近 datalen 根,
+        # 让浮窗严格显示"近半年/请求根数", 而非把一年多300根全挤进小图。
+        if bars and len(bars) > datalen:
+            bars = bars[-datalen:]
 
         # 4. 取股票名称: 优先内存快照 → 本地股票池 → 无则空串
         name = ""
