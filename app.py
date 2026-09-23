@@ -4980,9 +4980,20 @@ def run_screen(conds=None) -> dict:
     else:
         conds = set(conds)
     t0 = time.time()
-    # 1. 全市场快照
+    # 1. 全市场快照 (20260923: 整体失败自动重试3次, 避免瞬时异常导致"一直加载失败")
     _set_screen_progress("拉取全市场实时行情…")
-    spot = fetch_spot_all()
+    spot = None
+    for _try in range(3):
+        try:
+            spot = fetch_spot_all()
+            if spot:
+                break
+        except Exception:  # noqa: BLE001
+            spot = None
+        _set_screen_progress(f"行情快照失败, 自动重试 {_try + 1}/3…")
+        time.sleep(1.5 * (_try + 1))
+    if not spot:
+        raise RuntimeError("全市场行情快照连续3次拉取失败")
     # 2. 预过滤: 按 conds 剔除门, 减少K线拉取量
     candidates = []
     for r in spot:

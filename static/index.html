@@ -1637,38 +1637,69 @@ $('#cacheRefreshBtn').onclick=async()=>{
   btn.disabled=true; btn.textContent='刷新中…';
   $('#cacheInfo').textContent='K线数据: 正在清空并重新拉取… (下方保留旧数据, 完成后自动更新)';
   // 20260910: 不清空表格, 保留旧数据直到新数据就绪, 避免"下面数据刷不出"
-  try{
-    await fetch('/api/cache_refresh',{method:'POST'});
-    // 轮询筛选进度: 等待新数据(universe>0 且 !running)才完成
-    const poll=async()=>{
+  const info={start:Date.now(), lastProg:'', lastChange:Date.now(), attempts:0};
+  const MAX_ATTEMPTS=3, STALL_MS=45000, TOTAL_MS=8*60*1000;
+  // 触发/重新触发后端清缓存拉取, 失败自动小退避重试
+  const kick=async()=>{
+    for(let k=0;k<3;k++){
       try{
-        const r=await fetch('/api/screen');
-        const d=await r.json();
-        if(d.running){
-          $('#cacheInfo').textContent=`K线数据: 重新拉取中… ${d.progress||''}`;
-          btn.textContent='拉取中…';
-          setTimeout(poll, 3000);
-        }else if(d.universe>0){
-          // 筛选完成且有新数据
-          btn.disabled=false; btn.textContent='刷新';
-          loadCacheInfo();
-          render(d, false);
-        }else if(d.error){
-          btn.disabled=false; btn.textContent='刷新';
-          $('#cacheInfo').textContent='K线数据: 拉取失败 - '+d.error;
-        }else{
-          // 无数据且未运行, 可能异常, 继续等一会
-          setTimeout(poll, 3000);
-        }
-      }catch(e){
-        setTimeout(poll, 5000);
-      }
-    };
-    setTimeout(poll, 2000);
-  }catch(e){
+        const r=await fetch('/api/cache_refresh',{method:'POST'});
+        if(r.ok) return true;
+      }catch(e){}
+      $('#cacheInfo').textContent=`K线数据: 连接中断, 重连重试 ${k+1}/3…`;
+      await new Promise(res=>setTimeout(res,1500*(k+1)));
+    }
+    return false;
+  };
+  if(await kick()){
+    info.lastChange=Date.now();
+  }else{
     btn.disabled=false; btn.textContent='刷新';
-    $('#cacheInfo').textContent='K线数据: 刷新失败';
+    $('#cacheInfo').textContent='K线数据: 刷新失败 (服务无响应, 请稍后再试)';
+    return;
   }
+  const poll=async()=>{
+    const now=Date.now();
+    if(now-info.start>TOTAL_MS){
+      btn.disabled=false; btn.textContent='刷新';
+      $('#cacheInfo').textContent='K线数据: 拉取超时 (可在后台有进展后再次点击刷新)';
+      return;
+    }
+    let d=null;
+    try{ d=await (await fetch('/api/screen')).json(); }catch(e){ d=null; }
+    const prog=(d&&d.progress)||'';
+    if(prog!==info.lastProg){ info.lastProg=prog; info.lastChange=now; }
+    // 后端 running 但进度停滞过久 → 自动重启一次 (自愈)
+    const stalled = d&&d.running && (now-info.lastChange>STALL_MS);
+    if(stalled && info.attempts<MAX_ATTEMPTS){
+      info.attempts++;
+      $('#cacheInfo').textContent=`K线数据: 进度停滞, 自动重连 ${info.attempts}/${MAX_ATTEMPTS}…`;
+      await kick();
+      info.lastProg=''; info.lastChange=Date.now();
+      btn.textContent=`拉取中 ${info.attempts}…`;
+      setTimeout(poll,3000); return;
+    }
+    if(d&&d.error && !d.running){
+      btn.disabled=false; btn.textContent='刷新';
+      $('#cacheInfo').textContent='K线数据: 拉取失败 - '+d.error+' (可再点击刷新)';
+      return;
+    }
+    if(d&&d.running){
+      $('#cacheInfo').textContent=`K线数据: 重新拉取中… ${prog}`;
+      btn.textContent='拉取中…';
+      setTimeout(poll, 3000); return;
+    }
+    if(d&&d.universe>0){
+      // 筛选完成且有新数据
+      btn.disabled=false; btn.textContent='刷新';
+      loadCacheInfo();
+      render(d, false);
+      return;
+    }
+    // 无数据且未运行, 可能异常, 继续等一会
+    setTimeout(poll, 3000);
+  };
+  setTimeout(poll, 2000);
 };
 loadCacheInfo();
 
