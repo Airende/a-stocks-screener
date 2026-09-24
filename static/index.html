@@ -949,7 +949,7 @@
         <!-- ATR波动过滤 (20260906): 多选满足其一, 默认勾选3~8%波段弹性 -->
         <div class="ckbar" style="margin-bottom:10px">
           <span class="meta" style="font-weight:700;color:var(--txt)">ATR过滤:</span>
-          <label style="display:inline-flex;align-items:center;gap:5px;margin-right:8px;font-size:13px;cursor:pointer"><input type="checkbox" data-atr="e1" checked> ATR%&lt;4%（趋势票）</label>
+          <label style="display:inline-flex;align-items:center;gap:5px;margin-right:8px;font-size:13px;cursor:pointer"><input type="checkbox" data-atr="e1"> ATR%&lt;4%（趋势票）</label>
           <label style="display:inline-flex;align-items:center;gap:5px;margin-right:8px;font-size:13px;cursor:pointer"><input type="checkbox" data-atr="e2" checked> ATR%3~8%（波段弹性）</label>
           <label style="display:inline-flex;align-items:center;gap:5px;margin-right:8px;font-size:13px;cursor:pointer"><input type="checkbox" data-atr="e3" checked> ATR收缩（蓄势）</label>
         </div>
@@ -4047,8 +4047,8 @@ let sspPollTimer=null;
 let maSortMode='default';
 let maSortDir='desc';
 let maFilterConcept=null; // 当前选中的板块筛选(null=全部)
-// ATR过滤勾选项 (20260918): 多选满足其一, 默认全选
-let maAtrConds = ['e1','e2','e3'];
+// ATR过滤勾选项 (20260918): 多选满足其一, 默认选中第二、三个
+let maAtrConds = ['e2','e3'];
 function passMaAtr(s){
   // ATR过滤仅作用于日线均线形态tab; 背离tab(日线背离)和周线tab不受ATR限制 (与后端一致)
   const curPat = MA_PATS[maCurrentTab][0];
