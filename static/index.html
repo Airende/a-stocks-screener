@@ -4241,6 +4241,8 @@ function renderMATable(){
   updateMASortArrows();
   // --- ATR过滤(20260906, 多选满足其一) + 板块筛选(单选) ---
   let stocks = rawStocks.slice().filter(passMaAtr);
+  // 剔除银行票 (20260924): 行业或所属板块名含"银行"即移除 (口径=行业/板块含"银行")
+  stocks = stocks.filter(s=> !((s.industry||'').includes('银行') || (s.concept||'').includes('银行')));
   if(maFilterConcept){
     stocks = stocks.filter(s=> maSplitConcept(s.concept).includes(maFilterConcept));
   }
