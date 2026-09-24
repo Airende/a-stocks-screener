@@ -4247,7 +4247,7 @@ function renderMATable(){
   renderMADist(stocks);
   if(!stocks.length){
     const msg = maFilterConcept ? `板块「${maFilterConcept}」暂无匹配标的` : '当前形态暂无匹配标的';
-    $('#tbodyMA').innerHTML=`<tr><td colspan="6" class="empty">${msg}</td></tr>`;
+    $('#tbodyMA').innerHTML=maEmptyRow(msg);
     return;
   }
   // --- 排序: default=后端综合分顺序; industry=按行业股票数聚合; concept=按板块子概念聚合(宽松) ---
@@ -4449,6 +4449,10 @@ function renderMA(d){
   renderMATabs();
   renderMATable();
 }
+// 均线/上试盘 空行提示: 内容水平居中于可视区域 (20260926)
+function maEmptyRow(inner){
+  return '<tr><td colspan="12" class="empty"><div style="display:inline-flex;align-items:center;justify-content:center;gap:6px;vertical-align:middle;text-align:center">'+inner+'</div></td></tr>';
+}
 async function startMAScreen(){
   const btn=$('#maRunBtn');
   maPage=1;  // 新一轮扫描重置分页 (20260906)
@@ -4463,7 +4467,7 @@ async function startMAScreen(){
   }
   btn.disabled=true; btn.innerHTML='<span class="spin"></span>筛选中…';
   updateProgLine('#maProg','准备中…',true);
-  $('#tbodyMA').innerHTML='<tr><td colspan="6" class="empty"><span class="spin"></span>正在扫描全市场均线形态, 首次约需1-2分钟…</td></tr>';
+  $('#tbodyMA').innerHTML=maEmptyRow('<span class="spin"></span>正在扫描全市场均线形态, 首次约需1-2分钟…');
   try{ await fetch('/api/ma-screen/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({atr:maAtrConds})}); }catch(e){}
   const poll=async()=>{
     try{
@@ -4475,15 +4479,15 @@ async function startMAScreen(){
         if(!d.running){ btn.disabled=false; btn.textContent='重新筛选'; return; }
       }else if(d.error){
         updateProgLine('#maProg','',false);
-        $('#tbodyMA').innerHTML='<tr><td colspan="6" class="empty">出错: '+d.error+'</td></tr>';
+        $('#tbodyMA').innerHTML=maEmptyRow('出错: '+d.error);
         btn.disabled=false; btn.textContent='开始筛选'; return;
       }else{
-        $('#tbodyMA').innerHTML='<tr><td colspan="6" class="empty"><span class="spin"></span>'+(d.progress||'后台筛选中…')+'</td></tr>';
+        $('#tbodyMA').innerHTML=maEmptyRow('<span class="spin"></span>'+(d.progress||'后台筛选中…'));
       }
       setTimeout(poll,4000);
     }catch(e){
       updateProgLine('#maProg','',false);
-      $('#tbodyMA').innerHTML='<tr><td colspan="6" class="empty">加载失败: '+e.message+'</td></tr>';
+      $('#tbodyMA').innerHTML=maEmptyRow('加载失败: '+e.message);
       btn.disabled=false; btn.textContent='开始筛选';
     }
   };
