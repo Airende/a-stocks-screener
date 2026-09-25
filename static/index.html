@@ -3771,17 +3771,22 @@ function buildMiniChart(bars, pivots, opt){
       zzHtml=`<path d="${zzPath}" fill="none" stroke="#a06bff" stroke-width="1.2" stroke-dasharray="4,3" opacity="0.8"/>${marks}`;
     }
   }
-  // ---- 涨跌停「板」标记 (20260925): 涨停红板在K线上方(ZigZag ▼ 之上),
-  // 跌停绿板在当日K线下方, 贴图底时钳制防裁剪/防压日期轴; _sqT 反向缩放防拉伸 ----
+  // ---- 涨跌停「板」标记 (20260925): 涨停红圈板在K线上方(ZigZag ▼ 之上),
+  // 跌停绿圈板在当日K线下方, 贴图底时钳制; 文字5号+圆圈包裹, _sqT反向缩放防拉伸 ----
   const limitMarks=(()=>{ let s='';
     for(let i=0;i<n;i++){
       const t=limitDays[(bars[i].day||'').slice(0,10)];
       if(!t) continue;
       const x=padL+i*xStep+xStep/2;
-      let yy, fill;
-      if(t==='up'){ yy=y(bars[i].high)-20; fill='#ff4d4f'; }
-      else { yy=Math.min(y(bars[i].low)+13, h-7); fill='#26a69a'; }
-      s+=_sqT(x, yy, `fill="${fill}" font-size="6" font-weight="bold" text-anchor="middle" stroke="rgba(15,22,35,.85)" stroke-width="1.4" paint-order="stroke"`, '板');
+      let cl, fill;
+      // 圈直径=K线渲染宽度(bw×横向拉伸系数), 紧贴蜡烛上/下方
+      const r=Math.max(1.5, bw*kX/2);
+      if(t==='up'){ cl=y(bars[i].high)-(r+3); fill='#ff4d4f'; }
+      else { cl=Math.min(y(bars[i].low)+(r+3), h-8); fill='#26a69a'; }
+      const sc=kX>1.02? ` scale(${(1/kX).toFixed(3)},1)` : '';
+      // 20260925: 去掉"板"字, 仅留圆圈标记 (红=涨停在上, 绿=跌停在↓下)
+      s+=`<g transform="translate(${x.toFixed(1)},${cl.toFixed(1)})${sc}">`+
+         `<circle cx="0" cy="0" r="${r.toFixed(2)}" fill="#fff" stroke="${fill}" stroke-width="1"/></g>`;
     }
     return s; })();
   // 成交量+KDJ 副图 (20260925): 与浮窗同逻辑(kdSubPanels), 挂主图下方, 共用x映射对齐K线
@@ -6142,16 +6147,57 @@ function kdMultiChart(bars, opt){
   const grid1=[0,0.5,1].map(f=>{ const v=hi-f*rng1, yy=yFn1(v);
     return `<line x1="${padL}" y1="${yy.toFixed(1)}" x2="${w-padR}" y2="${yy.toFixed(1)}" stroke="rgba(255,255,255,.05)"/>`+
            `<text x="${w-padR+3}" y="${(yy+3).toFixed(1)}" fill="#5a6a82" font-size="9">${v.toFixed(2)}</text>`; }).join('');
-  // 涨跌停「板」标记: 涨停红板在K线上方, 跌停绿板在当日K线下方 (20260925)
+  // 涨跌停「板」标记: 涨停红圈板在K线上方, 跌停绿圈板在当日K线下方 (20260925 圈式5号字)
   const limitMarks=(()=>{ let s='';
     for(let i=0;i<n;i++){
       const t=limitDays[(bars[i].day||'').slice(0,10)];
       if(!t) continue;
-      const fill=t==='up'?'#ff4d4f':'#26a69a';
-      const yy=t==='up' ? (yFn1(bars[i].high)-10) : Math.min(yFn1(bars[i].low)+12, h1-4);
-      s+=`<text x="${xi(i).toFixed(1)}" y="${yy.toFixed(1)}" font-size="6.5" font-weight="700" text-anchor="middle" fill="${fill}" stroke="rgba(15,22,35,.9)" stroke-width="1.4" paint-order="stroke">板</text>`;
+      const x=xi(i).toFixed(1);
+      let cl, fill;
+      const r=Math.max(1.2, bw/2);   // 圈直径=K线宽度
+      if(t==='up'){ cl=yFn1(bars[i].high)-(r+2.5); fill='#ff4d4f'; }
+      else { cl=Math.min(yFn1(bars[i].low)+(r+2.5), h1-7); fill='#26a69a'; }
+      s+=`<g transform="translate(${x},${cl.toFixed(1)})">`+
+         `<circle cx="0" cy="0" r="${r.toFixed(2)}" fill="#fff" stroke="${fill}" stroke-width="1"/></g>`;
     }
     return s; })();
+  // 缠论叠加 (20260925): 笔/线段/中枢/趋势, 来自 /api/kline 的 chan (与bars同窗口计算, 索引对齐)
+  const chan=opt&&opt.chan;
+  let chanBands='', chanOverlay='';
+  if(chan && chan.ok && chan.strokes && chan.strokes.length){
+    const poly=(arr, gi, gp)=>{ if(!arr||!arr.length) return ''; let cpts=[], st=false;
+      arr.forEach(s=>{ if(!st){ cpts.push([s[gi[0]], s[gp[0]]]); st=true; } cpts.push([s[gi[1]], s[gp[1]]]); });
+      return cpts.map((p,k)=>`${k?'L':'M'}${xi(p[0]).toFixed(1)},${yFn1(p[1]).toFixed(1)}`).join(' '); };
+    const strokePath=poly(chan.strokes,['i0','i1'],['p0','p1']);
+    const segs=chan.segments||[];
+    chanBands=(chan.pivots||[]).map(p=>{
+      const x0=Math.max(padL, xi(p.i0)-bw/2), x1=Math.min(w-padR, xi(p.i1)+bw/2);
+      const yT=yFn1(p.zg), yB=yFn1(p.zd);
+      // ZG/ZD 数值标注(贴框右缘, 防出界钳制)
+      const zt=Math.max(10, yT-3), zb=Math.min(yB+10, h1-3);
+      return `<rect x="${x0.toFixed(1)}" y="${yT.toFixed(1)}" width="${Math.max(1,x1-x0).toFixed(1)}" height="${Math.max(2,yB-yT).toFixed(1)}" fill="rgba(160,107,255,.10)" stroke="rgba(160,107,255,.45)" stroke-width="1" stroke-dasharray="4,3"/>`+
+        `<text x="${x1.toFixed(1)}" y="${zt.toFixed(1)}" font-size="8" text-anchor="end" fill="rgba(180,140,255,.95)">ZG ${p.zg}</text>`+
+        `<text x="${x1.toFixed(1)}" y="${zb.toFixed(1)}" font-size="8" text-anchor="end" fill="rgba(180,140,255,.95)">ZD ${p.zd}</text>`;
+    }).join('');
+    // 三类买卖点(含背驰类): ▲/▼ + 名称, 近邻错层防遮盖 (同缠论tab)
+    let _lastX=-1e9, _lane=0;
+    const sigMarks=(chan.signals||[]).slice().sort((a,b)=>a.i-b.i).map(s=>{
+      const x=xi(s.i), yy=yFn1(s.price);
+      const isBuy=s.side==='buy';
+      const col=isBuy?'#ff4d4f':'#26a69a';
+      _lane=(x-_lastX<28)?(_lane+1)%3:0; _lastX=x;
+      const off=_lane*11;
+      const ay=Math.max(9, isBuy? yy+11+off : yy-5-off);
+      const ty=isBuy? Math.min(yy+23+off, h1-3) : Math.max(9, yy-17-off);
+      return `<text x="${x.toFixed(1)}" y="${ay.toFixed(1)}" font-size="8" text-anchor="middle" fill="${col}">${isBuy?'▲':'▼'}</text>`+
+             `<text x="${x.toFixed(1)}" y="${ty.toFixed(1)}" font-size="8" font-weight="700" text-anchor="middle" fill="${col}" stroke="rgba(15,22,35,.9)" stroke-width="1.2" paint-order="stroke">${esc(s.label||'')}</text>`;
+    }).join('');
+    // 20260925: 黄色线段线按需求移除, 仅保留趋势标签提示方向
+    const lastSeg=segs.length?segs[segs.length-1]:null;
+    chanOverlay=`<path d="${strokePath}" fill="none" stroke="rgba(232,238,246,.75)" stroke-width="1"/>`+
+      sigMarks+
+      (lastSeg? `<text x="${w-padR-4}" y="10" font-size="9" font-weight="700" text-anchor="end" fill="${lastSeg.dir==='up'?'#ff4d4f':'#26a69a'}">${lastSeg.dir==='up'?'趋势: 上涨':'趋势: 下跌'}${lastSeg.confirmed===false?'(未确认)':''}</text>`:'');
+  }
   const cid1='kd'+(++_chartSeq);
   // 20260920: 历史形态信号标注 (红"多"/青"破"/蓝"强"/金"观" 等一字简称), 由调用方异步注入
   // sig 关闭 xi/yFn1/n/bars 映射, kdAddSigs 据 histSigs 渲染 <text> 挂到 #${cid1}_sig
@@ -6180,10 +6226,11 @@ function kdMultiChart(bars, opt){
       return `<b>${esc(b.day||'')}</b>${limTag}<br>开 ${b.open} · 高 ${b.high}<br>低 ${b.low} · 收 <b>${b.close}</b> ${c?'<span style="color:'+(b.chg>=0?'#ff4d4f':'#26a69a')+'">'+(b.chg>=0?'+':'')+b.chg.toFixed(2)+'%</span>':''}`; }};
   // 20260906 修复: maPath 返回完整path元素, 直接输出(此前又包了一层<path d=...>导致均线不渲染)
   const p1=`<div class="sa-chart" id="${cid1}" style="height:${h1}px"><svg viewBox="0 0 ${w} ${h1}" width="${w}" height="${h1}">
-    ${grid1}${candles}${limitMarks}<g id="${sigLayerId}"></g>
+    ${grid1}${chanBands}${candles}${limitMarks}<g id="${sigLayerId}"></g>
     ${maPath(ma5,'#f5c842',1)}
     ${maPath(ma10,'#4f9dff',1)}
     ${maPath(ma20,'#a06bff',1)}
+    ${chanOverlay}
     <text x="${padL}" y="10" fill="#f5c842" font-size="9">MA5</text><text x="${padL+32}" y="10" fill="#4f9dff" font-size="9">MA10</text><text x="${padL+64}" y="10" fill="#a06bff" font-size="9">MA20</text>
   </svg></div>`;
 
@@ -6258,7 +6305,7 @@ async function showKlinePreview(code, anchor){
     const d = _kdCache[code];
     const bars = d.bars;
     // 20260920: 先渲染K线, 历史信号异步加载后注入, 不阻塞浮窗显示
-    const q=kdMultiChart(bars, {code, name:d.name});
+    const q=kdMultiChart(bars, {code, name:d.name, chan:d.chan});
     const renderMarkup = q && q.div ? {html:q.div, c1:q.c1, sig:q.sig} : {html:(q||''), c1:'', sig:null};
     if(_kdPopup !== pop) return;
     const last = bars[bars.length-1];

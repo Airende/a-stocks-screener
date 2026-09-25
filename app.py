@@ -10753,7 +10753,15 @@ def api_kline(code: str = "", datalen: int = 122):
                 "chg": chg,
             })
 
-        return {"code": code, "symbol": symbol, "name": name, "bars": out}
+        # 6. 缠论结构 (20260925): 与浮窗bars同窗口计算, 索引与bars对齐, 前端直接叠加笔/线段/中枢/趋势
+        chan = None
+        try:
+            if len(out) >= 10:
+                chan = chan_analysis(out, "auto")
+        except Exception:  # noqa: BLE001
+            chan = None
+
+        return {"code": code, "symbol": symbol, "name": name, "bars": out, "chan": chan}
     except Exception as e:  # noqa: BLE001
         return JSONResponse({"error": str(e)}, status_code=500)
 
