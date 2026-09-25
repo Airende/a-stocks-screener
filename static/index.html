@@ -146,6 +146,9 @@
   .collapsible summary::-webkit-details-marker{display:none}
   .collapsible summary::before{content:'▶';display:inline-block;font-size:9px;transition:transform .15s;color:var(--accent)}
   .collapsible[open] summary::before{transform:rotate(90deg)}
+  /* 多周期对比 (20260925): body.multi-tf 显示紧凑三联(日/周/月), 隐藏完整模式; 关闭时反之 */
+  body.multi-tf .tf-full{display:none}
+  body:not(.multi-tf) .tf-compact{display:none}
   .collapsible .col-body{padding:8px 12px 10px;font-size:12px;color:var(--txt);line-height:1.8;background:var(--panel2);border-top:1px solid var(--border)}
   .collapsible .col-body h5{margin:8px 0 4px;color:var(--accent);font-size:12px;font-weight:700}
   .collapsible .col-body table{width:100%;border-collapse:collapse;margin:4px 0 8px;font-size:11px}
@@ -663,6 +666,12 @@
   .watch-bar{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:12px}
   .watch-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
   .watch-head .tt{font-weight:800;font-size:13px;color:var(--txt)}
+  /* 盯盘条收起/展开 (20260925): 点击标题切换, 默认展开, 状态存localStorage */
+  .watch-head .tt{cursor:pointer;user-select:none}
+  .watch-head .tt:hover{color:var(--accent)}
+  .watch-head .tt .fold-arrow{display:inline-block;font-size:9px;margin-right:5px;color:var(--sub);transition:transform .15s}
+  .watch-bar.folded .watch-head .tt .fold-arrow{transform:rotate(-90deg)}
+  .watch-bar.folded .watch-wrap,.watch-bar.folded .watch-panel{display:none!important}
   .watch-head .wd-date{font-style:normal;font-size:12px;font-weight:600;color:var(--sub);font-variant-numeric:tabular-nums;
                        border:1px solid var(--border);background:rgba(255,255,255,.05);padding:2px 7px;border-radius:6px}
   .watch-head .agg{font-size:11px;color:var(--sub);font-variant-numeric:tabular-nums}
@@ -899,7 +908,7 @@
   <!-- ===== 自选股盯盘: 添加自选 + 实时涨跌幅 + 预警高亮 (20260918) ===== -->
   <div id="watchBar" class="watch-bar">
     <div class="watch-head">
-      <span class="tt">持仓盯盘</span>
+      <span class="tt" onclick="toggleWatchFold('watchBar')" title="点击收起/展开"><span class="fold-arrow">▼</span>持仓盯盘</span>
       <span class="agg" id="watchAgg"></span>
       <div class="watch-add">
         <button id="watchRefreshBtn" class="ghost" title="从云端拉取最新列表覆盖本机">同步</button>
@@ -917,7 +926,7 @@
   <!-- ===== 自选盯盘: 与持仓盯盘逻辑一致, 独立列表 (20260920) ===== -->
   <div id="watchBarSelf" class="watch-bar">
     <div class="watch-head">
-      <span class="tt">自选盯盘</span>
+      <span class="tt" onclick="toggleWatchFold('watchBarSelf')" title="点击收起/展开"><span class="fold-arrow">▼</span>自选盯盘</span>
       <span class="agg" id="watchAggSelf"></span>
       <div class="watch-add">
         <button id="watchRefreshBtnSelf" class="ghost" title="从云端拉取最新列表覆盖本机">同步</button>
@@ -950,13 +959,7 @@
           <span class="meta" id="maUpdated">尚未筛选</span>
           <button class="ghost" id="maRunBtn">开始筛选</button>
         </div>
-        <!-- ATR波动过滤 (20260906): 多选满足其一, 默认勾选3~8%波段弹性 -->
-        <div class="ckbar" style="margin-bottom:10px">
-          <span class="meta" style="font-weight:700;color:var(--txt)">ATR过滤:</span>
-          <label style="display:inline-flex;align-items:center;gap:5px;margin-right:8px;font-size:13px;cursor:pointer"><input type="checkbox" data-atr="e1"> ATR%&lt;4%（趋势票）</label>
-          <label style="display:inline-flex;align-items:center;gap:5px;margin-right:8px;font-size:13px;cursor:pointer"><input type="checkbox" data-atr="e2" checked> ATR%3~8%（波段弹性）</label>
-          <label style="display:inline-flex;align-items:center;gap:5px;margin-right:8px;font-size:13px;cursor:pointer"><input type="checkbox" data-atr="e3" checked> ATR收缩（蓄势）</label>
-        </div>
+        <!-- ATR过滤UI已移除 (20260925): 不再按ATR过滤, 列表仍显示ATR%列 -->
         <div class="ma-tabs" id="maTabs"></div>
         <div class="ma-tab-desc" id="maDesc"></div>
         <!-- 均线/上试盘 扫描进度条 (20260906) -->
@@ -1200,10 +1203,52 @@ function openStock(code, name, ev){
   }
 }
 // 从均线筛选/选股条件 跳转到个股分析 tab, 并直接搜索该股票
+// 筛选列表跳转位置记忆 (20260925): 从均线筛选列表点进个股分析时记录滚动位置与所点股票,
+// 回到均线形态筛选tab时恢复到原位置
+let _maReturnPos=null;
+// 右下角"返回筛选列表"浮窗 (20260925): 从筛选列表跳入个股分析时显示, 点击回到来时的筛选位置
+function showMaReturnFloat(){
+  let el=document.getElementById('maReturnFloat');
+  const label=(_maReturnPos&&_maReturnPos.label)||'筛选列表';
+  if(!el){
+    el=document.createElement('div');
+    el.id='maReturnFloat';
+    el.style.cssText='position:fixed;right:18px;bottom:18px;z-index:9999;cursor:pointer;'+
+      'background:var(--panel);border:1px solid var(--accent);border-radius:20px;padding:8px 16px;'+
+      'font-size:13px;color:var(--txt);box-shadow:0 6px 18px rgba(0,0,0,.4);user-select:none;transition:background .15s,color .15s';
+    el.onmouseenter=()=>{ el.style.background='var(--accent)'; el.style.color='#fff'; };
+    el.onmouseleave=()=>{ el.style.background='var(--panel)'; el.style.color='var(--txt)'; };
+    el.onclick=()=>{
+      hideMaReturnFloat();
+      const t=document.querySelector('.main-tab[data-pane="pane-ma"]');
+      if(t) t.click();   // 主tab逻辑会按 _maReturnPos 恢复滚动位置
+    };
+    document.body.appendChild(el);
+  }
+  el.innerHTML='↩ 返回'+label;
+  el.style.display='block';
+}
+function hideMaReturnFloat(){
+  const el=document.getElementById('maReturnFloat');
+  if(el) el.style.display='none';
+}
 function gotoStockAnalyze(code, name){
+  // 记录跳转时的滚动位置与所点股票 (先于tab切换); 任何页面跳入个股分析默认多周期对比
+  try{
+    const prevPane=document.querySelector('.tab-pane.active');
+    if(prevPane && prevPane.id!=='pane-stock'){
+      if(prevPane.id==='pane-ma'){
+        _maReturnPos={y: window.scrollY||0, code: String(code||''),
+          label: (typeof DISP_MA_NAME!=='undefined' && DISP_MA_NAME[maCurrentTab]) || '筛选列表'};
+      }
+      // 跳入个股分析默认开启多周期对比 (20260925, 不覆盖用户保存的偏好)
+      document.body.classList.add('multi-tf');
+    }
+  }catch(e){}
   // 切到 "个股分析" tab
   const tab = document.querySelector('.main-tab[data-pane="pane-stock"]');
   if(tab){ tab.click(); }
+  try{ if(typeof showMaReturnFloat==='function' && _maReturnPos && _maReturnPos.label) showMaReturnFloat(); }catch(e){}
   // 把搜索框临时填上股票名(便于用户看到当前在看哪只), 再触发分析
   try{ if(typeof saInput!=='undefined' && saInput){ saInput.value=name||code; } }catch(e){}
   if(typeof analyzeStock==='function'){ analyzeStock(code); }
@@ -1211,6 +1256,11 @@ function gotoStockAnalyze(code, name){
 // Tab切换
 document.querySelectorAll('.main-tab').forEach(t=>{
   t.onclick=()=>{
+    const _prevPane=document.querySelector('.tab-pane.active');
+    // 离开筛选列表时刷新记忆的滚动位置 (20260925)
+    if(_prevPane && _prevPane.id==='pane-ma' && _maReturnPos){ _maReturnPos.y=window.scrollY||0; }
+    // 手动切主tab(非"筛选列表→个股分析"跳转路径)时隐藏返回浮窗 (20260925)
+    if(!(_prevPane && _prevPane.id==='pane-ma' && t.dataset.pane==='pane-stock')) hideMaReturnFloat();
     document.querySelectorAll('.main-tab').forEach(x=>x.classList.remove('active'));
     document.querySelectorAll('.tab-pane').forEach(x=>x.classList.remove('active'));
     t.classList.add('active');
@@ -1221,6 +1271,17 @@ document.querySelectorAll('.main-tab').forEach(t=>{
     if(t.dataset.pane==='pane-history' && typeof loadHistoryDates==='function' && !histLoaded) loadHistoryDates();
     // 切到缠论结构 tab 时把最近一次分析结果的缠论框搬到此处 (20260920)
     if(t.dataset.pane==='pane-chan' && typeof moveChanToTab==='function') moveChanToTab();
+    // 回到筛选列表: 优先定位跳转前点击的那只股票(居中), 找不到则恢复离开时的滚动位置 (20260925)
+    if(t.dataset.pane==='pane-ma' && _maReturnPos){
+      requestAnimationFrame(()=>{
+        let done=false;
+        if(_maReturnPos.code){
+          const row=[...document.querySelectorAll('#tbodyMA tr')].find(tr=>tr.innerHTML.indexOf(_maReturnPos.code)>=0);
+          if(row){ row.scrollIntoView({block:'center'}); done=true; }
+        }
+        if(!done) window.scrollTo(0, _maReturnPos.y||0);
+      });
+    }
   };
 });
 // 缠论结构tab: 目标容器 / 当前是否处于该tab (供分析与切换共用, 20260920)
@@ -2429,6 +2490,28 @@ if($('#chanHistClr')) $('#chanHistClr').onclick=async()=>{
   await fetch('/api/stock/history',{method:'DELETE'});
   refreshAllHist();
 };
+// 多周期对比开关 (20260925): body.multi-tf 在 日/周/月紧凑三联 与 完整模式 间切换;
+// 两套图均预渲染, 切换零延迟; 偏好存localStorage
+function toggleMultiTF(){
+  document.body.classList.toggle('multi-tf');
+  const on=document.body.classList.contains('multi-tf');
+  try{ localStorage.setItem('multiTF', on?'1':'0'); }catch(e){}
+  const y=window.scrollY;
+  requestAnimationFrame(()=>window.scrollTo(0,y));   // 前后内容高度不同, 保持视口锚点
+}
+try{ if(localStorage.getItem('multiTF')==='1') document.body.classList.add('multi-tf'); }catch(e){}
+// 盯盘条收起/展开 (20260925): 点击"持仓盯盘/自选盯盘"标题切换, 默认展开, 状态存localStorage
+function toggleWatchFold(barId){
+  const bar=document.getElementById(barId);
+  if(!bar) return;
+  const folded=!bar.classList.contains('folded');
+  bar.classList.toggle('folded', folded);
+  try{ localStorage.setItem('watchFold_'+barId, folded?'1':'0'); }catch(e){}
+}
+['watchBar','watchBarSelf'].forEach(id=>{
+  try{ if(localStorage.getItem('watchFold_'+id)==='1'){ const b=document.getElementById(id); if(b) b.classList.add('folded'); } }catch(e){}
+});
+
 function renderAnalysis(d){
   const isHold = getHoldState(d.code);
   const chgCls=d.change_pct>0?'up':(d.change_pct<0?'down':'flat');
@@ -3099,7 +3182,33 @@ function renderAnalysis(d){
   const bars=d.bars||[];
   // ZigZag 转折点: 叠加到 K 线图 (波峰▼/波谷▲ + 折线)
   const zzPivots=((d.bs&&d.bs.my_style&&d.bs.my_style.extra)||{}).zz_recent_pivots||[];
-  const chartHtml=(bars.length?buildMiniChart(bars, zzPivots, {code:d.code, name:d.name}):'');
+  // 完整模式: 日K(全高+副图) → 周K(全高+副图) → 月K(折叠)
+  const chartHtml=(bars.length?`<div class="tf-full">${buildMiniChart(bars, zzPivots, {code:d.code, name:d.name})}</div>`:'');
+  // 周K线 (20260925): 日线聚合为周线, 复用主图绘制; 涨跌停/地量标记口径仅对日线, 周图不标
+  const weekBars=bars.length?dailyToWeekly(bars):[];
+  const weekChartHtml=(weekBars.length>=2)?`
+    <div class="tf-full"><div class="sec-h" style="margin-top:16px;font-size:14px">周K线
+      <span onclick="toggleMultiTF()" style="float:right;cursor:pointer;font-size:12px;color:var(--accent);border:1px solid var(--accent);border-radius:10px;padding:1px 10px;user-select:none">▤ 多周期对比</span></div>
+      ${buildMiniChart(weekBars, [], {noLimits:true})}</div>`:'';
+  // 月K线 (20260925): 按月聚合, 折叠默认收起; 涨跌停/地量口径仅对日线, 月图不标
+  const monthBars=bars.length?dailyToMonthly(bars):[];
+  const monthChartHtml=(monthBars.length>=2)?`
+    <div class="tf-full"><details class="collapsible" style="margin-top:10px">
+      <summary>月K线 (${monthBars.length}个月)</summary>
+      <div style="margin-top:8px">${buildMiniChart(monthBars, [], {noLimits:true})}</div>
+    </details></div>`:'';
+  // 多周期对比紧凑三联 (20260925): 日/周/月各170px主图、无副图, 一屏同览
+  const multiTfHtml=(bars.length&&weekBars.length>=2&&monthBars.length>=2)?`
+    <div class="tf-compact">
+      <div class="sec-h" style="margin-top:8px;font-size:14px">多周期对比 · 日 / 周 / 月
+        <span onclick="toggleMultiTF()" style="float:right;cursor:pointer;font-size:12px;color:var(--sub);border:1px solid var(--border);border-radius:10px;padding:1px 10px;user-select:none">✕ 退出对比</span></div>
+      <div class="sec-h" style="margin-top:6px;font-size:13px">日K</div>
+      ${buildMiniChart(bars, zzPivots, {code:d.code, name:d.name, compact:true})}
+      <div class="sec-h" style="margin-top:6px;font-size:13px">周K</div>
+      ${buildMiniChart(weekBars, [], {noLimits:true, compact:true})}
+      <div class="sec-h" style="margin-top:6px;font-size:13px">月K</div>
+      ${buildMiniChart(monthBars, [], {noLimits:true, compact:true})}
+    </div>`:'';
   // 缠论结构图 + 摘要 (20260911): 笔/线段/中枢/三类买卖点
   const ch=d.chan||{};
   const chanChartHtml=(bars.length&&ch.ok)?buildChanChart(bars, ch):'';
@@ -3110,8 +3219,8 @@ function renderAnalysis(d){
       </div>
       <div id="chanSummary">${chanSummaryHtml(ch)}</div>
       <div id="chanChart">${chanChartHtml}</div>
-      <details class="collapsible" style="margin-top:8px">
-        <summary>🎯 缠论一二三类买卖点 · 详细说明（点击展开）</summary>
+      <details class="collapsible" open style="margin-top:8px">
+        <summary>🎯 缠论一二三类买卖点 · 详细说明</summary>
         <div class="col-body">
           <div style="font-size:11.5px;color:var(--sub);line-height:1.7;margin-bottom:6px">买点=空头→多头转折的介入点；卖点=多头→空头转折的离场点。一/二类靠 <b>MACD 面积背驰</b> 判断力度，三类只看 <b>中枢突破与回抽</b>。</div>
           <table>
@@ -3505,6 +3614,9 @@ function renderAnalysis(d){
     ${boardHtml}${bizHtml}
     <div class="sa-grid">${gridHtml}</div>
     ${chartHtml}
+    ${multiTfHtml}
+    ${weekChartHtml}
+    ${monthChartHtml}
     ${vpSystemHtml}
     ${bsHtml}
     <div class="sec-h" style="margin-top:16px;font-size:14px">技术分析</div>
@@ -3514,11 +3626,48 @@ function renderAnalysis(d){
   // K线图十字光标 + OHLC悬浮绑定 (20260906)
   bindChartInteractivity(saPanel);
 }
+// 日线→月线聚合 (20260925): 按自然月合并, 开=月首日开, 高/低取月内极值,
+// 收=月末日收, 量累加, chg按月收盘环比。用于个股分析的月K线图(折叠默认收起)。
+function dailyToMonthly(bars){
+  const out=[]; let cur=null;
+  for(const b of bars){
+    const k=String(b.day||'').slice(0,7);   // YYYY-MM
+    if(!k) continue;
+    if(!cur||cur._k!==k){ if(cur) out.push(cur);
+      cur={_k:k, day:k+'-01', open:+b.open, high:+b.high, low:+b.low, close:+b.close, volume:+b.volume||0, chg:0}; }
+    else { if(+b.high>cur.high) cur.high=+b.high; if(+b.low<cur.low) cur.low=+b.low;
+      cur.close=+b.close; cur.volume+=+b.volume||0; }
+  }
+  if(cur) out.push(cur);
+  for(let i=1;i<out.length;i++) out[i].chg=(out[i].close/out[i-1].close-1)*100;
+  return out;
+}
+// 日线→周线聚合 (20260925): 按自然周(周一起始)合并, 开=周首日开, 高/低取周内极值,
+// 收=周末日收, 量累加, chg按周收盘环比。用于个股分析的周K线图。
+function dailyToWeekly(bars){
+  const out=[]; let cur=null;
+  const wkKey=d=>{ const p=String(d||'').split('-').map(Number); if(p.length!==3||isNaN(p[0])) return '';
+    const dt=new Date(p[0],p[1]-1,p[2]); const off=(dt.getDay()+6)%7; dt.setDate(dt.getDate()-off);
+    return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0'); };
+  for(const b of bars){
+    const k=wkKey(b.day);
+    if(!k) continue;
+    if(!cur||cur.day!==k){ if(cur) out.push(cur);
+      cur={day:k, open:+b.open, high:+b.high, low:+b.low, close:+b.close, volume:+b.volume||0, chg:0}; }
+    else { if(+b.high>cur.high) cur.high=+b.high; if(+b.low<cur.low) cur.low=+b.low;
+      cur.close=+b.close; cur.volume+=+b.volume||0; }
+  }
+  if(cur) out.push(cur);
+  for(let i=1;i<out.length;i++) out[i].chg=(out[i].close/out[i-1].close-1)*100;
+  return out;
+}
 function buildMiniChart(bars, pivots, opt){
-  const w=800,h=280,padL=8,padR=8,padT=40,padB=18; // 顶部加高, 容纳信号/SSP/历史标识, 避免被裁剪
+  const compact=!!(opt&&opt.compact);   // 多周期对比紧凑模式: 主图170px、无副图 (20260925)
+  const w=800, h=compact?170:280, padL=8, padR=8, padT=compact?34:40, padB=compact?14:18; // 顶部加高, 容纳信号/SSP/历史标识, 避免被裁剪
   const n=bars.length;
   if(n<2) return '';
-  const limitDays=_limitDaysOf(bars, opt&&opt.code, opt&&opt.name);
+  // 周K线(opt.noLimits)不判定涨跌停/地量: 涨跌停口径仅对日线有意义
+  const limitDays=(opt&&opt.noLimits)? {}: _limitDaysOf(bars, opt&&opt.code, opt&&opt.name);
   const hi=Math.max(...bars.map(b=>b.high));
   const lo=Math.min(...bars.map(b=>b.low));
   const rng=(hi-lo)||1;
@@ -3632,13 +3781,14 @@ function buildMiniChart(bars, pivots, opt){
       let yy, fill;
       if(t==='up'){ yy=y(bars[i].high)-20; fill='#ff4d4f'; }
       else { yy=Math.min(y(bars[i].low)+13, h-7); fill='#26a69a'; }
-      s+=_sqT(x, yy, `fill="${fill}" font-size="9" font-weight="bold" text-anchor="middle" stroke="rgba(15,22,35,.85)" stroke-width="2" paint-order="stroke"`, '板');
+      s+=_sqT(x, yy, `fill="${fill}" font-size="6" font-weight="bold" text-anchor="middle" stroke="rgba(15,22,35,.85)" stroke-width="1.4" paint-order="stroke"`, '板');
     }
     return s; })();
   // 成交量+KDJ 副图 (20260925): 与浮窗同逻辑(kdSubPanels), 挂主图下方, 共用x映射对齐K线
-  const subs=kdSubPanels(bars, {w, padL, padR, xi:(i)=>padL+i*xStep+xStep/2, bw, opt, stretch:true, kX});
+  // 紧凑模式(多周期对比)不渲染副图
+  const subs=(opt&&opt.compact)? {volHtml:'',kdjHtml:''} : kdSubPanels(bars, {w, padL, padR, xi:(i)=>padL+i*xStep+xStep/2, bw, opt, stretch:true, kX});
   return `
-    <div class="sa-chart" id="${cid}" style="height:280px">
+    <div class="sa-chart" id="${cid}" style="height:${h}px">
       <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:100%" preserveAspectRatio="none">
         ${gridLines}
         ${candles}
@@ -3676,16 +3826,17 @@ function chanPeriodBtns(active, code){
 function chanSummaryHtml(ch){
   if(!ch || !ch.ok || !ch.summary) return '';
   const s=ch.summary;
-  return `<div class="sa-row" style="margin-bottom:6px">
-      <span class="item">结构</span>
+  // 20260925 压缩高度: 保持分行, 收紧内边距与字号
+  return `<div class="sa-row" style="padding:4px 10px;font-size:12px;margin-bottom:4px">
+      <span class="item" style="min-width:auto">结构</span>
       <span class="desc">${esc(s.structure)} · 笔 ${s.stroke_count} · 线段 ${s.segment_count} · 中枢 ${s.pivot_count}</span>
     </div>
-    <div class="sa-row" style="margin-bottom:6px">
-      <span class="item">位置</span>
+    <div class="sa-row" style="padding:4px 10px;font-size:12px;margin-bottom:4px">
+      <span class="item" style="min-width:auto">位置</span>
       <span class="desc">${esc(s.position)}</span>
     </div>
-    <div class="sa-row" style="margin-bottom:6px">
-      <span class="item">最新信号</span>
+    <div class="sa-row" style="padding:4px 10px;font-size:12px;margin-bottom:0">
+      <span class="item" style="min-width:auto">最新信号</span>
       <span class="desc">${esc(s.last_signal)}</span>
     </div>`;
 }
@@ -3735,11 +3886,17 @@ function buildChanChart(bars, chan){
   const bw=Math.max(2, xStep*0.6);
   const xi=i=>padL+i*xStep+xStep/2;
   const y=v=>padT+(yHi-v)/rng*plotH;
+  // 主图svg按容器宽横向拉伸(preserveAspectRatio=none): 文字用 scale(1/kX,1) 反向缩放保持方正 (20260925)
+  const _hostW=((document.getElementById('pane-stock')||{}).clientWidth)||((document.getElementById('pane-chan')||{}).clientWidth)||0;
+  const kX=(_hostW>400)? Math.max(1, _hostW/w) : 1;
+  const _sqT=(x,y,attrs,inner)=> (kX>1.02)
+    ? `<text transform="translate(${Number(x).toFixed(1)},${Number(y).toFixed(1)}) scale(${(1/kX).toFixed(3)},1)" x="0" y="0" ${attrs}>${inner}</text>`
+    : `<text x="${Number(x).toFixed(1)}" y="${Number(y).toFixed(1)}" ${attrs}>${inner}</text>`;
   // 网格 + 右轴价格
   const gridLines=[0,0.25,0.5,0.75,1].map(f=>{
     const v=yHi-f*rng, yy=y(v);
     return `<line x1="${padL}" y1="${yy.toFixed(1)}" x2="${w-padR}" y2="${yy.toFixed(1)}" stroke="rgba(255,255,255,0.06)"/>`+
-           `<text x="${w-padR-2}" y="${(yy-3).toFixed(1)}" fill="#5a6a82" font-size="10" text-anchor="end">${v.toFixed(2)}</text>`;
+           _sqT(w-padR-2, yy-3, 'fill="#5a6a82" font-size="10" text-anchor="end"', v.toFixed(2));
   }).join('');
   // 中枢区间: 半透明色带 + ZG/ZD
   const bands=(chan.pivots||[]).map(p=>{
@@ -3747,8 +3904,8 @@ function buildChanChart(bars, chan){
     const x1=Math.min(w-padR, xi(p.i1)+xStep/2);
     const yT=y(p.zg), yB=y(p.zd);
     return `<rect x="${x0.toFixed(1)}" y="${yT.toFixed(1)}" width="${Math.max(1,x1-x0).toFixed(1)}" height="${Math.max(2,yB-yT).toFixed(1)}" fill="rgba(160,107,255,.10)" stroke="rgba(160,107,255,.5)" stroke-width="1" stroke-dasharray="4,3"/>`+
-           `<text x="${(x1-3).toFixed(1)}" y="${(yT-3).toFixed(1)}" fill="rgba(180,140,255,.95)" font-size="9" text-anchor="end">ZG ${p.zg.toFixed(2)}</text>`+
-           `<text x="${(x1-3).toFixed(1)}" y="${(yB+10).toFixed(1)}" fill="rgba(180,140,255,.95)" font-size="9" text-anchor="end">ZD ${p.zd.toFixed(2)}</text>`;
+           _sqT(x1-3, yT-3, 'fill="rgba(180,140,255,.95)" font-size="9" text-anchor="end"', `ZG ${p.zg.toFixed(2)}`)+
+           _sqT(x1-3, yB+10, 'fill="rgba(180,140,255,.95)" font-size="9" text-anchor="end"', `ZD ${p.zd.toFixed(2)}`);
   }).join('');
   // K线
   const candles=bars.map((b,i)=>{
@@ -3780,7 +3937,7 @@ function buildChanChart(bars, chan){
   // 当前价虚线
   const lastClose=bars[n-1].close;
   const priceLine=`<line x1="${padL}" y1="${y(lastClose).toFixed(1)}" x2="${w-padR}" y2="${y(lastClose).toFixed(1)}" stroke="rgba(255,255,255,.25)" stroke-width="1" stroke-dasharray="5,4"/>`+
-    `<text x="${w-padR-2}" y="${(y(lastClose)-4).toFixed(1)}" fill="#fff" font-size="9" text-anchor="end">${lastClose}</text>`;
+    _sqT(w-padR-2, y(lastClose)-4, 'fill="#fff" font-size="9" text-anchor="end"', lastClose);
   // 三类买卖点标记(近邻信号错层排布, 避免标签互相遮盖导致"只看到部分买卖点")
   let _lastX=-1e9, _lane=0;
   const sigMarks=(chan.signals||[]).slice().sort((a,b)=>a.i-b.i).map(s=>{
@@ -3790,19 +3947,19 @@ function buildChanChart(bars, chan){
     _lane = (x-_lastX<28) ? (_lane+1)%3 : 0; _lastX=x;
     const off=_lane*11;
     const ay=(isBuy?yy+11+off:yy-5-off), ty=(isBuy?yy+23+off:yy-17-off);
-    return `<text x="${x.toFixed(1)}" y="${ay.toFixed(1)}" fill="${col}" font-size="9" text-anchor="middle">${isBuy?'▲':'▼'}</text>`+
-           `<text x="${x.toFixed(1)}" y="${ty.toFixed(1)}" fill="${col}" font-size="10" font-weight="700" text-anchor="middle">${esc(s.label)}</text>`;
+    return _sqT(x, ay, `fill="${col}" font-size="9" text-anchor="middle"`, isBuy?'▲':'▼')+
+           _sqT(x, ty, `fill="${col}" font-size="10" font-weight="700" text-anchor="middle"`, esc(s.label));
   }).join('');
   // 日期轴: 跨月区间统一标 MM-DD (30分图同样跨多交易日, 只标时间无法定位日期)
   const dateTxt=[0,Math.floor(n/2),n-1].filter((v,i,a)=>a.indexOf(v)===i).map(i=>
-    `<text x="${xi(i).toFixed(1)}" y="${h-4}" fill="#5a6a82" font-size="9" text-anchor="middle">${(bars[i].day||'').slice(5,10)}</text>`).join('');
-  const legend=`<text x="${padL}" y="12" fill="#9fb0c6" font-size="10">K线</text>`+
-    `<text x="${padL+40}" y="12" fill="#e8eef6" font-size="10">— 笔</text>`+
-    `<text x="${padL+90}" y="12" fill="#f5c842" font-size="10">— 线段</text>`+
-    `<text x="${padL+150}" y="12" fill="#f5c842" font-size="10">┈ 未确认</text>`+
-    `<text x="${padL+212}" y="12" fill="#a06bff" font-size="10">▭ 中枢</text>`+
-    `<text x="${padL+282}" y="12" fill="#ff4d4f" font-size="10">▲ 买点</text>`+
-    `<text x="${padL+342}" y="12" fill="#26a69a" font-size="10">▼ 卖点</text>`;
+    _sqT(xi(i), h-4, 'fill="#5a6a82" font-size="9" text-anchor="middle"', (bars[i].day||'').slice(5,10))).join('');
+  const legend=_sqT(padL, 12, 'fill="#9fb0c6" font-size="10"', 'K线')+
+    _sqT(padL+40, 12, 'fill="#e8eef6" font-size="10"', '— 笔')+
+    _sqT(padL+90, 12, 'fill="#f5c842" font-size="10"', '— 线段')+
+    _sqT(padL+150, 12, 'fill="#f5c842" font-size="10"', '┈ 未确认')+
+    _sqT(padL+212, 12, 'fill="#a06bff" font-size="10"', '▭ 中枢')+
+    _sqT(padL+282, 12, 'fill="#ff4d4f" font-size="10"', '▲ 买点')+
+    _sqT(padL+342, 12, 'fill="#26a69a" font-size="10"', '▼ 卖点');
   const cid='chan'+(++_chartSeq);
   _chartReg[cid]={bars, w, padL, padR, padT, padB, n, h, hi:yHi, lo:yLo};
   return `<div class="sa-chart" id="${cid}" style="height:${h}px">
@@ -4053,11 +4210,11 @@ const MA_PATS=[
   ['多头排列','MA5>MA10>MA20>MA60，四线今日均>5日前，收盘≥MA10，多头排列持续≥5日（稳健型）'],
   ['多头排列向上发散','MA5>MA10>MA20，三线同步上行，间距扩大（不含MA60，宽松版）'],
   ['粘合向上突破','近3日MA5/MA10/MA20间距<1.5%(粘合)，现转为多头排列，突破启动'],
+  ['地量低价','极致底量低价(精炼)：量=击穿近60日地量(≤min×1.15)或量比≤0.6（满足其一）；价=收盘处于近半年高低区间下沿18%；且止跌企稳(近10日未破前20日最低)+持续缩量(近10日均量≤60日均量×0.75)。地量=卖压枯竭，观察信号，买点等其后放量阳线确认'],
   // 周线均线形态 (A + 埋伏二合一, 20260920 原B/C合并为'周线·埋伏')
   ['周线A·强势主升','周线多头排列(MA5>MA10>MA20) + MA20连续4周上行 + 收盘>MA10 + 距52周高回撤<15%；否决：收盘<MA20/MA20向下/空头排列/52周位<0.5'],
   ['周线·埋伏','周线低位埋伏(原B趋势回踩+C底部反转合并)：B=上升趋势中回踩20周线低吸(MA20/MA60向上+收盘≥MA20距MA20在0~+5%+距52周高回撤<25%)；C=底部反转初期(MA20由平转升+近4周金叉+放量>20周均量×1.5+距52周低涨>20%)'],
   ['日线背离','底部背离(KDJ/MACD底背离二合一)：近20日价格创新低但J值或DIF未创新低（动能未跟随下行），潜在反转信号'],
-  ['地量低价','极致底量低价(精炼)：量=击穿近60日地量(≤min×1.15)或量比≤0.6（满足其一）；价=收盘处于近半年高低区间下沿18%；且止跌企稳(近10日未破前20日最低)+持续缩量(近10日均量≤60日均量×0.75)。地量=卖压枯竭，观察信号，买点等其后放量阳线确认'],
   ['粘合向下突破','近3日MA5/MA10/MA20间距<1.5%(粘合)，现转为空头排列，破位下行'],
   ['空头排列向下发散','MA5<MA10<MA20，三线同步下行，间距扩大，弱势下降趋势'],
   // 上试盘策略 3 个池子（对应说明书 A/B/C 三栏）
@@ -4068,11 +4225,11 @@ const MA_PATS=[
 // 上试盘起始 tab: 前 9 个为 日线+周线+地量 (7日+2周), 9/10/11 为 A/B/C (20260925 新增地量低价tab)
 const SSP_KIND_TAB_OFFSET = 9;
 // 子tab显示名 (20260918): 单字前缀·精简名, 表达分组 日/周/试; 仅用于渲染文本, 内部匹配仍用 p[0] 原名(后端 counts 按原名)
-// 顺序 (20260925): 日多头排列→日多头发散→日粘合上突→周强势→周埋伏→日背离→日地量→日粘合下突→日空头发散→试ABC
+// 顺序 (20260925): 日多头排列→日多头发散→日粘合上突→日地量→周强势→周埋伏→日背离→日粘合下突→日空头发散→试ABC
 const DISP_MA_NAME=[
-  '日·多头排列','日·多头发散','日·粘合上突',
+  '日·多头排列','日·多头发散','日·粘合上突','日·地量',
   '周·强势主升','周·埋伏',
-  '日·背离','日·地量','日·粘合下突','日·空头发散',
+  '日·背离','日·粘合下突','日·空头发散',
   '试·新信号','试·观察池','试·已确认'
 ];
 let maCurrentTab=0;
@@ -4087,7 +4244,7 @@ let maFilterConcept=null; // 当前选中的板块筛选(null=全部)
 const MA_NUMERIC_SORTS={chg:'change_pct',price:'price',atr:'atr_pct',amount:'amount_yi'};
 let maQuickFilter=''; // 快速过滤: 代码/名称子串(大小写不敏感)
 // ATR过滤勾选项 (20260918): 多选满足其一, 默认选中第二、三个
-let maAtrConds = ['e2','e3'];
+let maAtrConds = [];  // ATR过滤UI已移除(20260925): 不过滤, 列表仍显示ATR%列
 function passMaAtr(s){
   // ATR过滤仅作用于日线均线形态tab; 背离tab(日线背离)和周线tab不受ATR限制 (与后端一致)
   const curPat = MA_PATS[maCurrentTab][0];
@@ -4099,12 +4256,7 @@ function passMaAtr(s){
   if(maAtrConds.includes('e3') && s.atr_shrink) return true;
   return false;
 }
-document.querySelectorAll('#maBody input[data-atr]').forEach(cb => {
-  cb.addEventListener('change', () => {
-    maAtrConds = [...document.querySelectorAll('#maBody input[data-atr]:checked')].map(c => c.dataset.atr);
-    renderMATable();  // 立即按当前勾选过滤已扫描结果
-  });
-});
+// ATR过滤UI已移除(20260925): 勾选联动逻辑一并删除, passMaAtr 因 maAtrConds 为空恒放行
 
 // 判断当前 tab 是否上试盘子 tab
 function _isSspTab(i){ return (i===undefined?maCurrentTab:i) >= SSP_KIND_TAB_OFFSET; }
@@ -5881,7 +6033,7 @@ function kdSubPanels(bars, cfg){
   // 极致底量低价标记 (20260925 放宽口径): 量=击穿近60日地量(≤min×1.15)或量比≤0.6 满足其一;
   // 价=收盘处于近半年高低区间下沿18%。满足 → 金色「地」字标
   const limitVol=(()=>{ const m={}; const W=60;
-    if(n<=W) return m;
+    if(n<=W || (opt&&opt.noLimits)) return m;   // 周K线(noLimits)不做日线口径的地量判定
     let pLo=Infinity, pHi=-Infinity;
     for(let j=0;j<n;j++){ if(bars[j].low<pLo) pLo=bars[j].low; if(bars[j].high>pHi) pHi=bars[j].high; }
     for(let i=W;i<n;i++){

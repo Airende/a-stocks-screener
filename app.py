@@ -5935,6 +5935,18 @@ def _chan_segments(pts: list[dict]) -> list[dict]:
             # 兜底: 特征序列不足以构成分型(数据不足或线段未走完) → 线段"未确认"
             end_idx = min(s + 3, m - 1)
             confirmed = False
+        else:
+            # 20260925 修复: 线段必须终结于段内极值。
+            # 特征序列"高高/低低"合并后元素的 lo/hi 保留合并前旧值, 真正的峰值处可能
+            # 不满足分型条件(实测合富中国 31.22 峰未成分型), 分型出现在更晚更低的
+            # 高点 → 向上线段终点低于段内最高, 线段线从峰值下方穿过。
+            # 修复: 已确认线段在 [s, end_idx] 内取极值bar作为终点; 若截断后不足
+            # 最少3笔(s+3)则保留分型终点, 避免退化成单笔线段。
+            _rng = range(s, end_idx + 1)
+            _ext = (max(_rng, key=lambda k: pts[k]["price"]) if up
+                    else min(_rng, key=lambda k: pts[k]["price"]))
+            if _ext >= s + 3:
+                end_idx = _ext
         segs.append({"s": s, "e": end_idx, "dir": "up" if up else "down",
                      "confirmed": confirmed})
         s = end_idx
@@ -6662,13 +6674,14 @@ def api_stock_chan(code: str = "", period: str = "day", start_dir: str = "auto")
 # ============================================================
 # 均线形态筛选模块
 # ============================================================
-MA_PATTERNS = ["多头排列", "多头排列向上发散", "粘合向上突破", "空头排列向下发散", "粘合向下突破",
-               "日线背离", "地量低价",
+MA_PATTERNS = ["多头排列", "多头排列向上发散", "粘合向上突破", "地量低价",
+               "空头排列向下发散", "粘合向下突破",
+               "日线背离",
                "周线A·强势主升", "周线·埋伏"]
 
 _ma_state = {"data": None, "running": False, "error": None, "progress": "",
              "ts": 0.0, "lock": threading.Lock(),
-             "atr_conds": ["e2"]}  # ATR过滤勾选项 (20260906): e1/e2/e3 多选满足其一
+             "atr_conds": []}  # ATR过滤UI已移除(20260925): 默认不过滤, 列表仍显示ATR%列
 _MA_CACHE_TTL = 300  # 5分钟
 
 # ============================================================
