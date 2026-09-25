@@ -245,17 +245,79 @@ def _is_trading_time() -> bool:
     return (9 * 60 + 30 <= t <= 11 * 60 + 30) or (13 * 60 <= t <= 15 * 60)
 
 
+# ============================================================
+# 交易日历 (20260925): 周末判定之外引入法定节假日感知。
+# 背景: 节假日休市时行情快照仍返回上一交易日的值, _patch_today_bar_from_spot
+#   会复制出一根日期为今天的"假K线"并落盘。修法=非交易日不补bar。
+# 主判定用东财指数日K的最后一根日期(=最近实际交易日, 自维护无需 yearly 更新);
+# 内置节假日表仅作东财接口不可用时的兜底, 未列出的节假日由东财校验兜住。
+# ============================================================
+_CN_MARKET_HOLIDAYS: set[str] = {
+    # 2026 (仅列东财不可用时仍需兜住的高置信日期)
+    "20260925",                            # 中秋节
+    "20261001", "20261002", "20261003", "20261004",
+    "20261005", "20261006", "20261007",    # 国庆节
+    # 2027
+    "20270101",                            # 元旦
+}
+
+# 东财交易日校验缓存: {date, is_trade_day, checked_at}; 并发重复请求无害, 不加锁
+_EM_TRADE_CAL: dict = {"date": "", "is_trade_day": True, "checked_at": 0.0}
+
+
+def _em_latest_trade_date() -> str | None:
+    """东财上证指数日K最后一根日期 (=最近实际交易日, YYYYMMDD); 失败返回 None"""
+    try:
+        data = _get(_EM_KLINE_URL, {
+            "secid": "1.000001",
+            "fields1": "f1", "fields2": "f51",
+            "klt": 101, "fqt": 0, "lmt": 3, "end": "20500101",
+        }, timeout=5)
+        klines = ((data or {}).get("data") or {}).get("klines") or []
+        if klines:
+            return str(klines[-1]).split(",")[0][:10].replace("-", "")
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
+def _is_cn_trade_day(now_bj: datetime | None = None) -> bool:
+    """判断当前是否 A 股交易日。
+    周末/内置节假日表命中 → 否; 盘前(<9:30, 指数K线尚无当日bar, 快照也是昨收) → 否;
+    其余以东财指数K线校验为准 (5分钟缓存); 东财失败时放行, 维持原行为。"""
+    now_bj = now_bj or datetime.now(_BJ_TZ)
+    ds = now_bj.strftime("%Y%m%d")
+    if now_bj.weekday() >= 5 or ds in _CN_MARKET_HOLIDAYS:
+        return False
+    if now_bj.hour * 60 + now_bj.minute < 9 * 60 + 30:
+        return False
+    now_ts = time.time()
+    if _EM_TRADE_CAL["date"] != ds or now_ts - _EM_TRADE_CAL["checked_at"] > 300:
+        latest = _em_latest_trade_date()
+        # latest=None(接口失败)→放行; 否则只有指数K线已出现今日bar才算交易日
+        _EM_TRADE_CAL.update({
+            "date": ds,
+            "is_trade_day": True if latest is None else (latest == ds),
+            "checked_at": now_ts,
+        })
+    return bool(_EM_TRADE_CAL["is_trade_day"])
+
+
+def _rollback_trade_day(d: datetime) -> datetime:
+    """回退到最近的交易日 (跳过周末与内置节假日)"""
+    while d.weekday() >= 5 or d.strftime("%Y%m%d") in _CN_MARKET_HOLIDAYS:
+        d -= timedelta(days=1)
+    return d
+
+
 def _latest_trade_date_str() -> str:
-    """返回最近交易日日期字符串 (跳过周末)"""
+    """返回最近交易日日期字符串 (跳过周末与节假日)"""
     now_bj = datetime.now(_BJ_TZ)
     # 如果是工作日且 >=15:00, 返回今天; 否则回退到最近的工作日
-    while now_bj.weekday() >= 5:  # 周六周日回退
-        now_bj -= timedelta(days=1)
+    now_bj = _rollback_trade_day(now_bj)
     if now_bj.weekday() < 5 and datetime.now(_BJ_TZ).hour < 15 and now_bj.date() == datetime.now(_BJ_TZ).date():
-        # 盘前, 用昨天(回退到最近工作日)
-        now_bj -= timedelta(days=1)
-        while now_bj.weekday() >= 5:
-            now_bj -= timedelta(days=1)
+        # 盘前, 用昨天(回退到最近交易日)
+        now_bj = _rollback_trade_day(now_bj - timedelta(days=1))
     return now_bj.strftime("%Y%m%d")
 
 
@@ -349,11 +411,10 @@ def _preload_kline_cache() -> int:
 def _cache_date_for_fetch() -> str:
     """返回数据缓存使用的日期: 收盘后用今天, 盘前/盘中用最近交易日"""
     now_bj = datetime.now(_BJ_TZ)
-    # 盘前(<15:00)或周末: 回退到最近的工作日
+    # 盘前(<15:00): 回退一天; 周末/节假日: 回退到最近交易日
     if now_bj.hour < 15:
         now_bj -= timedelta(days=1)
-    while now_bj.weekday() >= 5:  # 周六周日继续回退
-        now_bj -= timedelta(days=1)
+    now_bj = _rollback_trade_day(now_bj)
     return now_bj.strftime("%Y%m%d")
 
 
@@ -1114,6 +1175,8 @@ def _patch_today_bar_from_spot(bars: list[dict], symbol: str,
     now_bj = datetime.now(_BJ_TZ)
     if now_bj.weekday() >= 5:
         return bars  # 周末无实时行情, 不补当日bar
+    if not _is_cn_trade_day(now_bj):
+        return bars  # 法定节假日休市, 快照是上一交易日的值, 补bar会复制出假K线 (20260925)
     if spot_data is None:
         try:
             spot_all = fetch_spot_all()
@@ -6600,7 +6663,7 @@ def api_stock_chan(code: str = "", period: str = "day", start_dir: str = "auto")
 # 均线形态筛选模块
 # ============================================================
 MA_PATTERNS = ["多头排列", "多头排列向上发散", "粘合向上突破", "空头排列向下发散", "粘合向下突破",
-               "日线背离",
+               "日线背离", "地量低价",
                "周线A·强势主升", "周线·埋伏"]
 
 _ma_state = {"data": None, "running": False, "error": None, "progress": "",
@@ -6655,6 +6718,44 @@ def _apply_frozen_today_bar(bars: list[dict], symbol: str, today_date: str,
     bars[-1] = dict(last)
     bars[-1]["close"] = fz
     return bars
+
+
+def classify_bottom_volume(bars: list[dict]) -> bool:
+    """极致底量低价 (20260925, 精炼版): 判定最后一根bar(今日/最近交易日)。
+    基础: 量 = 击穿近60日地量(≤min×1.15) 或 量比(对60日均量)≤0.6 满足其一;
+          价 = 收盘价处于近半年(122交易日)高低区间下沿18%。
+    精炼 (20260925 实测 346→57):
+      A 止跌企稳 = 近10日收盘均未跌破前20日最低价 (剔除仍在破位的下跌中继);
+      B 持续缩量 = 近10日均量 ≤ 60日均量×0.75 (整段缩量筑底, 而非单日偶发)。
+    数据不足(≤60日)或量价异常返回False。地量=观察信号, 买点需其后放量阳线确认。"""
+    n = len(bars)
+    W = 60
+    if n <= W:
+        return False
+    win = bars[-122:] if n >= 122 else bars
+    p_hi = max(float(b["high"]) for b in win)
+    p_lo = min(float(b["low"]) for b in win)
+    if p_hi <= p_lo:
+        return False
+    last = bars[-1]
+    vol = float(last.get("volume") or 0)
+    if vol <= 0:
+        return False
+    prev = bars[-(W + 1):-1]
+    vmin = min(float(b["volume"]) for b in prev)
+    vavg = sum(float(b["volume"]) for b in prev) / W
+    vol_ok = (vol <= vmin * 1.15) or (vavg > 0 and vol <= vavg * 0.6)
+    pos = (float(last["close"]) - p_lo) / (p_hi - p_lo)
+    if not (vol_ok and pos <= 0.18):
+        return False
+    closes = [float(b["close"]) for b in bars]
+    lows = [float(b["low"]) for b in bars]
+    if min(closes[-10:]) < min(lows[-30:-10]):   # A: 近10日跌破前20日低点 → 仍在破位
+        return False
+    vols = [float(b["volume"]) for b in bars]
+    v10 = sum(vols[-10:]) / 10
+    v60 = sum(vols[-60:]) / 60
+    return bool(v60 > 0 and v10 <= v60 * 0.75)   # B: 持续缩量
 
 
 def classify_ma_pattern(bars: list[dict]) -> str | None:
@@ -7091,6 +7192,9 @@ def _run_ma_screen_thread():
             # 周线形态 (已通过否决条件, 直接加入)
             for wp in weekly_pats:
                 pats.append(wp)
+            # 极致底量低价 (20260925): 量击穿60日地量或量比≤0.6, 价处近半年下沿18%
+            if classify_bottom_volume(bars):
+                pats.append("地量低价")
             if not pats:
                 return None
             # 买卖点分析
