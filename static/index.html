@@ -4422,10 +4422,11 @@ const MA_NUMERIC_SORTS={chg:'change_pct',price:'price',atr:'atr_pct',amount:'amo
 let maQuickFilter=''; // 快速过滤: 代码/名称子串(大小写不敏感)
 // ATR过滤勾选项 (20260918): 多选满足其一, 默认选中第二、三个
 let maAtrConds = [];  // ATR过滤UI已移除(20260925): 不过滤, 列表仍显示ATR%列
-function passMaAtr(s){
+function passMaAtr(s, patOverride){
   // ATR过滤仅作用于日线均线形态tab; 背离tab(日线背离)和周线tab不受ATR限制 (与后端一致)
   // (20260927) 日·地量(地量低价)tab 也纳入 ATR%<3 硬过滤, 过滤掉低波动标的
-  const curPat = MA_PATS[maCurrentTab][0];
+  // patOverride: 供 tab 徽章计数按各自 pattern 判定, 不依赖全局 maCurrentTab (20260927)
+  const curPat = patOverride || MA_PATS[maCurrentTab][0];
   if(curPat.includes('背离') || curPat.startsWith('周线')) return true;
   // (2026-09-26) 硬过滤: ATR%<3 直接排除 (需求: 均线形态筛选过滤掉低波动标的)
   if(s.atr_pct != null && s.atr_pct < 3) return false;
@@ -4483,10 +4484,17 @@ function renderMATabs(){
     "缠论·日线一买":"1买","缠论·日线二买":"2买","缠论·日线三买":"3买",
     "上试盘·新信号":"观","上试盘·观察池":"等","上试盘·已确认":"买"};
   // 上试盘 3 个 tab 用 sspData.counts 显示数量
-  const maCounts=(maData&&maData.counts)||{};
   const sspCounts=(sspData&&sspData.counts)||{};
   $('#maTabs').innerHTML=MA_PATS.map((p,i)=>{
-    let c = _isSspTab(i) ? (sspCounts[p[0]]||0) : (maCounts[p[0]]||0);
+    // (20260927) tab 徽章数量与列表实际同步: 非ssp tab 用 过滤后(ATR+银行剔除)的条数, 而非后端原始count
+    let c;
+    if(_isSspTab(i)) c = sspCounts[p[0]]||0;
+    else {
+      const _raw = (maData && maData.patterns && maData.patterns[p[0]]) || [];
+      c = _raw.filter(s=>passMaAtr(s, p[0]))
+              .filter(s=> !((s.industry||'').includes('银行') || (s.concept||'').includes('银行')))
+              .length;
+    }
     const isSsp = _isSspTab(i);
     const title = isSsp ? `上试盘策略 ${['A池·新信号','B池·观察','C池·已确认买入'][i-SSP_KIND_TAB_OFFSET]||''}` : '';
     // 分组色 (20260918): 日线=grp-day/组内看跌=alt(青)、背离=alt2(中性), 周线=grp-week(蓝), 上试盘=ssp-tab(金)
