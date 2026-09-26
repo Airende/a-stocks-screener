@@ -6764,43 +6764,57 @@ def _apply_frozen_today_bar(bars: list[dict], symbol: str, today_date: str,
 
 
 def classify_bottom_volume(bars: list[dict]) -> bool:
-    """极致底量低价 (20260925, 精炼版): 判定最后一根bar(今日/最近交易日)。
-    基础: 量 = 击穿近60日地量(≤min×1.15) 或 量比(对60日均量)≤0.6 满足其一;
-          价 = 收盘价处于近半年(122交易日)高低区间下沿18%。
-    精炼 (20260925 实测 346→57; 20260926 放宽: A/B 由 AND 改二选一):
-      A 止跌企稳 = 近10日收盘均未跌破前20日最低价 (剔除仍在破位的下跌中继);
-      B 持续缩量 = 近10日均量 ≤ 60日均量×0.75 (整段缩量筑底, 而非单日偶发)。
-    数据不足(≤60日)或量价异常返回False。地量=观察信号, 买点需其后放量阳线确认。"""
+    """极致底量低价 (20260927, 近10日回溯版): 判定最近10个交易日内是否有任一K线出过"底量低价"。
+    基础(逐bar): 量 = 击穿该bar前60日地量(≤min×1.15) 或 量比(对前60日均量)≤0.6 满足其一;
+                价 = 该bar收盘处于其前122根(近半年)高低区间下沿18%。
+    精炼(逐bar, 二选一, 与往期口径一致): A止跌企稳 / B持续缩量。
+    单日出底 = 观察信号; 买点需其后放量阳线确认。数据不足(≤60日)或量价异常返回False。"""
     n = len(bars)
-    W = 60
-    if n <= W:
+    W = 60          # 量能基准窗口: 前60根
+    LOOK = 122      # 价区间窗口: 前122根(近半年)
+    NEAR = 10       # 回溯窗口: 最近10个交易日内曾出底即算
+    if n <= W + 1:
         return False
-    win = bars[-122:] if n >= 122 else bars
-    p_hi = max(float(b["high"]) for b in win)
-    p_lo = min(float(b["low"]) for b in win)
-    if p_hi <= p_lo:
-        return False
-    last = bars[-1]
-    vol = float(last.get("volume") or 0)
-    if vol <= 0:
-        return False
-    prev = bars[-(W + 1):-1]                 # 基准窗口: 前60根K线 (20260926 确认固定60根口径)
-    vmin = min(float(b["volume"]) for b in prev)
-    vavg = sum(float(b["volume"]) for b in prev) / W
-    vol_ok = (vol <= vmin * 1.15) or (vavg > 0 and vol <= vavg * 0.6)
-    pos = (float(last["close"]) - p_lo) / (p_hi - p_lo)
-    if not (vol_ok and pos <= 0.18):
-        return False
-    closes = [float(b["close"]) for b in bars]
-    lows = [float(b["low"]) for b in bars]
-    # A: 止跌企稳 = 近10日收盘未跌破前20日低点 (20260926: 由必选改二选一)
-    steady = not (min(closes[-10:]) < min(lows[-30:-10]))
-    vols = [float(b["volume"]) for b in bars]
-    v10 = sum(vols[-10:]) / 10
-    v60 = sum(vols[-60:]) / 60
-    # B: 持续缩量 (20260926: 由必选改二选一)
-    shrink = (v60 > 0) and (v10 <= v60 * 0.75)
-    return steady or shrink   # A/B 二选一命中即可
+    # 只扫描最近 NEAR 个交易日; 每个候选bar需有足够左侧数据(i>=W), 且价区间需有数据(i>=1)
+    for i in range(max(W, n - NEAR), n):
+        last = bars[i]
+        vol = float(last.get("volume") or 0)
+        if vol <= 0:
+            continue
+        # 量能: 相对该bar前60根
+        prev = bars[i - W:i]
+        vmin = min(float(b["volume"]) for b in prev)
+        vavg = sum(float(b["volume"]) for b in prev) / W
+        if vavg <= 0 or not (vmin > 0):
+            continue
+        vol_ok = (vol <= vmin * 1.15) or (vol <= vavg * 0.6)
+        if not vol_ok:
+            continue
+        # 价: 相对该bar前122根(近半年)高低区间下沿
+        st = max(0, i - LOOK)
+        win = bars[st:i + 1]
+        p_hi = max(float(b["high"]) for b in win)
+        p_lo = min(float(b["low"]) for b in win)
+        if p_hi <= p_lo:
+            continue
+        pos = (float(last["close"]) - p_lo) / (p_hi - p_lo)
+        if pos > 0.18:
+            continue
+        # A: 止跌企稳 = 该bar近10日收盘未跌破前20日最低 (需足够历史)
+        steady = False
+        if i >= 30:
+            closes_s = [float(b["close"]) for b in bars[i - 9:i + 1]]
+            lows_p = [float(b["low"]) for b in bars[i - 29:i - 9]]
+            steady = not (min(closes_s) < min(lows_p))
+        # B: 持续缩量 = 该bar近10日均量 ≤ 前60日均量×0.75
+        shrink = False
+        v10 = sum(float(b["volume"]) for b in bars[i - 9:i + 1]) / 10
+        v60 = sum(float(b["volume"]) for b in bars[i - 59:i + 1]) / 60
+        if v60 > 0:
+            shrink = (v10 <= v60 * 0.75)
+        if steady or shrink:      # A/B 二选一命中即可
+            return True
+    return False
 
 
 def classify_ma_pattern(bars: list[dict]) -> str | None:
