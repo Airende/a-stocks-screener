@@ -1267,8 +1267,8 @@ function gotoStockAnalyze(code, name){
         _maReturnPos={y: window.scrollY||0, code: String(code||''),
           label: (typeof DISP_MA_NAME!=='undefined' && DISP_MA_NAME[maCurrentTab]) || '筛选列表'};
       }
-      // 跳入个股分析默认开启多周期对比 (20260925, 不覆盖用户保存的偏好)
-      document.body.classList.add('multi-tf');
+      // (2026-09-26) 跳入个股分析默认"完整个股分析"(完整模式), 不显示多周期对比
+      document.body.classList.remove('multi-tf');
     }
   }catch(e){}
   // 切到 "个股分析" tab
@@ -2647,9 +2647,8 @@ function toggleMultiTF(){
   const y=window.scrollY;
   requestAnimationFrame(()=>window.scrollTo(0,y));   // 前后内容高度不同, 保持视口锚点
 }
-// (2026-09-26) 默认打开: 其它页面提交到个股分析页时, "完整个股分析"默认展开
-// 仅当用户在本页面显式点击关掉(存0)后才处于收起态
-try{ if(localStorage.getItem('multiTF')!=='0') document.body.classList.add('multi-tf'); }catch(e){}
+// (2026-09-26) 默认"完整个股分析"(完整模式): 仅当用户显式开过多周期对比(存1)才显示紧凑三联
+try{ if(localStorage.getItem('multiTF')==='1') document.body.classList.add('multi-tf'); }catch(e){}
 // 盯盘条收起/展开 (20260925): 点击"持仓盯盘/自选盯盘"标题切换, 默认展开, 状态存localStorage
 function toggleWatchFold(barId){
   const bar=document.getElementById(barId);
