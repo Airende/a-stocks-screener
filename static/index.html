@@ -6579,7 +6579,7 @@ async function showKlinePreview(code, anchor){
   _kdPlace(pop, anchor);
   try{
     if(!_kdCache[code]){
-      const r = await fetch('/api/kline?code=' + encodeURIComponent(code) + '&datalen=200');
+      const r = await fetch('/api/kline?code=' + encodeURIComponent(code) + '&datalen=122');
       const d = await r.json();
       if(!d.bars || !d.bars.length){ pop.innerHTML = '<div class="empty">无K线数据</div>'; return; }
       _kdCache[code] = d;
@@ -6605,7 +6605,7 @@ async function showKlinePreview(code, anchor){
     const ignoreBtn = `<span class="kd-mk-btn kd-mk-ignore${ignoreActive}" style="color:#4ade80" onclick="popupToggleIgnore('${code}','${mkName}')">×</span>`;
     pop.innerHTML = `<div style="padding:6px 10px 2px;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:space-between">
         <div>${d.name ? esc(d.name)+' ' : ''}<span class="meta cp-code"  onclick="openTHS('${code}')">${code}</span> ${chgTxt}
-        <span class="meta" style="margin-left:6px">近一年日K · 三均线 · 量 · KDJ</span>
+        <span class="meta" style="margin-left:6px">近半年日K · 三均线 · 量 · KDJ</span>
         <span class="meta sig-status" id="${renderMarkup.c1}_status" style="margin-left:8px;color:#6b7d95">信号加载中…</span></div>
         <div class="kd-mk-bar">${mkBtns}${ignoreBtn}</div>
       </div>` + renderMarkup.html;
