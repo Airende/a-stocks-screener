@@ -133,6 +133,19 @@ _PRIMARY_TAG_BOOST = {
     "601985": "核电",        # 中国核电
 }
 
+# 0. 股票个股名称修正 (20260927): 数据源(新浪)偶发把证券简称返回成公司全称/错误名, 按代码统一修正。
+#    在 fetch_spot_all 等返回处调用 _fix_stock_name(code, name) 兜底, 保证列表/搜索/个股分析名称一致。
+_STOCK_NAME_FIX: dict[str, str] = {
+    "603163": "圣晖集成",   # 新浪误称"圣晖系统集成集团"
+}
+
+
+def _fix_stock_name(code: str, name: str) -> str:
+    """名称修正: 命中 _STOCK_NAME_FIX 则返回修正名, 否则原样返回。"""
+    fixed = _STOCK_NAME_FIX.get(str(code).zfill(6))
+    return fixed if fixed else name
+
+
 # 2. 申万行业名 → 开盘啦风格名称修正 (去掉罗马数字、补充行业前缀)
 _INDUSTRY_NAME_FIX: dict[str, str] = {
     "铜": "金属铜",
@@ -792,15 +805,22 @@ def fetch_spot_all() -> list[dict]:
     收盘后优先使用本地缓存; 盘中实时拉取。
     20260906 容灾: 新浪主源失败(或熔断期内)时, 用本地缓存的股票池 + 腾讯批量行情兜底。
     20260907 性能: 增加内存TTL缓存, 解决选股时N只股票各自触发全市场快照拉取导致的请求爆炸。"""
+    def _norm(rows_in: list[dict]) -> list[dict]:
+        """就地归正名称: 命中 _STOCK_NAME_FIX 的股票, 名称修正为证券简称。"""
+        for r in rows_in:
+            r["name"] = _fix_stock_name(r.get("code", ""), r.get("name", "") or "")
+        return rows_in
+
     # 内存缓存命中
     now = time.time()
     if _SPOT_MEM_CACHE["data"] is not None and (now - _SPOT_MEM_CACHE["ts"]) < _SPOT_MEM_TTL:
-        return _SPOT_MEM_CACHE["data"]
+        return _norm(_SPOT_MEM_CACHE["data"])
     # 收盘后: 优先用本地缓存
     if _should_use_spot_cache():
         cache_date = _cache_date_for_fetch()
         cached = _load_spot_cache(cache_date)
         if cached is not None:
+            _norm(cached)
             _SPOT_MEM_CACHE["data"] = cached
             _SPOT_MEM_CACHE["ts"] = now
             return cached
@@ -860,6 +880,7 @@ def fetch_spot_all() -> list[dict]:
         # 盘中 _should_use_spot_cache() 仍为 False, 不会读缓存(实时拉取),
         # 但缓存文件存在可避免刷新后显示 0MB, 且作为主源失败时的容灾兜底。
         if rows:
+            _norm(rows)
             _save_spot_cache(_cache_date_for_fetch(), rows)
         # 更新内存缓存
         _SPOT_MEM_CACHE["data"] = rows
@@ -880,6 +901,7 @@ def fetch_spot_all() -> list[dict]:
         if not rows:
             raise RuntimeError(f"新浪主源失败且腾讯/东财备源均无数据: {str(e)[:60]}") from e
         # 更新内存缓存 (备源数据也缓存)
+        _norm(rows)
         _SPOT_MEM_CACHE["data"] = rows
         _SPOT_MEM_CACHE["ts"] = time.time()
         return rows
