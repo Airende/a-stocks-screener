@@ -4425,6 +4425,8 @@ function passMaAtr(s){
   // ATR过滤仅作用于日线均线形态tab; 背离tab(日线背离)和周线tab不受ATR限制 (与后端一致)
   const curPat = MA_PATS[maCurrentTab][0];
   if(curPat.includes('背离') || curPat.startsWith('周线') || curPat==='地量低价') return true;
+  // (2026-09-26) 硬过滤: ATR%<3 直接排除 (需求: 均线形态筛选过滤掉低波动标的)
+  if(s.atr_pct != null && s.atr_pct < 3) return false;
   if(!maAtrConds.length) return true;
   if(s.atr_pct == null) return true;  // 旧扫描结果无ATR字段时不隐藏
   if(maAtrConds.includes('e1') && s.atr_pct < 4) return true;
