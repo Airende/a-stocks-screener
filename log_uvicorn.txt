@@ -1,59 +1,9 @@
-[storage] [2026-09-26 19:23:31] 云端存储已启用: supabase_rest (project=oxsqqngljiuvrfmbclio)
-[storage] [2026-09-26 19:23:32] 标记加载(云端+本地合并): 161 条
-INFO:     Started server process [6390]
+[storage] [2026-09-26 19:34:25] 云端存储已启用: supabase_rest (project=oxsqqngljiuvrfmbclio)
+[storage] [2026-09-26 19:34:25] 标记加载(云端+本地合并): 161 条
+INFO:     Started server process [7501]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
 INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
-INFO:     127.0.0.1:59594 - "GET / HTTP/1.1" 200 OK
-INFO:     127.0.0.1:53462 - "GET / HTTP/1.1" 200 OK
-INFO:     127.0.0.1:37448 - "POST /api/ma-screen/run HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57838 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57842 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:44536 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:44540 - "GET / HTTP/1.1" 200 OK
-INFO:     127.0.0.1:44592 - "GET /api/conds HTTP/1.1" 200 OK
-INFO:     127.0.0.1:44604 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:44612 - "GET /api/stock/history HTTP/1.1" 200 OK
-INFO:     127.0.0.1:44618 - "GET /api/ssp-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:44664 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:44548 - "POST /api/watchlist/sync HTTP/1.1" 200 OK
-INFO:     127.0.0.1:44676 - "GET /api/marks HTTP/1.1" 200 OK
-INFO:     127.0.0.1:44688 - "GET /api/events HTTP/1.1" 200 OK
-INFO:     127.0.0.1:44578 - "GET /api/cache_info HTTP/1.1" 200 OK
-INFO:     127.0.0.1:44692 - "GET /%40vite/client HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:44696 - "POST /api/ma-screen/run HTTP/1.1" 200 OK
-INFO:     127.0.0.1:44706 - "GET /api/screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:44718 - "GET /api/screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:44562 - "POST /api/watchlist/sync HTTP/1.1" 200 OK
-INFO:     127.0.0.1:44730 - "GET /api/screen HTTP/1.1" 200 OK
-/workspace/app.py:7473: RuntimeWarning: invalid value encountered in divide
-  ((feat["up_shadow"] / np.where(pc > 0, pc, np.nan)) / (feat["amp"] / 100)),
-INFO:     127.0.0.1:44586 - "GET /api/watchlist?scope=hold HTTP/1.1" 200 OK
-INFO:     127.0.0.1:44648 - "GET /api/market-snapshot HTTP/1.1" 200 OK
-INFO:     127.0.0.1:44744 - "GET /api/minute-data?symbol=sh603067 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:44754 - "GET /api/minute-data?symbol=sz300433 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:44770 - "GET /api/minute-data?symbol=sh601636 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:44808 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:44792 - "GET /api/minute-data?symbol=sz300199 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:44782 - "GET /api/minute-data?symbol=sz300420 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:44632 - "GET /api/watchlist?scope=self HTTP/1.1" 200 OK
-INFO:     127.0.0.1:44738 - "GET /api/watchlist?scope=hold HTTP/1.1" 200 OK
-INFO:     127.0.0.1:44822 - "GET /api/watchlist?scope=self HTTP/1.1" 200 OK
-INFO:     127.0.0.1:47176 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:47184 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:47194 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:47198 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59642 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59650 - "GET /api/events HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59656 - "GET /api/ssp-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59672 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59682 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59696 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59698 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59700 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:47314 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:47328 - "GET /api/kline?code=600316&datalen=122 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:47354 - "GET /api/kline?code=605016&datalen=122 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:47376 - "GET /api/kline?code=600968&datalen=122 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:47396 - "GET /api/events HTTP/1.1" 200 OK
-INFO:     127.0.0.1:47342 - "GET /api/stock/hist-signals?code=600316 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46590 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51868 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51882 - "GET / HTTP/1.1" 200 OK

@@ -980,6 +980,7 @@
         <div class="ckbar" style="margin-bottom:10px">
           <span class="meta" id="maUpdated">尚未筛选</span>
           <button class="ghost" id="maRunBtn">开始筛选</button>
+          <button class="ghost" id="maExportBtn">导出代码</button>
         </div>
         <!-- ATR过滤UI已移除 (20260925): 不再按ATR过滤, 列表仍显示ATR%列 -->
         <div class="ma-tabs" id="maTabs"></div>
@@ -4888,6 +4889,35 @@ async function startMAScreen(){
   setTimeout(poll, 4000);
 }
 $('#maRunBtn').onclick=startMAScreen;
+
+// 导出当前形态tab的股票代码清单 (20260926) —— 供导入同花顺自定义板块/自选股看盘。
+// 口径: 导出当前tab后端命中全量(含银行), 方便在同花顺按完整名单逐个看K线。
+function exportMATabCodes(){
+  if(_isSspTab()){
+    const pool=_sspPool();
+    const list=(sspData&&sspData[pool])||[];
+    if(!list.length){ alert('当前上试盘池为空'); return; }
+    const poolName = (pool==='new_signals'?'新信号':pool==='watch_pool'?'观察池':'已确认');
+    const lines=list.map(s=>`${s.code},${s.name}`);
+    downloadText(`ARD_上试盘${poolName}_${new Date().toISOString().slice(0,10)}.txt`, lines.join('\n'));
+    return;
+  }
+  if(!maData||!maData.patterns){ alert('尚无筛选结果'); return; }
+  const pat=MA_PATS[maCurrentTab][0];
+  const list=(maData.patterns[pat]||[]);
+  if(!list.length){ alert('当前tab无匹配标的'); return; }
+  const lines=list.map(s=>`${s.code},${s.name}`);
+  downloadText(`ARD_${pat}_${new Date().toISOString().slice(0,10)}.txt`, lines.join('\n'));
+}
+function downloadText(fname, content){
+  const blob=new Blob([content],{type:'text/plain;charset=utf-8'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=fname;
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },200);
+}
+$('#maExportBtn').onclick=exportMATabCodes;
 
 // 启动
 initConds().then(()=>{
