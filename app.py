@@ -6775,16 +6775,6 @@ def classify_bottom_volume(bars: list[dict]) -> bool:
     NEAR = 5        # 回溯窗口: 最近5个交易日内曾出底即算
     if n <= W + 1:
         return False
-    # MA10: 供"站上MA10(趋势转强)"精筛 (20260927 回测: 基线51.5%→+站MA10 53.6%)
-    clos_all = [float(b["close"]) for b in bars]
-    ma10v = [None] * n
-    _s = 0.0
-    for _i, _v in enumerate(clos_all):
-        _s += _v
-        if _i >= 10:
-            _s -= clos_all[_i - 10]
-        if _i >= 9:
-            ma10v[_i] = _s / 10
     # 只扫描最近 NEAR 个交易日; 每个候选bar需有足够左侧数据(i>=W), 且价区间需有数据(i>=1)
     for i in range(max(W, n - NEAR), n):
         last = bars[i]
@@ -6823,9 +6813,6 @@ def classify_bottom_volume(bars: list[dict]) -> bool:
         if v60 > 0:
             shrink = (v10 <= v60 * 0.75)
         if steady or shrink:      # A/B 二选一命中即可
-            # 精筛(20260927): 出底那根收盘须站上MA10(趋势转强), 排除仍在下行通道的假底
-            if not (ma10v[i] and float(last["close"]) >= ma10v[i]):
-                continue
             return True
     return False
 

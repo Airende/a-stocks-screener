@@ -6315,13 +6315,11 @@ function kdSubPanels(bars, cfg){
   const vmax=Math.max(...bars.map(b=>b.volume))||1;
   const yFn2=v=>padT2+(1-v/vmax)*(h2-padT2-padB2);
   // 极致底量低价标记 (20260927 逐bar窗口版, 与后端 classify_bottom_volume 一致):
-  // 量=击穿该bar前60根地量 或 量比≤0.6; 价=该bar处其往前122根下沿18%;
-  // A/B二选一(止跌企稳/持续缩量); 且收盘站上MA10(趋势转强精筛)。满足 → 金色「地」字标。
+  // 对每根bar, 量=击穿其前60根地量(≤min×1.15)或量比≤0.6(二者居其一);
+  // 价=该bar收盘处于"其往前122根(近半年)"高低区间下沿18%。满足 → 金色「地」字标。
+  // 不再用整批统一区间, 避免列表后端判定与浮窗标注因窗口不同而不同步。
   const limitVol=(()=>{ const m={}; const W=60; const LOOK=122;
     if(n<=W || (opt&&opt.noLimits)) return m;   // 周K线(noLimits)不做日线口径的地量判定
-    // MA10 数组 (供站上MA10判断)
-    const _ma=[], _c=n=>+bars[n].close; let _cl=0;
-    for(let _i=0;_i<n;_i++){ _cl+=_c(_i); if(_i>=10) _cl-=_c(_i-10); if(_i>=9) _ma[_i]=_cl/10; else _ma[_i]=null; }
     for(let i=W;i<n;i++){
       const vol=+bars[i].volume; if(!(vol>0)) continue;
       let vmin=Infinity, vsum=0;
@@ -6333,22 +6331,7 @@ function kdSubPanels(bars, cfg){
       let pLo=Infinity, pHi=-Infinity;
       for(let j=ps;j<=i;j++){ if(bars[j].low<pLo) pLo=bars[j].low; if(bars[j].high>pHi) pHi=bars[j].high; }
       const pos=(pHi>pLo)?(+bars[i].close-pLo)/(pHi-pLo):1;
-      if(pos>0.18) continue;
-      // A止跌企稳 / B持续缩量 (二选一)
-      let steady=false;
-      if(i>=30){
-        let s=0,c=0,pmin=1e18; for(let j=i-9;j<=i;j++){s+=bars[j].close;c++;}
-        for(let j=i-29;j<i-9;j++){ if(bars[j].low<pmin) pmin=bars[j].low; }
-        steady= !((s/c) < pmin);   // 简化: 用近10日均收 vs 前20日最低
-      }
-      let shrink=false;
-      if(i>=60){ let v10=0,v60=0; for(let j=i-9;j<=i;j++)v10+=bars[j].volume; v10/=10;
-        for(let j=i-59;j<=i;j++)v60+=bars[j].volume; v60/=60;
-        shrink=(v60>0)&&(v10<=v60*0.75); }
-      if(!(steady||shrink)) continue;
-      // 精筛: 收盘站上MA10
-      if(!(_ma[i] && +bars[i].close >= _ma[i])) continue;
-      m[(bars[i].day||'').slice(0,10)]=true;
+      if(pos<=0.18) m[(bars[i].day||'').slice(0,10)]=true;
     }
     return m; })();
   const volMarks=(()=>{ let s='';
