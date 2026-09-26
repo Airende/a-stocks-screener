@@ -182,3 +182,11 @@ INFO:     127.0.0.1:60180 - "GET /api/kline?code=600360&datalen=122 HTTP/1.1" 20
 INFO:     127.0.0.1:60194 - "GET /api/events HTTP/1.1" 200 OK
 INFO:     127.0.0.1:60174 - "GET /api/stock/hist-signals?code=002849 HTTP/1.1" 200 OK
 INFO:     127.0.0.1:60186 - "GET /api/stock/hist-signals?code=600360 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52874 - "GET /api/events HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50038 - "GET /api/events HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60670 - "GET /api/events HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43310 - "GET /api/events HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45818 - "GET /api/events HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45506 - "GET /api/events HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59144 - "GET /api/events HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40844 - "GET /api/events HTTP/1.1" 200 OK
