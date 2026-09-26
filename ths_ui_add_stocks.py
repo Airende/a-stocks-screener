@@ -14,7 +14,8 @@
 
 特点:
   - 自动探测 2A(控件可读) 优先; 失败自动回落 2B(坐标)
-  - 逐只间隔 0.4s, 防止丢输入
+  - 逐只间隔 0.5s, 防止丢输入
+  - 2B 模式: 每个分组切换需要人工确认(因坐标无法识别是哪个分组), 避免改错组
   - run_log.csv 记录 分组,代码,状态(ok/fail/skip), 支持断点续跑(skip表示已完成)
   - 2B 每10只截屏一次到 /workspace/shot_01.png 供人工确认未跑偏
 """
@@ -26,7 +27,7 @@ LOG = os.path.join(BASE, "run_log.csv")
 COORDS = os.path.join(BASE, "ui_coords.json")
 SHOT_DIR = os.path.join(BASE, "shots")
 PROC = "同花顺"
-DELAY = 0.4          # 逐只间隔
+DELAY = 0.5          # 逐只间隔 (2B 放宽至0.5s防丢输入)
 RETRY = 1            # 失败重试次数
 MODE = None          # 'A' / 'B', 探测后定
 _coords = {}
@@ -110,6 +111,9 @@ def snapshot(tag):
 def b_add_stock(code):
     cc(_coords["code_input"]["x"], _coords["code_input"]["y"])   # 点输入框
     time.sleep(0.3)
+    sh("cliclick kp:cmd+a")                                       # 全选
+    sh("cliclick kd:cmd && cliclick kp:keycode:51 && cliclick ku:cmd")  # 删除(Backspace)
+    time.sleep(0.2)
     sh(f'cliclick t:"{code}"')                                   # 键盘输入
     time.sleep(0.2)
     sh("cliclick kp:return")                                     # 回车确认
@@ -148,11 +152,16 @@ def run_group(group, codes, done):
     print(f"[{group}] ok {ok_codes}/{len(codes)}")
 
 def main():
-    global MODE, _coords
+    global MODE, _coords, CSV
     args = sys.argv[1:]
     only = None
     if args and args[0] == "--only":
         only = set(args[1:])
+    elif args and args[0] == "--csv":
+        # 指定数据源: python3 ths_ui_add_stocks.py --csv ths_groups_test.csv
+        CSV = os.path.join(BASE, args[1])
+        if not os.path.exists(CSV):
+            print(f"指定CSV不存在: {CSV}"); return
 
     rows = load_csv()
     if not rows:
@@ -163,7 +172,14 @@ def main():
     MODE = "A" if detect_2a() else "B"
     print(f"[探测] 选路线 -> 2{MODE} ({'控件精准操控' if MODE=='A' else '坐标盲点'})")
     if MODE == "B":
-        print("提示: 请先核对 ui_coords.json 的坐标(用 cliclick p 取点), 将窗口移到位并切到目标分组")
+        print("提示: 请先用 cliclick p 核对 ui_coords.json 的窗口/输入框坐标, 并手工把同花顺窗口移到指定位置")
+        try:
+            move_win()                      # 固定窗口位置, 确保坐标一致
+        except Exception:
+            pass
+        time.sleep(0.5)
+        cc(_coords["code_input"]["x"], _coords["code_input"]["y"])   # 先点一下输入框聚焦
+        time.sleep(0.3)
 
     done = load_already_done()
     print(f"已完成断点: {len(done)} 条")
@@ -181,8 +197,9 @@ def main():
     time.sleep(0.5)
     for grp, codes in groups.items():
         if MODE == "B":
-            b_click_group(grp)          # 点选该分组
-            time.sleep(0.4)
+            # 坐标盲点无法识别分组, 由人工确认已在目标分组(避免灌错组)
+            print(f"\n请在左侧手动点选分组 [ {grp} ] (共{len(codes)}只)")
+            input("准备好后按 回车 开始该分组...")
         run_group(grp, codes, done)
 
     print(f"\n完成. 日志: {LOG}  截屏: {SHOT_DIR}/")
