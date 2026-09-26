@@ -6309,8 +6309,11 @@ function kdSubPanels(bars, cfg){
   // 价=收盘处于近半年高低区间下沿18%。满足 → 金色「地」字标。 (20260926 基准窗口定为前60根K线)
   const limitVol=(()=>{ const m={}; const W=60;
     if(n<=W || (opt&&opt.noLimits)) return m;   // 周K线(noLimits)不做日线口径的地量判定
+    // 20260927 统一口径: "近半年高低区间"固定取最近122根K线(约半年), 而非整个bars数组。
+    // 浮窗(122根)与个股分析(250根)传入的数组长度不同, 若遍历全数组会算出不同区间导致底量标识不同步。
+    const ps=Math.max(0, n-122);   // 起始索引: 使浮窗与个股分析都只看最近122根
     let pLo=Infinity, pHi=-Infinity;
-    for(let j=0;j<n;j++){ if(bars[j].low<pLo) pLo=bars[j].low; if(bars[j].high>pHi) pHi=bars[j].high; }
+    for(let j=ps;j<n;j++){ if(bars[j].low<pLo) pLo=bars[j].low; if(bars[j].high>pHi) pHi=bars[j].high; }
     for(let i=W;i<n;i++){
       const vol=+bars[i].volume; if(!(vol>0)) continue;
       let vmin=Infinity, vsum=0;
