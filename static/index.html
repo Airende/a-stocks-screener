@@ -6579,7 +6579,8 @@ async function showKlinePreview(code, anchor){
   _kdPlace(pop, anchor);
   try{
     if(!_kdCache[code]){
-      const r = await fetch('/api/kline?code=' + encodeURIComponent(code) + '&datalen=122');
+      // 近半年显示(130根: 122根显示+8根前视余量), 保证"近5日曾出底"在浮窗精确标全
+      const r = await fetch('/api/kline?code=' + encodeURIComponent(code) + '&datalen=130');
       const d = await r.json();
       if(!d.bars || !d.bars.length){ pop.innerHTML = '<div class="empty">无K线数据</div>'; return; }
       _kdCache[code] = d;
