@@ -4424,8 +4424,9 @@ let maQuickFilter=''; // 快速过滤: 代码/名称子串(大小写不敏感)
 let maAtrConds = [];  // ATR过滤UI已移除(20260925): 不过滤, 列表仍显示ATR%列
 function passMaAtr(s){
   // ATR过滤仅作用于日线均线形态tab; 背离tab(日线背离)和周线tab不受ATR限制 (与后端一致)
+  // (20260927) 日·地量(地量低价)tab 也纳入 ATR%<3 硬过滤, 过滤掉低波动标的
   const curPat = MA_PATS[maCurrentTab][0];
-  if(curPat.includes('背离') || curPat.startsWith('周线') || curPat==='地量低价') return true;
+  if(curPat.includes('背离') || curPat.startsWith('周线')) return true;
   // (2026-09-26) 硬过滤: ATR%<3 直接排除 (需求: 均线形态筛选过滤掉低波动标的)
   if(s.atr_pct != null && s.atr_pct < 3) return false;
   if(!maAtrConds.length) return true;
