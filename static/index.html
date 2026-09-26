@@ -6305,20 +6305,30 @@ function kdSubPanels(bars, cfg){
   const h2=80, padT2=12, padB2=6;  // 加高使量柱更清晰 (20260925)
   const vmax=Math.max(...bars.map(b=>b.volume))||1;
   const yFn2=v=>padT2+(1-v/vmax)*(h2-padT2-padB2);
-  // 极致底量低价标记 (20260925 放宽口径): 量=击穿近60日地量(≤min×1.15)或量比≤0.6 满足其一;
+  // 极致底量低价标记 (20260925 放宽口径; 20260926 基准窗口改为"当前bar前60自然日"):
+  // 量 = 击穿前60自然日地量(≤min×1.15) 或 量比(对前60自然日均量)≤0.6 满足其一;
   // 价=收盘处于近半年高低区间下沿18%。满足 → 金色「地」字标
-  const limitVol=(()=>{ const m={}; const W=60;
-    if(n<=W || (opt&&opt.noLimits)) return m;   // 周K线(noLimits)不做日线口径的地量判定
+  const limitVol=(()=>{ const m={};
+    if(opt&&opt.noLimits) return m;   // 周K线(noLimits)不做日线口径的地量判定
+    const DAY=86400000;
+    const dayTs=bars.map(b=>{ const s=(b.day||'').slice(0,10); if(!/^\d{4}-\d{2}-\d{2}$/.test(s)) return NaN;
+      const p=s.split('-'); return Date.UTC(+p[0], +p[1]-1, +p[2]); });
     let pLo=Infinity, pHi=-Infinity;
-    for(let j=0;j<n;j++){ if(bars[j].low<pLo) pLo=bars[j].low; if(bars[j].high>pHi) pHi=bars[j].high; }
-    for(let i=W;i<n;i++){
+    for(let j=0;j<bars.length;j++){ if(bars[j].low<pLo) pLo=bars[j].low; if(bars[j].high>pHi) pHi=bars[j].high; }
+    for(let i=0;i<bars.length;i++){
+      const t=dayTs[i]; if(!isFinite(t)) continue;
+      const day=(bars[i].day||'').slice(0,10);
       const vol=+bars[i].volume; if(!(vol>0)) continue;
-      let vmin=Infinity, vsum=0;
-      for(let j=i-W;j<i;j++){ const v=+bars[j].volume; if(v<vmin) vmin=v; vsum+=v; }
-      const vavg=vsum/W;
+      let vmin=Infinity, vsum=0, cnt=0;
+      for(let j=0;j<i;j++){
+        const tj=dayTs[j]; if(!isFinite(tj)) continue;
+        if(t-tj<=DAY*60){ const v=+bars[j].volume; if(v<vmin) vmin=v; vsum+=v; cnt++; }
+      }
+      if(!cnt) continue;
+      const vavg=vsum/cnt;
       const pos=(pHi>pLo)?(+bars[i].close-pLo)/(pHi-pLo):1;
       const vOk=(vol<=vmin*1.15)||(vavg>0 && vol/vavg<=0.6);
-      if(vOk && pos<=0.18) m[(bars[i].day||'').slice(0,10)]=true;
+      if(vOk && pos<=0.18) m[day]=true;
     }
     return m; })();
   const volMarks=(()=>{ let s='';
