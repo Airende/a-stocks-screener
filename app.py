@@ -6685,7 +6685,7 @@ MA_PATTERNS = ["多头排列", "多头排列向上发散", "粘合向上突破",
 _CHAN_BUY_TAB = {"一买": "缠论·日线一买", "二买": "缠论·日线二买", "三买": "缠论·日线三买"}
 
 
-def _chan_day_buy_type(bars: list[dict], rec_days: int = 3) -> str:
+def _chan_day_buy_type(bars: list[dict], rec_days: int = 5) -> str:
     """日线缠论: 返回最近一个出现、且发生在最近 rec_days 个交易日内的买点类型(一买/二买/三买),
     无则返回空串。复用 chan_analysis。买点中文名在 signal 的 label(type 为 B1/B2/B3 代码);
     组合信号(如 '二买/三买')按 三买>二买>一买 归入更高层级。"""
