@@ -6685,20 +6685,24 @@ MA_PATTERNS = ["多头排列", "多头排列向上发散", "粘合向上突破",
 _CHAN_BUY_TAB = {"一买": "缠论·日线一买", "二买": "缠论·日线二买", "三买": "缠论·日线三买"}
 
 
-def _chan_day_buy_type(bars: list[dict]) -> str:
-    """日线缠论: 返回最近一个出现的买点类型(一买/二买/三买), 无明确买点返回空串。
-    复用 chan_analysis (笔/线段/中枢/MACD面积背驰)。signals 已按 bar 索引升序;
-    买点中文名在 label(type 为 B1/B2/B3 代码), 组合信号(如 '二买/三买')按 三买>二买>一买 归入更高层级。"""
+def _chan_day_buy_type(bars: list[dict], rec_days: int = 3) -> str:
+    """日线缠论: 返回最近一个出现、且发生在最近 rec_days 个交易日内的买点类型(一买/二买/三买),
+    无则返回空串。复用 chan_analysis。买点中文名在 signal 的 label(type 为 B1/B2/B3 代码);
+    组合信号(如 '二买/三买')按 三买>二买>一买 归入更高层级。"""
     try:
         r = chan_analysis(bars, start_dir="auto")
     except Exception:  # noqa: BLE001
         return ""
     if not r or not r.get("ok"):
         return ""
-    # 反向遍历取出最近一个含一/二/三买的买入信号
+    n = len(bars)
+    cutoff = n - max(int(rec_days), 1)  # 最近 rec_days 个交易日内的最小 bar 索引
+    # 反向遍历: 只保留发生在窗口(最近 rec_days 交易日内)的买入信号, 取最靠后者
     for s in reversed(r.get("signals", [])):
         if s.get("side") != "buy":
             continue
+        if s.get("i", -1) < cutoff:
+            return ""  # 最近的买入信号已超出窗口 → 该股不入缠论tab
         label = s.get("label", "")
         for cand in ("三买", "二买", "一买"):  # 高层级优先
             if cand in label:

@@ -1,139 +1,39 @@
-[storage] [2026-09-20 18:34:28] 云端存储已启用: supabase_rest (project=oxsqqngljiuvrfmbclio)
-[storage] [2026-09-20 18:34:29] 标记加载(云端+本地合并): 151 条
-[storage] [2026-09-20 18:34:29] 持仓加载(云端+本地合并): 3 只
-INFO:     Started server process [10891]
+[storage] [2026-09-26 18:50:42] 云端存储已启用: supabase_rest (project=oxsqqngljiuvrfmbclio)
+[storage] [2026-09-26 18:50:43] 标记加载(云端+本地合并): 161 条
+INFO:     Started server process [4341]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
 INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
-INFO:     127.0.0.1:33578 - "GET / HTTP/1.1" 200 OK
-INFO:     127.0.0.1:40772 - "GET / HTTP/1.1" 200 OK
-INFO:     127.0.0.1:40790 - "GET / HTTP/1.1" 200 OK
-INFO:     127.0.0.1:40808 - "GET /api/conds HTTP/1.1" 200 OK
-INFO:     127.0.0.1:40826 - "GET /api/ssp-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:40828 - "GET /api/stock/history HTTP/1.1" 200 OK
-INFO:     127.0.0.1:40820 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:40870 - "GET /api/events HTTP/1.1" 200 OK
-INFO:     127.0.0.1:40864 - "GET /api/positions HTTP/1.1" 200 OK
-INFO:     127.0.0.1:40862 - "GET /api/marks HTTP/1.1" 200 OK
-INFO:     127.0.0.1:40884 - "POST /api/ma-screen/run HTTP/1.1" 200 OK
-INFO:     127.0.0.1:40882 - "GET /api/screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:40872 - "GET / HTTP/1.1" 200 OK
-INFO:     127.0.0.1:40892 - "GET /api/screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:40902 - "POST /api/screen/refresh HTTP/1.1" 200 OK
-INFO:     127.0.0.1:40916 - "GET /api/screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:35784 - "GET /api/conds HTTP/1.1" 200 OK
-INFO:     127.0.0.1:35798 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:35814 - "GET /api/ssp-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:35806 - "GET /api/stock/history HTTP/1.1" 200 OK
-INFO:     127.0.0.1:35854 - "GET /api/events HTTP/1.1" 200 OK
-INFO:     127.0.0.1:35838 - "GET /api/marks HTTP/1.1" 200 OK
-INFO:     127.0.0.1:35876 - "GET /%40vite/client HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:35864 - "GET /api/positions HTTP/1.1" 200 OK
-INFO:     127.0.0.1:35892 - "GET /api/screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:35908 - "POST /api/ma-screen/run HTTP/1.1" 200 OK
-INFO:     127.0.0.1:35922 - "GET /api/screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:35924 - "POST /api/screen/refresh HTTP/1.1" 200 OK
-INFO:     127.0.0.1:35936 - "GET /api/screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:35938 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:35940 - "GET /api/screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:40840 - "GET /api/watchlist HTTP/1.1" 200 OK
-INFO:     127.0.0.1:35972 - "GET /api/minute-data?symbol=sz002080 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:35956 - "GET /api/minute-data?symbol=sz301396 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:35980 - "GET /api/minute-data?symbol=sz002896 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:35976 - "GET /api/minute-data?symbol=sh603127 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:35992 - "GET /api/minute-data?symbol=sz300540 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:35988 - "GET /api/minute-data?symbol=sh603067 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:35822 - "GET /api/watchlist HTTP/1.1" 200 OK
-INFO:     127.0.0.1:35996 - "GET /api/minute-data?symbol=sz300179 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:36014 - "GET /api/minute-data?symbol=sz301396 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:36028 - "GET /api/minute-data?symbol=sz002080 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:35946 - "GET /api/watchlist HTTP/1.1" 200 OK
-INFO:     127.0.0.1:36040 - "GET /api/minute-data?symbol=sh603127 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:36048 - "GET /api/minute-data?symbol=sz002896 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:36002 - "GET /api/watchlist HTTP/1.1" 200 OK
-INFO:     127.0.0.1:36056 - "GET /api/minute-data?symbol=sh603067 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:36064 - "GET /api/minute-data?symbol=sz300540 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:36096 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:36072 - "GET /api/minute-data?symbol=sz300179 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:36082 - "GET /api/minute-data?symbol=sh603067 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:36100 - "GET /api/minute-data?symbol=sz300540 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:36106 - "GET /api/minute-data?symbol=sz300179 HTTP/1.1" 200 OK
-/workspace/app.py:7265: RuntimeWarning: invalid value encountered in divide
+INFO:     127.0.0.1:46440 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46474 - "GET /api/events HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46482 - "GET /api/conds HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46484 - "GET /api/ma-screen HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46490 - "GET /api/ssp-screen HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46506 - "GET /api/stock/history HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46466 - "GET /api/cache_info HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46442 - "POST /api/watchlist/sync HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46540 - "GET /api/marks HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46548 - "GET /%40vite/client HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:46556 - "GET /api/screen HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46572 - "POST /api/ma-screen/run HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46582 - "GET /api/screen HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46594 - "POST /api/screen/refresh HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46596 - "GET /api/screen HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46450 - "POST /api/watchlist/sync HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56152 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56156 - "GET /api/ma-screen HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56170 - "GET /api/screen HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46476 - "GET /api/watchlist?scope=hold HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56198 - "GET /api/minute-data?symbol=sh603067 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56196 - "GET /api/minute-data?symbol=sz300433 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56212 - "GET /api/minute-data?symbol=sh601636 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56216 - "GET /api/minute-data?symbol=sz300420 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56232 - "GET /api/ma-screen HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56238 - "GET /api/screen HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56218 - "GET /api/minute-data?symbol=sz300199 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46514 - "GET /api/watchlist?scope=self HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56186 - "GET /api/watchlist?scope=hold HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46530 - "GET /api/market-snapshot HTTP/1.1" 200 OK
+/workspace/app.py:7469: RuntimeWarning: invalid value encountered in divide
   ((feat["up_shadow"] / np.where(pc > 0, pc, np.nan)) / (feat["amp"] / 100)),
-INFO:     127.0.0.1:36114 - "GET /api/screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:36126 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:36138 - "GET /api/screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:35828 - "GET /api/market-snapshot HTTP/1.1" 200 OK
-INFO:     127.0.0.1:41650 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:40856 - "GET /api/market-snapshot HTTP/1.1" 200 OK
-INFO:     127.0.0.1:41654 - "GET /api/screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:41656 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:41662 - "GET /api/screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:41670 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:41678 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:41688 - "GET /api/screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:41682 - "GET /api/screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:41692 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:41706 - "GET /api/events HTTP/1.1" 200 OK
-INFO:     127.0.0.1:41722 - "GET /api/screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:41714 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:41738 - "GET /api/screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59472 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59488 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59474 - "GET /api/screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59494 - "GET /api/screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59502 - "GET /api/ssp-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59510 - "GET /api/ssp-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59514 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59522 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59538 - "GET /api/screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59552 - "GET /api/screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:40806 - "GET /api/cache_info HTTP/1.1" 200 OK
-INFO:     127.0.0.1:39174 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:39178 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:39182 - "GET /api/screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:39186 - "GET /api/screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:39190 - "GET /api/history/dates HTTP/1.1" 200 OK
-INFO:     127.0.0.1:39206 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:39214 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:39216 - "GET /api/screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:39192 - "GET /api/history?date=2026-09-18 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:39232 - "GET /api/screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:39234 - "GET /api/events HTTP/1.1" 200 OK
-INFO:     127.0.0.1:39244 - "GET /api/screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:39258 - "GET /api/screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:39272 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55590 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55600 - "GET /api/screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55602 - "GET /api/screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55616 - "GET /api/minute-data?symbol=sz399006 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55634 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55626 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55624 - "GET /api/minute-data?symbol=sz399006 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55646 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55656 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:52480 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:52482 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:52490 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:52492 - "GET /api/ma-screen HTTP/1.1" 200 OK
-INFO:     127.0.0.1:52508 - "GET /api/events HTTP/1.1" 200 OK
-INFO:     127.0.0.1:46836 - "GET /api/minute-data?symbol=sz399001 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:46850 - "GET /api/kline?code=001210&datalen=122 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:46864 - "GET /api/stock/hist-signals?code=001210 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:35602 - "GET /api/events HTTP/1.1" 200 OK
-INFO:     127.0.0.1:35368 - "GET /api/events HTTP/1.1" 200 OK
-INFO:     127.0.0.1:34648 - "GET /api/events HTTP/1.1" 200 OK
-INFO:     127.0.0.1:36544 - "GET /api/events HTTP/1.1" 200 OK
-INFO:     127.0.0.1:39920 - "GET /api/events HTTP/1.1" 200 OK
-INFO:     127.0.0.1:36122 - "GET /api/events HTTP/1.1" 200 OK
-INFO:     127.0.0.1:39306 - "GET /api/events HTTP/1.1" 200 OK
-INFO:     127.0.0.1:33470 - "GET /api/events HTTP/1.1" 200 OK
-INFO:     127.0.0.1:52128 - "GET /api/events HTTP/1.1" 200 OK
-INFO:     127.0.0.1:40608 - "GET /api/events HTTP/1.1" 200 OK
-INFO:     127.0.0.1:44990 - "GET /api/history?date=2026-09-07 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:45000 - "GET /api/kline?code=003039&datalen=122 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:45012 - "GET /api/stock/hist-signals?code=003039 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:47348 - "GET /api/events HTTP/1.1" 200 OK
-INFO:     127.0.0.1:37160 - "GET /api/events HTTP/1.1" 200 OK
-INFO:     Shutting down
-INFO:     Waiting for connections to close. (CTRL+C to force quit)
+INFO:     127.0.0.1:56244 - "GET /api/watchlist?scope=self HTTP/1.1" 200 OK
