@@ -6677,7 +6677,33 @@ def api_stock_chan(code: str = "", period: str = "day", start_dir: str = "auto")
 MA_PATTERNS = ["多头排列", "多头排列向上发散", "粘合向上突破", "地量低价",
                "空头排列向下发散", "粘合向下突破",
                "日线背离",
-               "周线A·强势主升", "周线·埋伏"]
+               "周线A·强势主升", "周线·埋伏",
+               # 缠论日线买卖点分组 (20260926): 最近一个出现的日线买点类型
+               "缠论·日线一买", "缠论·日线二买", "缠论·日线三买"]
+
+
+_CHAN_BUY_TAB = {"一买": "缠论·日线一买", "二买": "缠论·日线二买", "三买": "缠论·日线三买"}
+
+
+def _chan_day_buy_type(bars: list[dict]) -> str:
+    """日线缠论: 返回最近一个出现的买点类型(一买/二买/三买), 无明确买点返回空串。
+    复用 chan_analysis (笔/线段/中枢/MACD面积背驰)。signals 已按 bar 索引升序;
+    买点中文名在 label(type 为 B1/B2/B3 代码), 组合信号(如 '二买/三买')按 三买>二买>一买 归入更高层级。"""
+    try:
+        r = chan_analysis(bars, start_dir="auto")
+    except Exception:  # noqa: BLE001
+        return ""
+    if not r or not r.get("ok"):
+        return ""
+    # 反向遍历取出最近一个含一/二/三买的买入信号
+    for s in reversed(r.get("signals", [])):
+        if s.get("side") != "buy":
+            continue
+        label = s.get("label", "")
+        for cand in ("三买", "二买", "一买"):  # 高层级优先
+            if cand in label:
+                return cand
+    return ""
 
 _ma_state = {"data": None, "running": False, "error": None, "progress": "",
              "ts": 0.0, "lock": threading.Lock(),
@@ -7208,6 +7234,10 @@ def _run_ma_screen_thread():
             # 极致底量低价 (20260925): 量击穿60日地量或量比≤0.6, 价处近半年下沿18%
             if classify_bottom_volume(bars):
                 pats.append("地量低价")
+            # 缠论日线买点 (20260926): 最近一个1买/2买/3买 → 各自缠论tab
+            _cb = _chan_day_buy_type(bars)
+            if _cb and _cb in _CHAN_BUY_TAB:
+                pats.append(_CHAN_BUY_TAB[_cb])
             if not pats:
                 return None
             # 买卖点分析

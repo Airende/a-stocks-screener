@@ -445,6 +445,10 @@
 .ma-tab.grp-day.alt2{color:#9aa3af;background:linear-gradient(180deg,rgba(154,163,175,.12),var(--panel2));border-color:rgba(154,163,175,.28)}
 .ma-tab.grp-day.alt2:hover{color:#fff}
 .ma-tab.grp-day.alt2.active{background:linear-gradient(180deg,#8a93a1,#6b7482);color:#fff;border-color:#6b7482}
+/* 缠论买卖点tab (20260926): 紫色紫罗兰, 靠近日线红但偏紫 */
+.ma-tab.grp-chan{color:#c084fc;background:linear-gradient(180deg,rgba(192,132,252,.13),var(--panel2));border-color:rgba(192,132,252,.32)}
+.ma-tab.grp-chan:hover{color:#fff}
+.ma-tab.grp-chan.active{background:linear-gradient(180deg,#a855f7,#7c3aed);color:#fff;border-color:#7c3aed;border-top:2px solid #d8b4fe}
 .ma-tab.grp-week{color:#4da3ff;background:linear-gradient(180deg,rgba(77,163,255,.13),var(--panel2));border-color:rgba(77,163,255,.28)}
 .ma-tab.grp-week:hover{color:#fff}
 .ma-tab.grp-week.active{background:linear-gradient(180deg,#4da3ff,#2f6fe0);color:#fff;border-color:#2f6fe0}
@@ -4375,19 +4379,24 @@ const MA_PATS=[
   ['日线背离','底部背离(KDJ/MACD底背离二合一)：近20日价格创新低但J值或DIF未创新低（动能未跟随下行），潜在反转信号'],
   ['粘合向下突破','近3日MA5/MA10/MA20间距<1.5%(粘合)，现转为空头排列，破位下行'],
   ['空头排列向下发散','MA5<MA10<MA20，三线同步下行，间距扩大，弱势下降趋势'],
+  // 缠论日线买卖点分组 (20260926): 1买/2买/3买 各自独立 tab
+  ['缠论·日线一买','日线缠论 一买：空头抛压衰竭、力度背驰确认底部（第一类买点），下跌趋势反转的介入契机'],
+  ['缠论·日线二买','日线缠论 二买：一买后回抽不破前低（形成次低点），安全介入点'],
+  ['缠论·日线三买','日线缠论 三买：突破最后中枢后回抽不回中枢，强势追涨点'],
   // 上试盘策略 3 个池子（对应说明书 A/B/C 三栏）
   ['上试盘·新信号','A池：今日刚出现长上影试盘日，观察不买；待后续放量突破再入场'],
   ['上试盘·观察池','B池：10日确认窗口内，未破信号日最低价、未放量突破的股票，附待突破价'],
   ['上试盘·已确认','C池：今日刚放量×1.01突破试盘高点 + 量比≥2 + 沪深300在MA20上方，当日收盘买入'],
 ];
-// 上试盘起始 tab: 前 9 个为 日线+周线+地量 (7日+2周), 9/10/11 为 A/B/C (20260925 新增地量低价tab)
-const SSP_KIND_TAB_OFFSET = 9;
+// 上试盘起始 tab: 前 12 个为 日线+周线+地量+缠论 (7日+2周+3缠), 12/13/14 为 A/B/C (20260926 新增缠论买卖点tab)
+const SSP_KIND_TAB_OFFSET = 12;
 // 子tab显示名 (20260918): 单字前缀·精简名, 表达分组 日/周/试; 仅用于渲染文本, 内部匹配仍用 p[0] 原名(后端 counts 按原名)
 // 顺序 (20260925): 日多头排列→日多头发散→日粘合上突→日地量→周强势→周埋伏→日背离→日粘合下突→日空头发散→试ABC
 const DISP_MA_NAME=[
   '日·多头排列','日·多头发散','日·粘合上突','日·地量',
   '周·强势主升','周·埋伏',
   '日·背离','日·粘合下突','日·空头发散',
+  '缠·日线1买','缠·日线2买','缠·日线3买',
   '试·新信号','试·观察池','试·已确认'
 ];
 let maCurrentTab=0;
@@ -4458,6 +4467,7 @@ function renderMATabs(){
   const PAT_GLYPH={"多头排列":"多","多头排列向上发散":"发","粘合向上突破":"突",
     "粘合向下突破":"跌","空头排列向下发散":"空","日线背离":"背","地量低价":"地",
     "周线A·强势主升":"周","周线·埋伏":"伏",
+    "缠论·日线一买":"1买","缠论·日线二买":"2买","缠论·日线三买":"3买",
     "上试盘·新信号":"观","上试盘·观察池":"等","上试盘·已确认":"买"};
   // 上试盘 3 个 tab 用 sspData.counts 显示数量
   const maCounts=(maData&&maData.counts)||{};
@@ -4468,7 +4478,7 @@ function renderMATabs(){
     const title = isSsp ? `上试盘策略 ${['A池·新信号','B池·观察','C池·已确认买入'][i-SSP_KIND_TAB_OFFSET]||''}` : '';
     // 分组色 (20260918): 日线=grp-day/组内看跌=alt(青)、背离=alt2(中性), 周线=grp-week(蓝), 上试盘=ssp-tab(金)
     // 20260920: 日/周交错排列, 按名称前缀判断分组, 不再用下标边界
-    const grpCls = isSsp ? '' : (p[0].startsWith('周线') ? 'grp-week' : 'grp-day');
+    const grpCls = isSsp ? '' : (p[0].startsWith('周线') ? 'grp-week' : (p[0].startsWith('缠论') ? 'grp-chan' : 'grp-day'));
     const dayAlt = (!isSsp && p[0].includes('向下')) ? ' alt' : '';
     const dayAlt2 = (!isSsp && p[0].includes('背离')) ? ' alt2' : '';
     const glyph = PAT_GLYPH[p[0]] ? `<b class="gl">${PAT_GLYPH[p[0]]}</b>` : '';
