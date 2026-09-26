@@ -6766,13 +6766,12 @@ def _apply_frozen_today_bar(bars: list[dict], symbol: str, today_date: str,
 def classify_bottom_volume(bars: list[dict]) -> bool:
     """极致底量低价 (20260927, 近5日回溯版): 判定最近5个交易日内是否有任一K线出过"底量低价"。
     基础(逐bar): 量 = 击穿该bar前60日地量(≤min×1.15) 或 量比(对前60日均量)≤0.6 满足其一;
-                价 = 该bar收盘处于其前122根(近半年)高低区间下沿10% (20260927 由18%收紧)。
-    精炼(逐bar, 二选一): A止跌企稳 / B持续缩量(加强: ≤60日均量×0.6, 且其后未放量下跌)。
+                价 = 该bar收盘处于其前122根(近半年)高低区间下沿18%。
+    精炼(逐bar, 二选一, 与往期口径一致): A止跌企稳 / B持续缩量。
     单日出底 = 观察信号; 买点需其后放量阳线确认。数据不足(≤60日)或量价异常返回False。"""
     n = len(bars)
     W = 60          # 量能基准窗口: 前60根
     LOOK = 122      # 价区间窗口: 前122根(近半年)
-    POS_LO = 0.10   # 价位下沿阈值 (20260927 由0.18收紧到0.10)
     NEAR = 5        # 回溯窗口: 最近5个交易日内曾出底即算
     if n <= W + 1:
         return False
@@ -6799,7 +6798,7 @@ def classify_bottom_volume(bars: list[dict]) -> bool:
         if p_hi <= p_lo:
             continue
         pos = (float(last["close"]) - p_lo) / (p_hi - p_lo)
-        if pos > POS_LO:
+        if pos > 0.18:
             continue
         # A: 止跌企稳 = 该bar近10日收盘未跌破前20日最低 (需足够历史)
         steady = False
@@ -6807,22 +6806,12 @@ def classify_bottom_volume(bars: list[dict]) -> bool:
             closes_s = [float(b["close"]) for b in bars[i - 9:i + 1]]
             lows_p = [float(b["low"]) for b in bars[i - 29:i - 9]]
             steady = not (min(closes_s) < min(lows_p))
-        # B: 持续缩量 (加强 20260927) = 该bar近10日均量 ≤ 前60日均量×0.6, 且其后未放量下跌
+        # B: 持续缩量 = 该bar近10日均量 ≤ 前60日均量×0.75
         shrink = False
         v10 = sum(float(b["volume"]) for b in bars[i - 9:i + 1]) / 10
         v60 = sum(float(b["volume"]) for b in bars[i - 59:i + 1]) / 60
-        if v60 > 0 and v10 <= v60 * 0.6:
-            shrink = True
-            # 底量日之后到今日: 若出现放量阴线(量≥60日均量×1.5 且收跌) 则视为仍在放量下杀, 不作数
-            for k in range(i + 1, n):
-                bk = bars[k]
-                if float(bk.get("close") or 0) < float(bk.get("open") or 0):
-                    _s = sum(float(b["volume"]) for b in bars[max(0, k - 59):k + 1])
-                    _c = k - max(0, k - 59)
-                    _avg = _s / _c if _c > 0 else 0
-                    if _avg > 0 and float(bk.get("volume") or 0) >= _avg * 1.5:
-                        shrink = False
-                        break
+        if v60 > 0:
+            shrink = (v10 <= v60 * 0.75)
         if steady or shrink:      # A/B 二选一命中即可
             return True
     return False
