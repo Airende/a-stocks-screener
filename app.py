@@ -6767,7 +6767,7 @@ def classify_bottom_volume(bars: list[dict]) -> bool:
     """极致底量低价 (20260925, 精炼版): 判定最后一根bar(今日/最近交易日)。
     基础: 量 = 击穿近60日地量(≤min×1.15) 或 量比(对60日均量)≤0.6 满足其一;
           价 = 收盘价处于近半年(122交易日)高低区间下沿18%。
-    精炼 (20260925 实测 346→57):
+    精炼 (20260925 实测 346→57; 20260926 放宽: A/B 由 AND 改二选一):
       A 止跌企稳 = 近10日收盘均未跌破前20日最低价 (剔除仍在破位的下跌中继);
       B 持续缩量 = 近10日均量 ≤ 60日均量×0.75 (整段缩量筑底, 而非单日偶发)。
     数据不足(≤60日)或量价异常返回False。地量=观察信号, 买点需其后放量阳线确认。"""
@@ -6793,12 +6793,14 @@ def classify_bottom_volume(bars: list[dict]) -> bool:
         return False
     closes = [float(b["close"]) for b in bars]
     lows = [float(b["low"]) for b in bars]
-    if min(closes[-10:]) < min(lows[-30:-10]):   # A: 近10日跌破前20日低点 → 仍在破位
-        return False
+    # A: 止跌企稳 = 近10日收盘未跌破前20日低点 (20260926: 由必选改二选一)
+    steady = not (min(closes[-10:]) < min(lows[-30:-10]))
     vols = [float(b["volume"]) for b in bars]
     v10 = sum(vols[-10:]) / 10
     v60 = sum(vols[-60:]) / 60
-    return bool(v60 > 0 and v10 <= v60 * 0.75)   # B: 持续缩量
+    # B: 持续缩量 (20260926: 由必选改二选一)
+    shrink = (v60 > 0) and (v10 <= v60 * 0.75)
+    return steady or shrink   # A/B 二选一命中即可
 
 
 def classify_ma_pattern(bars: list[dict]) -> str | None:
