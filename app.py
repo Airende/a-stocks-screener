@@ -6784,31 +6784,9 @@ def classify_bottom_volume(bars: list[dict]) -> bool:
     vol = float(last.get("volume") or 0)
     if vol <= 0:
         return False
-    from datetime import datetime, timedelta
-    try:
-        ld = datetime.strptime(str(bars[-1].get("day") or "")[:10], "%Y-%m-%d").date()
-    except Exception:
-        ld = None
-    if ld is None:
-        prev = bars[-(W + 1):-1]               # 日期缺失/异常 → 回退固定60根
-        winvols = [float(b["volume"]) for b in prev]
-    else:
-        prev_start = ld - timedelta(days=60)   # 前60自然日 (20260926: 由固定60根改为60自然日)
-        prev_days = set()
-        for bw in bars[:-1]:
-            s = str(bw.get("day") or "")[:10]
-            try:
-                d = datetime.strptime(s, "%Y-%m-%d").date()
-            except Exception:
-                d = None
-            if d and prev_start <= d < ld:
-                prev_days.add(bw["day"])
-        winvols = [float(bw["volume"]) for bw in bars[:-1] if bw.get("day") in prev_days]
-        if len(winvols) < 10:
-            prev = bars[-(W + 1):-1]           # 窗口数据过少 → 回退固定60根
-            winvols = [float(b["volume"]) for b in prev]
-    vmin = min(winvols)
-    vavg = sum(winvols) / len(winvols)
+    prev = bars[-(W + 1):-1]                 # 基准窗口: 前60根K线 (20260926 确认固定60根口径)
+    vmin = min(float(b["volume"]) for b in prev)
+    vavg = sum(float(b["volume"]) for b in prev) / W
     vol_ok = (vol <= vmin * 1.15) or (vavg > 0 and vol <= vavg * 0.6)
     pos = (float(last["close"]) - p_lo) / (p_hi - p_lo)
     if not (vol_ok and pos <= 0.18):
