@@ -4426,7 +4426,7 @@ function passMaAtr(s, patOverride){
   // ATR过滤仅作用于日线均线形态tab; 背离tab(日线背离)和周线tab不受ATR限制 (与后端一致)
   // (20260927) 日·地量(地量低价)tab 也纳入 ATR%<3 硬过滤, 过滤掉低波动标的
   // patOverride: 供 tab 徽章计数按各自 pattern 判定, 不依赖全局 maCurrentTab (20260927)
-  const curPat = patOverride || MA_PATS[maCurrentTab][0];
+  const curPat = (typeof patOverride==='string') ? patOverride : MA_PATS[maCurrentTab][0];
   if(curPat.includes('背离') || curPat.startsWith('周线')) return true;
   // (2026-09-26) 硬过滤: ATR%<3 直接排除 (需求: 均线形态筛选过滤掉低波动标的)
   if(s.atr_pct != null && s.atr_pct < 3) return false;
@@ -4626,7 +4626,7 @@ function renderMATable(){
   $('#maDesc').textContent=MA_PATS[maCurrentTab][1];
   updateMASortArrows();
   // --- ATR过滤(20260906, 多选满足其一) + 板块筛选(单选) ---
-  let stocks = rawStocks.slice().filter(passMaAtr);
+  let stocks = rawStocks.slice().filter(s=>passMaAtr(s));
   // 剔除银行票 (20260924): 行业或所属板块名含"银行"即移除 (口径=行业/板块含"银行")
   stocks = stocks.filter(s=> !((s.industry||'').includes('银行') || (s.concept||'').includes('银行')));
   if(maFilterConcept){
