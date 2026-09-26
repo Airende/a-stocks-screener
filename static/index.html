@@ -1432,6 +1432,7 @@ function loadMoreRow(shown, total, colSpan, handler){
 // ---- K线图十字光标 + OHLC 悬浮 ----
 let _chartSeq = 0;
 const _chartReg = {};   // cid -> {bars, w, padL, padR, n}
+const _xhairSync = {};  // 跨图同步十字线: group -> {charts:[{div,svg,reg}]} (20260925)
 function bindChartInteractivity(rootEl){
   if(!rootEl) return;
   rootEl.querySelectorAll('.sa-chart[id]').forEach(div=>{
@@ -1440,6 +1441,12 @@ function bindChartInteractivity(rootEl){
     div.dataset.xhairBound = '1';
     const svg = div.querySelector('svg');
     if(!svg) return;
+    // 跨图同步十字线注册表 (20260925): 日/周/月三图共用一组, 悬停任意图竖线贯穿全部
+    if(reg.sync){
+      (_xhairSync[reg.sync] ||= {charts:[]});
+      _xhairSync[reg.sync].charts = _xhairSync[reg.sync].charts.filter(c=>c.div.isConnected);
+      _xhairSync[reg.sync].charts.push({div, svg, reg});
+    }
     // 十字光标竖线 + 悬浮框 (懒创建)
     let vline = svg.querySelector('.xhair');
     if(!vline){
@@ -1476,11 +1483,20 @@ function bindChartInteractivity(rootEl){
       const vx = (ev.clientX - rect.left) / rect.width * reg.w;  // 视口坐标→viewBox坐标(preserveAspectRatio=none)
       const vy = (ev.clientY - rect.top) / rect.height * reg.h;
       const xStep = (reg.w - reg.padL - reg.padR) / reg.n;
-      let i = Math.floor((vx - reg.padL) / xStep);
+      // 对齐模式 (20260925): 周/月图的蜡烛按"末个交易日"定位在公共时间轴上,
+      // 悬停命中 = 先算公共时间轴下标, 再找覆盖该日期的本图bar
+      let i;
+      if(reg.idxForDi){
+        const xsD=(reg.w-reg.padL-reg.padR)/reg.alignTotal;
+        const di=Math.max(0, Math.min(reg.alignTotal-1, Math.floor((vx-reg.padL)/xsD)));
+        i=reg.idxForDi(di);
+      } else {
+        i = Math.floor((vx - reg.padL) / xStep);
+      }
       if(i < 0 || i >= reg.n){ tip.style.display='none'; vline.style.display='none'; }
       else {
         const b = reg.bars[i];
-        const px = reg.padL + i*xStep + xStep/2;
+        const px = reg.xi? reg.xi(i) : (reg.padL + i*xStep + xStep/2);
         vline.setAttribute('x1', px); vline.setAttribute('x2', px);
         vline.style.display='';
         // 悬浮内容: 注册了 tipFn 的图表(悬浮预览的量/KDJ副图)用自定义内容, 其余默认OHLC (20260906)
@@ -1508,8 +1524,109 @@ function bindChartInteractivity(rootEl){
       } else {
         hline.style.display='none'; hlbl.style.display='none';
       }
+      // 跨图同步 (20260925): 悬停任意图, 竖向虚线贯穿同组日/周/月所有图
+      if(reg.sync && reg.alignPos){
+        const _hb=reg.bars[i];
+        const di=(reg.alignPos[(_hb&&(_hb._e||_hb.day))]!=null)? reg.alignPos[_hb._e||_hb.day] : i;
+        const g=_xhairSync[reg.sync];
+        if(g) for(const c of g.charts){
+          const cv=c.svg.querySelector('.xhair');
+          if(!cv) continue;
+          if(c.div===div) continue;   // 自己的已在上方设置
+          const xsD=(c.reg.w-c.reg.padL-c.reg.padR)/(c.reg.alignTotal||c.reg.n);
+          const x=c.reg.padL+(Math.min(di,(c.reg.alignTotal||c.reg.n)-1)+0.5)*xsD;
+          cv.setAttribute('x1',x.toFixed(1)); cv.setAttribute('x2',x.toFixed(1));
+          cv.style.display='';
+        }
+      }
     });
-    div.addEventListener('mouseleave', ()=>{ tip.style.display='none'; vline.style.display='none'; hline.style.display='none'; hlbl.style.display='none'; });
+    div.addEventListener('mouseleave', ()=>{ tip.style.display='none'; vline.style.display='none'; hline.style.display='none'; hlbl.style.display='none'; if(rngLive){ rngLive=false; if(rngSel) rngShow(); } if(reg.sync && _xhairSync[reg.sync]) for(const c of _xhairSync[reg.sync].charts){ const cv=c.svg.querySelector('.xhair'); if(cv) cv.style.display='none'; } });
+    // ---- 拉区间看涨跌幅 (20260925): 按住拖选两根K线, 实时显示区间涨跌幅/起止日期/交易日数 ----
+    let rngSel=null, rngLive=false;
+    let rngRect=svg.querySelector('.rng-sel');
+    if(!rngRect){
+      rngRect=document.createElementNS('http://www.w3.org/2000/svg','rect');
+      rngRect.setAttribute('class','rng-sel');
+      rngRect.setAttribute('fill','rgba(65,105,225,.16)');
+      rngRect.setAttribute('stroke','rgba(120,150,255,.7)');
+      rngRect.setAttribute('stroke-width','1');
+      rngRect.setAttribute('stroke-dasharray','3,2');
+      rngRect.style.display='none';
+      svg.insertBefore(rngRect, svg.firstChild);   // 垫底: 高亮带在蜡烛后面
+    }
+    let rngTip=div.querySelector('.rng-tip');
+    if(!rngTip){
+      rngTip=document.createElement('div');
+      rngTip.className='rng-tip';
+      rngTip.style.cssText='position:absolute;display:none;z-index:6;pointer-events:none;background:rgba(20,28,44,.95);border:1px solid var(--border);border-radius:6px;padding:4px 10px;font-size:11px;line-height:1.55;color:var(--txt);white-space:nowrap';
+      div.appendChild(rngTip);
+    }
+    // 取消按钮 (20260925): 区间带右上角的 ✕, 点击清除选中
+    let rngX=div.querySelector('.rng-x');
+    if(!rngX){
+      rngX=document.createElement('div');
+      rngX.className='rng-x';
+      rngX.textContent='✕';
+      rngX.title='取消区间';
+      rngX.style.cssText='position:absolute;display:none;z-index:7;width:17px;height:17px;line-height:15px;text-align:center;cursor:pointer;border-radius:50%;background:rgba(20,28,44,.95);border:1px solid var(--border);color:var(--sub);font-size:10px;user-select:none';
+      rngX.addEventListener('mousedown', e=>e.stopPropagation());   // 不触发新的拖选
+      rngX.onclick=()=>{
+        rngSel=null;
+        rngRect.style.display='none'; rngTip.style.display='none'; rngX.style.display='none';
+      };
+      div.appendChild(rngX);
+    }
+    const pT=reg.padT||0, pB=reg.padB||0;
+    const rngIdx=ev=>{
+      const rect=div.getBoundingClientRect();
+      const vx=(ev.clientX-rect.left)/rect.width*reg.w;
+      if(reg.idxForDi){
+        const xsD=(reg.w-reg.padL-reg.padR)/reg.alignTotal;
+        const di=Math.max(0, Math.min(reg.alignTotal-1, Math.floor((vx-reg.padL)/xsD)));
+        return reg.idxForDi(di);
+      }
+      return Math.max(0, Math.min(reg.n-1, Math.floor((vx-reg.padL)/((reg.w-reg.padL-reg.padR)/reg.n))));
+    };
+    const rngShow=()=>{
+      if(!rngSel) return;
+      const i0=Math.min(rngSel.a,rngSel.b), i1=Math.max(rngSel.a,rngSel.b);
+      const xStep=(reg.w-reg.padL-reg.padR)/reg.n;
+      // 对齐模式: 边界用公共时间轴位置(周/月bar在其末个交易日处) (20260925)
+      const xa=reg.xi? reg.xi(i0) : (reg.padL+i0*xStep);
+      const xb=reg.xi? reg.xi(i1) : (reg.padL+(i1+1)*xStep);
+      const xa_=Math.min(xa,xb), xb_=Math.max(xa,xb);
+      const bwpx=reg.xi? Math.abs(reg.xi(i1)-reg.xi(i0))/Math.max(1,i1-i0)*0.7 : xStep*0.7;
+      rngRect.setAttribute('x',(xa_-bwpx*0.5).toFixed(1));
+      rngRect.setAttribute('y',pT);
+      rngRect.setAttribute('width',(xb_-xa_+bwpx).toFixed(1));
+      rngRect.setAttribute('height',(reg.h-pT-pB).toFixed(1));
+      rngRect.style.display='';
+      const b0=reg.bars[i0], b1=reg.bars[i1];
+      const c0=parseFloat(b0.close), c1=parseFloat(b1.close);
+      const pct=(c0>0)?(c1/c0-1)*100:0;
+      const col=pct>0?'#ff4d4f':(pct<0?'#26a69a':'#e8eef6');
+      rngTip.innerHTML=`<b>${esc((b0.day||'').slice(5))} → ${esc((b1.day||'').slice(5))}</b> · ${i1-i0+1}个交易日<br>`+
+        `<span style="font-size:14px;font-weight:700;color:${col}">${pct>0?'+':''}${pct.toFixed(2)}%</span> <span style="color:var(--sub)">区间涨跌幅</span>`;
+      rngTip.style.display='block';
+      const rectB=div.getBoundingClientRect();
+      const cxL=(xa_-bwpx*0.5)/reg.w*rectB.width;
+      const cxR=(xb_+bwpx*0.5)/reg.w*rectB.width;
+      let lx=(cxL+cxR)/2 - rngTip.offsetWidth/2;
+      lx=Math.max(4, Math.min(rectB.width-rngTip.offsetWidth-4, lx));
+      rngTip.style.left=lx+'px'; rngTip.style.top='4px';
+      // ✕ 挂区间带右上角 (20260925)
+      rngX.style.left=(cxR-20)+'px'; rngX.style.top='2px'; rngX.style.display='block';
+    };
+    div.addEventListener('mousedown', ev=>{
+      if(ev.button!==0) return;
+      rngSel={a:rngIdx(ev), b:rngIdx(ev)}; rngLive=true;
+      ev.preventDefault();   // 防止拖选时选中页面文字
+      rngShow();
+    });
+    div.addEventListener('mousemove', ev=>{
+      if(rngLive && rngSel){ rngSel.b=rngIdx(ev); rngShow(); }
+    });
+    window.addEventListener('mouseup', ()=>{ if(rngLive){ rngLive=false; if(rngSel) rngShow(); } });
   });
 }
 // ---- SSE 实时事件 (20260906): 订阅 /api/events, ts 变化才拉全量数据; 原有轮询保留作断连兜底 ----
@@ -3201,31 +3318,37 @@ function renderAnalysis(d){
   // ZigZag 转折点: 叠加到 K 线图 (波峰▼/波谷▲ + 折线)
   const zzPivots=((d.bs&&d.bs.my_style&&d.bs.my_style.extra)||{}).zz_recent_pivots||[];
   // 完整模式: 日K(全高+副图) → 周K(全高+副图) → 月K(折叠)
-  const chartHtml=(bars.length?`<div class="tf-full">${buildMiniChart(bars, zzPivots, {code:d.code, name:d.name})}</div>`:'');
+  // 完整模式: 日K(全高+副图) → 周K(全高+副图) → 月K(折叠)
+  // 时间对齐 (20260925): 以日线日期序列为公共时间轴, 周/月bar定位到其末个交易日位置,
+  // 三图x轴严格对齐; sync='stockTF' 使悬停任意图时竖向虚线贯穿三图
+  const dPos={}; bars.forEach((b,i)=>{ if(dPos[b.day]==null) dPos[b.day]=i; });
+  const tfAlign={pos:dPos, total:bars.length};
+  const tfOpt={align:tfAlign, sync:'stockTF'};
+  const chartHtml=(bars.length?`<div class="tf-full">${buildMiniChart(bars, zzPivots, {code:d.code, name:d.name, sync:'stockTF'})}</div>`:'');
   // 周K线 (20260925): 日线聚合为周线, 复用主图绘制; 涨跌停/地量标记口径仅对日线, 周图不标
   const weekBars=bars.length?dailyToWeekly(bars):[];
   const weekChartHtml=(weekBars.length>=2)?`
     <div class="tf-full"><div class="sec-h" style="margin-top:16px;font-size:14px">周K线
       <span onclick="toggleMultiTF()" style="float:right;cursor:pointer;font-size:12px;color:var(--accent);border:1px solid var(--accent);border-radius:10px;padding:1px 10px;user-select:none">▤ 多周期对比</span></div>
-      ${buildMiniChart(weekBars, [], {noLimits:true})}</div>`:'';
+      ${buildMiniChart(weekBars, [], Object.assign({noLimits:true}, tfOpt))}</div>`:'';
   // 月K线 (20260925): 按月聚合, 折叠默认收起; 涨跌停/地量口径仅对日线, 月图不标
   const monthBars=bars.length?dailyToMonthly(bars):[];
   const monthChartHtml=(monthBars.length>=2)?`
     <div class="tf-full"><details class="collapsible" style="margin-top:10px">
       <summary>月K线 (${monthBars.length}个月)</summary>
-      <div style="margin-top:8px">${buildMiniChart(monthBars, [], {noLimits:true})}</div>
+      <div style="margin-top:8px">${buildMiniChart(monthBars, [], Object.assign({noLimits:true}, tfOpt))}</div>
     </details></div>`:'';
   // 多周期对比紧凑三联 (20260925): 日/周/月各170px主图、无副图, 一屏同览
   const multiTfHtml=(bars.length&&weekBars.length>=2&&monthBars.length>=2)?`
     <div class="tf-compact">
       <div class="sec-h" style="margin-top:8px;font-size:14px">多周期对比 · 日 / 周 / 月
-        <span onclick="toggleMultiTF()" style="float:right;cursor:pointer;font-size:12px;color:var(--sub);border:1px solid var(--border);border-radius:10px;padding:1px 10px;user-select:none">✕ 退出对比</span></div>
+        <span onclick="toggleMultiTF()" style="float:right;cursor:pointer;font-size:12px;font-weight:600;color:#fff;background:linear-gradient(135deg,var(--accent),#3b7bff);border:1px solid var(--accent);border-radius:10px;padding:2px 12px;user-select:none">打开完整个股分析</span></div>
       <div class="sec-h" style="margin-top:6px;font-size:13px">日K</div>
-      ${buildMiniChart(bars, zzPivots, {code:d.code, name:d.name, compact:true})}
+      ${buildMiniChart(bars, zzPivots, Object.assign({code:d.code, name:d.name, compact:true, sync:'stockTF'}, tfOpt))}
       <div class="sec-h" style="margin-top:6px;font-size:13px">周K</div>
-      ${buildMiniChart(weekBars, [], {noLimits:true, compact:true})}
+      ${buildMiniChart(weekBars, [], Object.assign({noLimits:true, compact:true}, tfOpt))}
       <div class="sec-h" style="margin-top:6px;font-size:13px">月K</div>
-      ${buildMiniChart(monthBars, [], {noLimits:true, compact:true})}
+      ${buildMiniChart(monthBars, [], Object.assign({noLimits:true, compact:true}, tfOpt))}
     </div>`:'';
   // 缠论结构图 + 摘要 (20260911): 笔/线段/中枢/三类买卖点
   const ch=d.chan||{};
@@ -3652,9 +3775,9 @@ function dailyToMonthly(bars){
     const k=String(b.day||'').slice(0,7);   // YYYY-MM
     if(!k) continue;
     if(!cur||cur._k!==k){ if(cur) out.push(cur);
-      cur={_k:k, day:k+'-01', open:+b.open, high:+b.high, low:+b.low, close:+b.close, volume:+b.volume||0, chg:0}; }
+      cur={_k:k, day:b.day, _s:b.day, _e:b.day, open:+b.open, high:+b.high, low:+b.low, close:+b.close, volume:+b.volume||0, chg:0}; }
     else { if(+b.high>cur.high) cur.high=+b.high; if(+b.low<cur.low) cur.low=+b.low;
-      cur.close=+b.close; cur.volume+=+b.volume||0; }
+      cur.close=+b.close; cur._e=b.day; cur.volume+=+b.volume||0; }
   }
   if(cur) out.push(cur);
   for(let i=1;i<out.length;i++) out[i].chg=(out[i].close/out[i-1].close-1)*100;
@@ -3670,10 +3793,10 @@ function dailyToWeekly(bars){
   for(const b of bars){
     const k=wkKey(b.day);
     if(!k) continue;
-    if(!cur||cur.day!==k){ if(cur) out.push(cur);
-      cur={day:k, open:+b.open, high:+b.high, low:+b.low, close:+b.close, volume:+b.volume||0, chg:0}; }
+    if(!cur||cur._k!==k){ if(cur) out.push(cur);
+      cur={_k:k, day:b.day, _s:b.day, _e:b.day, open:+b.open, high:+b.high, low:+b.low, close:+b.close, volume:+b.volume||0, chg:0}; }
     else { if(+b.high>cur.high) cur.high=+b.high; if(+b.low<cur.low) cur.low=+b.low;
-      cur.close=+b.close; cur.volume+=+b.volume||0; }
+      cur.close=+b.close; cur.day=b.day; cur._e=b.day; cur.volume+=+b.volume||0; }
   }
   if(cur) out.push(cur);
   for(let i=1;i<out.length;i++) out[i].chg=(out[i].close/out[i-1].close-1)*100;
@@ -3692,6 +3815,14 @@ function buildMiniChart(bars, pivots, opt){
   const plotW=w-padL-padR, plotH=h-padT-padB;
   const xStep=plotW/n;
   const bw=Math.max(2, xStep*0.6); // 蜡烛体宽度
+  // 时间对齐 (20260925): align={pos:日线日期→下标, total:日线根数} 时, x按"日线日期序列"
+  // 公共时间轴映射——周/月bar画在其末个交易日的位置, 日/周/月三图时间严格对齐,
+  // 并支持跨图同步十字线(悬停任意图, 竖线贯穿三图)
+  const align=(opt&&opt.align)||null;
+  const xi= align
+    ? (i=>{ const b=bars[i]||{}; const p=(align.pos[b._e]!=null)?align.pos[b._e]:((align.pos[b.day]!=null)?align.pos[b.day]:i);
+            return padL+(p+0.5)*(plotW/align.total); })
+    : (i=>padL+i*xStep+xStep/2);
   // 主图svg按容器宽横向拉伸(preserveAspectRatio=none), 文字字形会被拉宽:
   // 所有文字用 scale(1/kX,1) 反向缩放保持方正 (20260925)
   const _hostW=((document.getElementById('pane-stock')||{}).clientWidth)||0;
@@ -3718,7 +3849,7 @@ function buildMiniChart(bars, pivots, opt){
     let started=false;
     for(let i=0;i<n;i++){
       if(isNaN(arr[i])) continue;
-      const x=padL+i*xStep+xStep/2, yy=y(arr[i]);
+      const x=xi(i), yy=y(arr[i]);
       p+=`${started?'L':'M'}${x.toFixed(1)},${yy.toFixed(1)} `;
       started=true;
     }
@@ -3726,7 +3857,7 @@ function buildMiniChart(bars, pivots, opt){
   };
   // 蜡烛体
   const candles=bars.map((b,i)=>{
-    const x=padL+i*xStep+xStep/2;
+    const x=xi(i);
     const chg=b.chg||0;
     const up=chg>=0;
     const col=up?'#ff4d4f':'#26a69a';
@@ -3745,7 +3876,7 @@ function buildMiniChart(bars, pivots, opt){
   }).join('');
   // 日期刻度(首/中/尾)
   const dateTxt=[0,Math.floor(n/2),n-1].filter((v,i,a)=>a.indexOf(v)===i).map(i=>{
-    const x=padL+i*xStep+xStep/2;
+    const x=xi(i);
     const day=(bars[i].day||'').slice(5); // MM-DD
     return _sqT(x, h-4, `fill="#5a6a82" font-size="10" text-anchor="middle"`, day);
   }).join('');
@@ -3755,7 +3886,11 @@ function buildMiniChart(bars, pivots, opt){
                _sqT(padL+82, padT-2, `fill="#a06bff" font-size="10"`, 'MA20');
   // 注册图表数据, 供 bindChartInteractivity 十字光标/OHLC悬浮 (20260906)
   const cid='chart'+(++_chartSeq);
-  _chartReg[cid]={bars, w, padL, padR, padT, padB, n, h, hi, lo};
+  _chartReg[cid]={bars, w, padL, padR, padT, padB, n, h, hi, lo,
+    xi, alignPos: align?align.pos:null, alignTotal: align?align.total:n,
+    sync: (opt&&opt.sync)||null,
+    idxForDi: align? (di=>{ for(let k=n-1;k>=0;k--){ const b=bars[k]; const s0=align.pos[b._s], e0=align.pos[b._e];
+        if(s0!=null&&e0!=null&&di>=s0&&di<=e0) return k; } return Math.min(n-1,di); }) : (di=>di)};
   // ---- ZigZag 转折点叠加 (波峰▼/波谷▲ + 折线) ----
   let zzHtml='';
   if(pivots && pivots.length){
@@ -3773,13 +3908,13 @@ function buildMiniChart(bars, pivots, opt){
       // 1) ZigZag 折线: 连接相邻转折点 (紫色虚线)
       let zzPath='', started=false;
       for(const p of visPivots){
-        const x=padL+p.i*xStep+xStep/2, yy=y(p.price);
+        const x=xi(p.i), yy=y(p.price);
         zzPath+=`${started?'L':'M'}${x.toFixed(1)},${yy.toFixed(1)} `;
         started=true;
       }
       // 2) 标记: 波峰▼在 high 上方, 波谷▲在 low 下方
       const marks=visPivots.map(p=>{
-        const x=padL+p.i*xStep+xStep/2;
+        const x=xi(p.i);
         const isH=p.type==='H';
         const col=isH?'#dc3545':'#26a69a';
         const arrow=isH?'▼':'▲';
@@ -3795,7 +3930,7 @@ function buildMiniChart(bars, pivots, opt){
     for(let i=0;i<n;i++){
       const t=limitDays[(bars[i].day||'').slice(0,10)];
       if(!t) continue;
-      const x=padL+i*xStep+xStep/2;
+      const x=xi(i);
       let cl, fill;
       // 圈直径=K线渲染宽度(bw×横向拉伸系数), 紧贴蜡烛上/下方
       const r=Math.max(1.5, bw*kX/2);
@@ -3809,7 +3944,7 @@ function buildMiniChart(bars, pivots, opt){
     return s; })();
   // 成交量+KDJ 副图 (20260925): 与浮窗同逻辑(kdSubPanels), 挂主图下方, 共用x映射对齐K线
   // 紧凑模式(多周期对比)不渲染副图
-  const subs=(opt&&opt.compact)? {volHtml:'',kdjHtml:''} : kdSubPanels(bars, {w, padL, padR, xi:(i)=>padL+i*xStep+xStep/2, bw, opt, stretch:true, kX});
+  const subs=(opt&&opt.compact)? {volHtml:'',kdjHtml:''} : kdSubPanels(bars, {w, padL, padR, xi, bw, opt, stretch:true, kX});
   return `
     <div class="sa-chart" id="${cid}" style="height:${h}px">
       <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:100%" preserveAspectRatio="none">
@@ -5207,6 +5342,9 @@ function buildWatchPanelSkeleton(panel, code, x, bar){
       <span class="st" data-f="strength"></span>
       <span class="close" title="关闭" onclick="selectWatch('${cd}','${(bar&&bar.scope)||'hold'}')">✕</span>
     </div>
+    <div style="margin:2px 0 8px;display:flex;gap:8px">
+      <button class="btn btn-primary" data-f="btnAnalyze" style="flex:1">打开完整个股分析</button>
+    </div>
     <div class="wp-op txt"><span class="opbig" data-f="op"></span><span class="opwhy" data-f="opwhy"></span></div>
     <div class="tail-wrap" data-f="tailwrap">
       <div class="tail-head" onclick="toggleTail(this)">
@@ -5258,9 +5396,7 @@ function buildWatchPanelSkeleton(panel, code, x, bar){
     <div class="wp-items" data-f="gate"></div>
     <div class="wp-note" data-f="fundamental"></div>
     <div class="wp-veto" data-f="veto"></div>
-    <div style="margin-top:10px;display:flex;gap:8px">
-      <button class="btn btn-primary" data-f="btnAnalyze">打开完整个股分析</button>
-    </div>`;
+    <div style="margin-top:8px"></div>`;
   panel.querySelector('[data-f="btnAnalyze"]')
     .onclick=()=>gotoStockAnalyze(String(x.code), x.name||String(x.code));
 }
