@@ -7294,6 +7294,10 @@ def _run_ma_screen_thread():
                 r = f.result()
                 if r:
                     pats, item = r
+                    # 剔除银行票 (20260926): 与前端列表口径一致(dict) —— 行业或板块含"银行"即不入任何
+                    # 均线形态tab。放在后端聚合处统一过滤, 使 tab 徽标(counts)与列表(patterns)数量一致。
+                    if "银行" in (item.get("industry") or "") or "银行" in (item.get("concept") or ""):
+                        continue
                     for p in pats:
                         results[p].append(item)
             except Exception:  # noqa: BLE001
