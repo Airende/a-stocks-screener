@@ -713,7 +713,7 @@
   .watch-row.alarm-limit-up .nm,.watch-row.alarm-limit-down .nm,.watch-row.alarm-spike .nm{color:var(--gold)}
   /* 返回筛选列表时, 原点击股票行高亮闪烁 (20260925) */
   @keyframes maReturnFlash{0%{background:rgba(65,105,225,.45)}55%{background:rgba(65,105,225,.20)}100%{background:transparent}}
-  #tbodyMA tr.ma-return-flash>td{animation:maReturnFlash 1.1s ease-out 3}
+  #tbodyMA tr.ma-return-flash>td{animation:maReturnFlash 1.1s ease-out 1}
   .watch-cards.dragging-gap{gap:0}
   .watch-card{position:relative;display:flex;flex-direction:column;gap:2px;min-width:118px;padding:8px 10px;
               border:1px solid var(--border);border-radius:8px;background:rgba(255,255,255,.02);cursor:pointer;
@@ -1305,8 +1305,8 @@ document.querySelectorAll('.main-tab').forEach(t=>{
           const row=[...document.querySelectorAll('#tbodyMA tr')].find(tr=>tr.innerHTML.indexOf(_maReturnPos.code)>=0);
           if(row){
             row.scrollIntoView({block:'center'});
-            row.classList.add('ma-return-flash');              // 高亮闪烁3次定位来源行
-            setTimeout(()=>row.classList.remove('ma-return-flash'), 3400);
+            row.classList.add('ma-return-flash');              // 高亮闪烁1次定位来源行
+            setTimeout(()=>row.classList.remove('ma-return-flash'), 1400);
             done=true;
           }
         }
