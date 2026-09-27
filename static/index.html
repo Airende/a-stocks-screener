@@ -6365,7 +6365,7 @@ function kdSubPanels(bars, cfg){
       const tag=r>=1.5?'<span style="color:#ff4d4f">放量</span>':(r<=0.8?'<span style="color:#26a69a">缩量</span>':'平量');
       const ditag=limitVol[(b.day||'').slice(0,10)]?' <span style="color:#f5c842;font-weight:700">地量低价</span>':'';
       return `<b>${esc(b.day||'')}</b>${ditag}<br>量 ${v.toFixed(2)}万手 · VR ${r.toFixed(2)} ${tag}`; }};
-  const p2=`<div class="sa-chart" id="${cid2}" style="height:${h2}px;margin-top:2px"><svg ${stretch?'viewBox="0 0 '+w+' '+h2+'" style="width:100%;height:100%" preserveAspectRatio="none"':'viewBox="0 0 '+w+' '+h2+'" width="'+w+'" height="'+h2+'"'}">
+  const p2=`<div class="sa-chart" id="${cid2}" style="height:${h2}px;margin-top:2px"><svg viewBox="0 0 ${w} ${h2}" style="width:100%;height:100%" preserveAspectRatio="none">
     <line x1="${padL}" y1="${yFn2(vmax).toFixed(1)}" x2="${w-padR}" y2="${yFn2(vmax).toFixed(1)}" stroke="rgba(255,255,255,.05)"/>
     ${vbars}${vmaPath}${volMarks}
     ${_sqT(padL, 9, `fill="#9fb0c6" font-size="9"`, '成交量')}
@@ -6391,7 +6391,7 @@ function kdSubPanels(bars, cfg){
     tipFn:(b,i)=>`<b>${esc(b.day||'')}</b><br>K ${K[i].toFixed(1)} · D ${D[i].toFixed(1)} · <b>J ${J[i].toFixed(1)}</b>`};
   // 底部日期轴并入KDJ面板
   const dates=[0,Math.floor(n/2),n-1].map(i=>_sqT(xi(i), h3-1, `fill="#5a6a82" font-size="8" text-anchor="middle"`, (bars[i].day||'').slice(2))).join('');
-  const p3final=`<div class="sa-chart" id="${cid3}" style="height:${h3}px;margin-top:2px"><svg ${stretch?'viewBox="0 0 '+w+' '+h3+'" style="width:100%;height:100%" preserveAspectRatio="none"':'viewBox="0 0 '+w+' '+h3+'" width="'+w+'" height="'+h3+'"'}">${refLines}${line(K,'#e8eef6',1)}${line(D,'#f5c842',1)}${line(J,'#a06bff',1)}${_sqT(padL, 9, `fill="#e8eef6" font-size="9"`, 'K')}${_sqT(padL+12, 9, `fill="#f5c842" font-size="9"`, 'D')}${_sqT(padL+24, 9, `fill="#a06bff" font-size="9"`, 'J')}${dates}</svg></div>`;
+  const p3final=`<div class="sa-chart" id="${cid3}" style="height:${h3}px;margin-top:2px"><svg viewBox="0 0 ${w} ${h3}" style="width:100%;height:100%" preserveAspectRatio="none">${refLines}${line(K,'#e8eef6',1)}${line(D,'#f5c842',1)}${line(J,'#a06bff',1)}${_sqT(padL, 9, `fill="#e8eef6" font-size="9"`, 'K')}${_sqT(padL+12, 9, `fill="#f5c842" font-size="9"`, 'D')}${_sqT(padL+24, 9, `fill="#a06bff" font-size="9"`, 'J')}${dates}</svg></div>`;
   return {volHtml:p2, kdjHtml:p3final};
 }
 function kdMultiChart(bars, opt){
@@ -6508,7 +6508,7 @@ function kdMultiChart(bars, opt){
       const limTag=lim==='up'?' <span style="color:#ff4d4f;font-weight:700">涨停</span>':(lim==='down'?' <span style="color:#26a69a;font-weight:700">跌停</span>':'');
       return `<b>${esc(b.day||'')}</b>${limTag}<br>开 ${b.open} · 高 ${b.high}<br>低 ${b.low} · 收 <b>${b.close}</b> ${c?'<span style="color:'+(b.chg>=0?'#ff4d4f':'#26a69a')+'">'+(b.chg>=0?'+':'')+b.chg.toFixed(2)+'%</span>':''}`; }};
   // 20260906 修复: maPath 返回完整path元素, 直接输出(此前又包了一层<path d=...>导致均线不渲染)
-  const p1=`<div class="sa-chart" id="${cid1}" style="height:${h1}px"><svg viewBox="0 0 ${w} ${h1}" width="${w}" height="${h1}">
+  const p1=`<div class="sa-chart" id="${cid1}" style="height:${h1}px"><svg viewBox="0 0 ${w} ${h1}" style="width:100%;height:100%" preserveAspectRatio="none">
     ${grid1}${chanBands}${candles}${limitMarks}<g id="${sigLayerId}"></g>
     ${maPath(ma5,'#f5c842',1)}
     ${maPath(ma10,'#4f9dff',1)}
