@@ -6787,11 +6787,13 @@ def _apply_frozen_today_bar(bars: list[dict], symbol: str, today_date: str,
 
 def classify_bottom_volume(bars: list[dict]) -> bool:
     """极致底量低价 (20260927, 近5日回溯版): 判定最近5个交易日内是否有任一K线出过"底量低价"。
-    基础(逐bar): 量 = 击穿该bar前60日地量(≤min×1.15) 或 量比(对前60日均量)≤0.6 满足其一。
+    基础(逐bar): 量 = 击穿该bar前60日地量(≤min×1.15) 或 量比(对前60日均量)≤0.6 满足其一;
+                价 = 该bar收盘处于其前122根(近半年)高低区间下沿18% (仅列表/选股口径, K线浮窗标注为纯量能)。
     精炼(逐bar, 二选一, 与往期口径一致): A止跌企稳 / B持续缩量。
     单日出底 = 观察信号; 买点需其后放量阳线确认。数据不足(≤60日)或量能异常返回False。"""
     n = len(bars)
     W = 60          # 量能基准窗口: 前60根
+    LOOK = 122      # 价区间窗口: 前122根(近半年)
     NEAR = 5        # 回溯窗口: 最近5个交易日内曾出底即算
     if n <= W + 1:
         return False
@@ -6809,6 +6811,16 @@ def classify_bottom_volume(bars: list[dict]) -> bool:
             continue
         vol_ok = (vol <= vmin * 1.15) or (vol <= vavg * 0.6)
         if not vol_ok:
+            continue
+        # 价: 相对该bar前122根(近半年)高低区间下沿 (仅列表/选股口径, K线浮窗标注已改为纯量能)
+        st = max(0, i - LOOK)
+        win = bars[st:i + 1]
+        p_hi = max(float(b["high"]) for b in win)
+        p_lo = min(float(b["low"]) for b in win)
+        if p_hi <= p_lo:
+            continue
+        pos = (float(last["close"]) - p_lo) / (p_hi - p_lo)
+        if pos > 0.18:
             continue
         # A: 止跌企稳 = 该bar近10日收盘未跌破前20日最低 (需足够历史)
         steady = False
