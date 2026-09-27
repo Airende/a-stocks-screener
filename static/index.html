@@ -970,7 +970,6 @@
     <div class="main-tab active" data-pane="pane-ma">均线形态筛选</div>
     <div class="main-tab" data-pane="pane-cond">选股条件</div>
     <div class="main-tab" data-pane="pane-stock">个股分析</div>
-    <div class="main-tab" data-pane="pane-chan">缠论结构</div>
     <div class="main-tab" data-pane="pane-marks">标记管理</div>
     <div class="main-tab" data-pane="pane-history">历史信号</div>
 
@@ -1114,32 +1113,6 @@
           <div class="sa-hist-list" id="saHistList"></div>
         </div>
         <div class="sa-panel" id="saPanel"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- 缠论结构 (独立 tab, 20260920): 结构图+摘要+周期切换 仅在此展示 -->
-  <div class="tab-pane" id="pane-chan">
-    <div class="card" style="border-radius:12px">
-      <div class="card-b" style="display:block;padding-top:14px">
-        <!-- 缠论专用搜索: 复用后端 /api/stock/search 与历史 /api/stock/history (与个股分析共享历史) -->
-        <div class="sa-box">
-          <div class="sa-box-inner">
-            <input class="sa-input" id="chanInput" type="text" placeholder="输入股票代码(002080) / 名称(中材科技) / 拼音首字母(zcjy)…" autocomplete="off" />
-            <button class="sa-search-btn" id="chanSearchBtn">搜索</button>
-          </div>
-          <div class="sa-dropdown" id="chanDropdown"></div>
-        </div>
-        <div class="sa-hist" id="chanHist">
-          <div class="sa-hist-h" id="chanHistToggle">
-            <span style="display:flex;align-items:center"><span class="sa-hist-arr">▼</span><span>历史记录</span><span style="font-size:11px;color:var(--sub);margin-left:6px">与个股分析共享</span></span>
-            <button class="ghost" id="chanHistClr" onclick="event.stopPropagation()" style="padding:2px 8px;font-size:10px;border-radius:4px">清空</button>
-          </div>
-          <div class="sa-hist-list" id="chanHistList"></div>
-        </div>
-        <!-- 当前搜索股票 (20260920): 与个股分析标题(.sa-head)一致样式, 显示当前搜索/选择的股票 -->
-        <div id="chanStockCur" class="sa-head" style="margin-top:8px"></div>
-        <div id="chanTabBox"></div>
       </div>
     </div>
   </div>
@@ -1295,8 +1268,6 @@ document.querySelectorAll('.main-tab').forEach(t=>{
     if(t.dataset.pane==='pane-marks' && typeof renderMkTable==='function') renderMkTable();
     // 切到历史信号 tab 时加载归档数据 (20260906)
     if(t.dataset.pane==='pane-history' && typeof loadHistoryDates==='function' && !histLoaded) loadHistoryDates();
-    // 切到缠论结构 tab 时把最近一次分析结果的缠论框搬到此处 (20260920)
-    if(t.dataset.pane==='pane-chan' && typeof moveChanToTab==='function') moveChanToTab();
     // 回到筛选列表: 优先定位跳转前点击的那只股票(居中), 找不到则恢复离开时的滚动位置 (20260925)
     if(t.dataset.pane==='pane-ma' && _maReturnPos){
       requestAnimationFrame(()=>{
@@ -1314,25 +1285,6 @@ document.querySelectorAll('.main-tab').forEach(t=>{
       });
     }
   };
-});
-// 缠论结构tab: 目标容器 / 当前是否处于该tab (供分析与切换共用, 20260920)
-let _chanBoxEl=null;
-let isChanTabActive=false;
-function moveChanToTab(){
-  isChanTabActive=true;
-  const box=document.getElementById('chanTabBox');
-  if(!box) return;
-  _chanBoxEl=box;
-  // 进入该tab时也加载共享搜索历史 (20260920)
-  if(typeof loadChanHistory==='function') loadChanHistory();
-  if(!_chanLastBox){ box.innerHTML=''; return; }
-  box.innerHTML=_chanLastBox;
-  // 新图十字光标/OHLC 悬浮绑定 (旧图已带 xhairBound, 重复调用安全)
-  if(typeof bindChartInteractivity==='function') bindChartInteractivity(box);
-}
-// 切换到其它tab时记录"缠论tab已离开", 下次切回/新分析时复用 (20260920)
-document.querySelectorAll('.main-tab').forEach(t=>{
-  t.addEventListener('click',()=>{ isChanTabActive=(t.dataset.pane==='pane-chan'); },{capture:true});
 });
 const fmtPct = v=>{
   if(v==null||isNaN(v)) return '—';
@@ -2169,7 +2121,7 @@ if(chanInput){
   });
 }
 document.addEventListener('click',e=>{
-  if(!e.target.closest('.sa-box')) chanDD.classList.remove('show');
+  if(chanDD && !e.target.closest('.sa-box')) chanDD.classList.remove('show');
 });
 async function searchStockChan(q){
   try{
@@ -2270,11 +2222,6 @@ async function analyzeStock(code, date){
   // 20260906 支持历史时点复盘: date(YYYY-MM-DD)非空时按该日为最后一天分析
   saPanel.classList.add('show');
   saPanel.innerHTML='<div style="text-align:center;padding:30px"><span class="spin"></span>'+(date?('正在分析 '+esc(date)+' 时点数据…'):'正在拉取K线并分析技术指标…')+'</div>';
-  // 若用户在缠论tab发起分析, 同时在该tab显示加载态 (20260920)
-  if(isChanTabActive){
-    const box=document.getElementById('chanTabBox');
-    if(box) box.innerHTML='<div style="text-align:center;padding:30px"><span class="spin"></span> 正在计算缠论结构…</div>';
-  }
   try{
     let url='/api/stock/analyze?code='+encodeURIComponent(code);
     if(date) url+='&date='+encodeURIComponent(date);
@@ -3404,9 +3351,6 @@ function renderAnalysis(d){
         </div>
       </details>
     </div>`:'';
-  // 若用户当前已切到缠论tab, 直接把框搬到tab里实时显示; 否则存入全局, 切tab时再搬 (20260920)
-  _chanLastBox=chanHtml;
-  if(isChanTabActive && typeof moveChanToTab==='function') moveChanToTab();
   // 所属板块 + 主营业务
   const boardHtml=(d.industry||d.concept)?`
     <div class="sa-row" style="margin-bottom:6px">
@@ -3772,6 +3716,7 @@ function renderAnalysis(d){
     ${multiTfHtml}
     ${weekChartHtml}
     ${monthChartHtml}
+    ${chanHtml}
     ${vpSystemHtml}
     ${bsHtml}
     <div class="sec-h" style="margin-top:16px;font-size:14px">技术分析</div>
@@ -3982,8 +3927,6 @@ const _CHAN_PERIODS=[['30m','30分'],['day','日线'],['week','周线']];
 const _CHAN_START_BTNS=[['auto','自动'],['down','下·上·下'],['up','上·下·上']];
 let _chanStartDir=(function(){ try{ return sessionStorage.getItem('chanStartDir')||'auto'; }catch(e){ return 'auto'; } })();
 let _chanPeriod='day';
-// 最近一次个股分析生成的缠论结构框(独立tab展示用, 20260920)
-let _chanLastBox='';
 function chanPeriodBtns(active, code){
   return '<span class="chan-pd">'
     +_CHAN_PERIODS.map(([v,lv])=>{
@@ -4029,7 +3972,7 @@ async function switchChanPeriod(code, period){
     pdEl && pdEl.querySelectorAll('.cpd[data-pd]').forEach(b=>b.classList.toggle('on', b.dataset.pd===period));
     pdEl && pdEl.querySelectorAll('.cpd[data-sd]').forEach(b=>b.classList.toggle('on', b.dataset.sd===_chanStartDir));
     // 新图十字光标/OHLC 悬浮绑定 (旧图已带 xhairBound, 重复调用安全)
-    bindChartInteractivity(_chanBoxEl && _chanBoxEl.isConnected ? _chanBoxEl : saPanel);
+    bindChartInteractivity(saPanel);
   }catch(e){
     chartEl.innerHTML='<div class="empty">切换失败: '+esc(e.message)+'</div>';
   }
