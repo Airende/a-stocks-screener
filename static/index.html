@@ -3794,7 +3794,6 @@ function buildMiniChart(bars, pivots, opt){
   const rng=(hi-lo)||1;
   const plotW=w-padL-padR, plotH=h-padT-padB;
   const xStep=plotW/n;
-  const bw=Math.max(2, xStep*0.6); // 蜡烛体宽度
   // 时间对齐 (20260925): align={pos:日线日期→下标, total:日线根数} 时, x按"日线日期序列"
   // 公共时间轴映射——周/月bar画在其末个交易日的位置, 日/周/月三图时间严格对齐,
   // 并支持跨图同步十字线(悬停任意图, 竖线贯穿三图)
@@ -3803,6 +3802,18 @@ function buildMiniChart(bars, pivots, opt){
     ? (i=>{ const b=bars[i]||{}; const p=(align.pos[b._e]!=null)?align.pos[b._e]:((align.pos[b.day]!=null)?align.pos[b.day]:i);
             return padL+(p+0.5)*(plotW/align.total); })
     : (i=>padL+i*xStep+xStep/2);
+  // 动态调整蜡烛宽度 (20260928): 周/月K在align公共时间轴上按"末交易日"定位,
+  // 当最后一根(或任意)是仅含1~2个交易日/紧邻前一根的bar时, 固定宽度会压到相邻蜡烛导致重叠。
+  // 计算相邻蜡烛的实际最小间距, 蜡烛宽度最多占该间距的70%, 保证永不重叠。
+  let bw=Math.max(2, xStep*0.6); // 蜡烛体宽度(默认)
+  if(align && n>1){
+    let minGap=Infinity;
+    for(let i=1;i<n;i++){
+      const gap=xi(i)-xi(i-1);
+      if(gap>0) minGap=Math.min(minGap,gap);
+    }
+    if(minGap<Infinity) bw=Math.min(bw, Math.max(1, minGap*0.7)); // 最大占用间距的70%
+  }
   // 主图svg按容器宽横向拉伸(preserveAspectRatio=none), 文字字形会被拉宽:
   // 所有文字用 scale(1/kX,1) 反向缩放保持方正 (20260925)
   const _hostW=((document.getElementById('pane-stock')||{}).clientWidth)||0;
