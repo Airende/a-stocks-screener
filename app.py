@@ -5447,6 +5447,31 @@ def cache_info():
     }
 
 
+@app.get("/api/status")
+def api_status():
+    """汇总各后台任务的运行状态(running/progress), 供顶栏 cacheInfo 在长任务进行中
+    持续显示"加载中 + 进度", 空闲时前端恢复为缓存统计。只读, 不触发任何任务。"""
+    with _screen_lock:
+        s_run = _state["running"]
+        s_prog = _state["progress"]
+    with _ma_state["lock"]:
+        m_run = _ma_state["running"]
+        m_prog = _ma_state["progress"]
+    with _SSP_STATE["lock"]:
+        sp_run = _SSP_STATE["running"]
+        sp_prog = _SSP_STATE["progress"]
+    tasks = []
+    if s_run:
+        tasks.append(("多维选股", s_prog))
+    if m_run:
+        tasks.append(("均线形态", m_prog))
+    if sp_run:
+        tasks.append(("上试盘", sp_prog))
+    name = " · ".join(t[0] for t in tasks)
+    prog = " ｜ ".join((t[1] or "…") for t in tasks)
+    return {"running": bool(tasks), "name": name, "progress": prog}
+
+
 @app.post("/api/cache_refresh")
 def cache_refresh():
     """清空本地文件缓存(所有日期), 触发重新拉取。返回新缓存任务状态。

@@ -1803,8 +1803,27 @@ async function loadCacheInfo(){
     $('#cacheInfo').textContent='获取失败';
   }
 }
+// 后台长任务状态轮询 (20260928): 选股/均线/上试盘任一回台运行时, cacheInfo 持续显示 "加载中+进度"
+let _cacheTaskTimer=null, _cacheWasRunning=false;
+async function pollTaskStatus(){
+  try{
+    const r=await fetch('/api/status');
+    const d=await r.json();
+    const running=!!d.running;
+    if(!window.__manualCacheRefresh){
+      if(running){
+        $('#cacheInfo').innerHTML='<span class="spin"></span> '+(d.name||'后台任务')+' 进行中 … '+(d.progress||'');
+      } else if(_cacheWasRunning){
+        loadCacheInfo(); // 任务结束, 恢复缓存统计(只刷新一次, 避免每轮重复请求)
+      }
+      _cacheWasRunning=running;
+    }
+  }catch(e){ /* 静默: 网络异常时保持现状 */ }
+  _cacheTaskTimer=setTimeout(pollTaskStatus, 4000);
+}
 $('#cacheRefreshBtn').onclick=async()=>{
-  if(!confirm('确认刷新K线数据？将清空本地缓存并重新从服务拉取（约需2-3分钟）。')) return;
+  window.__manualCacheRefresh=true; // 防止任务状态轮询与手动刷新文案互相覆盖
+  if(!confirm('确认刷新K线数据？将清空本地缓存并重新从服务拉取（约需2-3分钟）。')) { window.__manualCacheRefresh=false; return; }
   const btn=$('#cacheRefreshBtn');
   btn.disabled=true; btn.textContent='刷新中…';
   $('#cacheInfo').textContent='K线数据: 正在清空并重新拉取… (下方保留旧数据, 完成后自动更新)';
@@ -1828,14 +1847,14 @@ $('#cacheRefreshBtn').onclick=async()=>{
   }else{
     btn.disabled=false; btn.textContent='刷新';
     $('#cacheInfo').textContent='K线数据: 刷新失败 (服务无响应, 请稍后再试)';
-    return;
+    window.__manualCacheRefresh=false; return;
   }
   const poll=async()=>{
     const now=Date.now();
     if(now-info.start>TOTAL_MS){
       btn.disabled=false; btn.textContent='刷新';
       $('#cacheInfo').textContent='K线数据: 拉取超时 (可在后台有进展后再次点击刷新)';
-      return;
+      window.__manualCacheRefresh=false; return;
     }
     let d=null;
     try{ d=await (await fetch('/api/screen')).json(); }catch(e){ d=null; }
@@ -1854,7 +1873,7 @@ $('#cacheRefreshBtn').onclick=async()=>{
     if(d&&d.error && !d.running){
       btn.disabled=false; btn.textContent='刷新';
       $('#cacheInfo').textContent='K线数据: 拉取失败 - '+d.error+' (可再点击刷新)';
-      return;
+      window.__manualCacheRefresh=false; return;
     }
     if(d&&d.running){
       $('#cacheInfo').textContent=`K线数据: 重新拉取中… ${prog}`;
@@ -1866,6 +1885,7 @@ $('#cacheRefreshBtn').onclick=async()=>{
       btn.disabled=false; btn.textContent='刷新';
       loadCacheInfo();
       render(d, false);
+      window.__manualCacheRefresh=false;
       return;
     }
     // 无数据且未运行, 可能异常, 继续等一会
@@ -1874,6 +1894,7 @@ $('#cacheRefreshBtn').onclick=async()=>{
   setTimeout(poll, 2000);
 };
 loadCacheInfo();
+pollTaskStatus();
 
 // ===== 个股分析模块 =====
 let saTimer=null;
