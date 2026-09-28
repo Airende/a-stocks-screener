@@ -4772,7 +4772,7 @@ function maRowHtml(s,i){
   if(showWeekly && s.w_ma20){
     const posColor = (s.w_pos52||0) >= 0.6 ? 'var(--up)' : ((s.w_pos52||0) < 0.3 ? 'var(--down)' : 'var(--gold)');
     const boostTag = s.w_vol_boost ? ' <span style="color:var(--gold)">🔥放量</span>' : '';
-    weeklyLine = `<div class="code" style="color:var(--sub);font-size:11px">周MA20:${s.w_ma20} · 52周位:<span style="color:${posColor}">${((s.w_pos52||0)*100).toFixed(2)}%</span>${boostTag}</div>`;
+    weeklyLine = `<div class="code" style="color:var(--sub);font-size:11px">52周位:<span style="color:${posColor}">${((s.w_pos52||0)*100).toFixed(2)}%</span>${boostTag}</div>`;
   }
   return `<tr>
     <td class="l">${i+1}</td>
