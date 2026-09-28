@@ -3867,8 +3867,7 @@ function buildMiniChart(bars, pivots, opt){
         cw=Math.max(1, span*dayU*0.7);       // 宽度约=日K宽度的70% × 交易日数
       }
     }
-    const chg=b.chg||0;
-    const up=chg>=0;
+    const up=b.close>=b.open;  // 阴阳线: 按收盘vs开盘判定实体颜色 (20260928)
     const col=up?'#ff4d4f':'#26a69a';
     const yO=y(b.open), yC=y(b.close);
     const yH=y(b.high), yL=y(b.low);
@@ -4074,7 +4073,7 @@ function buildChanChart(bars, chan){
   }).join('');
   // K线
   const candles=bars.map((b,i)=>{
-    const x=xi(i), col=(b.chg||0)>=0?'#ff4d4f':'#26a69a';
+    const x=xi(i), col=b.close>=b.open?'#ff4d4f':'#26a69a';  // 阴阳线: 按收/开判定 (20260928)
     const yO=y(b.open), yC=y(b.close);
     const bodyTop=Math.min(yO,yC), bodyH=Math.max(1,Math.abs(yC-yO));
     return `<line x1="${x.toFixed(1)}" y1="${y(b.high).toFixed(1)}" x2="${x.toFixed(1)}" y2="${y(b.low).toFixed(1)}" stroke="${col}" stroke-width="1"/>`+
@@ -4231,8 +4230,7 @@ function buildMiniChartWithMarkers(bars, buyMarkers, sellMarkers, prewarmDays){
   // K线: 预热段淡化(opacity 0.35), 回测段正常
   const candles=bars.map((b,i)=>{
     const x=padL+i*xStep+xStep/2;
-    const chg=b.chg||0;
-    const up=chg>=0;
+    const up=b.close>=b.open;  // 阴阳线: 按收盘vs开盘判定实体颜色 (20260928)
     const col=up?'#ff4d4f':'#26a69a';
     const yO=y(b.open), yC=y(b.close);
     const yH=y(b.high), yL=y(b.low);
@@ -6389,7 +6387,7 @@ function kdMultiChart(bars, opt){
   const rng1=(hi-lo)||1;
   const yFn1=v=>padT1+(hi-v)/rng1*(h1-padT1-padB1);
   const candles=bars.map((b,i)=>{
-    const col=(b.chg||0)>=0?'#ff4d4f':'#26a69a';
+    const col=b.close>=b.open?'#ff4d4f':'#26a69a';  // 阴阳线: 按收/开判定 (20260928)
     const yO=yFn1(b.open), yC=yFn1(b.close), bodyTop=Math.min(yO,yC);
     return `<line x1="${xi(i).toFixed(1)}" y1="${yFn1(b.high).toFixed(1)}" x2="${xi(i).toFixed(1)}" y2="${yFn1(b.low).toFixed(1)}" stroke="${col}" stroke-width="0.8"/>`+
            `<rect x="${(xi(i)-bw/2).toFixed(1)}" y="${bodyTop.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(1,Math.abs(yC-yO)).toFixed(1)}" fill="${col}"/>`;
