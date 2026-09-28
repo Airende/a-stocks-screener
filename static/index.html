@@ -3325,13 +3325,13 @@ function renderAnalysis(d){
   const weekChartHtml=(weekBars.length>=2)?`
     <div class="tf-full"><div class="sec-h" style="margin-top:16px;font-size:14px">周K线
       <span onclick="toggleMultiTF()" style="float:right;cursor:pointer;font-size:12px;color:var(--accent);border:1px solid var(--accent);border-radius:10px;padding:1px 10px;user-select:none">▤ 多周期对比</span></div>
-      ${buildMiniChart(weekBars, [], Object.assign({noLimits:true}, tfOpt))}</div>`:'';
+      ${buildMiniChart(weekBars, [], Object.assign({noLimits:true, tf:'week'}, tfOpt))}</div>`:'';
   // 月K线 (20260925): 按月聚合, 折叠默认收起; 涨跌停/地量口径仅对日线, 月图不标
   const monthBars=bars.length?dailyToMonthly(bars):[];
   const monthChartHtml=(monthBars.length>=2)?`
     <div class="tf-full"><details class="collapsible" style="margin-top:10px">
       <summary>月K线 (${monthBars.length}个月)</summary>
-      <div style="margin-top:8px">${buildMiniChart(monthBars, [], Object.assign({noLimits:true}, tfOpt))}</div>
+      <div style="margin-top:8px">${buildMiniChart(monthBars, [], Object.assign({noLimits:true, tf:'month'}, tfOpt))}</div>
     </details></div>`:'';
   // 多周期对比紧凑三联 (20260925): 日/周/月各170px主图、无副图, 一屏同览
   const multiTfHtml=(bars.length&&weekBars.length>=2&&monthBars.length>=2)?`
@@ -3854,6 +3854,7 @@ function buildMiniChart(bars, pivots, opt){
     return p;
   };
   // 蜡烛体
+  const barW=new Array(n).fill(null); // 逐根蜡烛中心/宽度 (align模式下宽度=该K线实际跨度, 供量柱对齐) 20260928
   const candles=bars.map((b,i)=>{
     // 蜡烛中心与宽度 (20260928): align 模式下, 中心对准该周的中间交易日, 宽度≈该周工作日跨度
     // (正常周≈5个日K, 进行中的最后一周按其真实天数, 右侧留空位)。非align模式退化为 xi/bw。
@@ -3867,6 +3868,7 @@ function buildMiniChart(bars, pivots, opt){
         cw=Math.max(1, span*dayU*0.7);       // 宽度约=日K宽度的70% × 交易日数
       }
     }
+    barW[i]={cx, cw}; // 记录该根蜡烛实际中心/宽度, 供量柱对齐 (20260928)
     const up=b.close>=b.open;  // 阴阳线: 按收盘vs开盘判定实体颜色 (20260928)
     const col=up?'#ff4d4f':'#26a69a';
     const yO=y(b.open), yC=y(b.close);
@@ -3952,7 +3954,7 @@ function buildMiniChart(bars, pivots, opt){
     return s; })();
   // 成交量+KDJ 副图 (20260925): 与浮窗同逻辑(kdSubPanels), 挂主图下方, 共用x映射对齐K线
   // 紧凑模式(多周期对比)不渲染副图
-  const subs=(opt&&opt.compact)? {volHtml:'',kdjHtml:''} : kdSubPanels(bars, {w, padL, padR, xi, bw, opt, stretch:true, kX});
+  const subs=(opt&&opt.compact)? {volHtml:'',kdjHtml:''} : kdSubPanels(bars, {w, padL, padR, xi, bw, barW, opt, stretch:true, kX});
   return `
     <div class="sa-chart" id="${cid}" style="height:${h}px">
       <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:100%" preserveAspectRatio="none">
@@ -6273,6 +6275,8 @@ function _limitDaysOf(bars, code, name){
 //   stretch=false → svg 固定尺寸(浮窗); 数值标注在右侧留白
 function kdSubPanels(bars, cfg){
   const w=cfg.w, padL=cfg.padL, padR=cfg.padR, xi=cfg.xi, bw=cfg.bw||3, opt=cfg.opt||{};
+  const barW=cfg.barW||null;   // 逐根蜡烛实际宽度(align/周·月K) — 量柱宽度与之对齐 (20260928)
+  const tf=opt.tf||'';         // ''=日K, 'week'(周), 'month'(月)
   const stretch=!!cfg.stretch;
   const kX=cfg.kX||1;   // 主图横向拉伸系数: 文字反向缩放用 (20260925)
   const syncName=cfg.sync||null;   // 跨图同步十字线组 (浮窗三面板共用, 20260928)
@@ -6308,7 +6312,10 @@ function kdSubPanels(bars, cfg){
   const vbars=bars.map((b,i)=>{
     const col=(b.chg||0)>=0?'rgba(255,77,79,.85)':'rgba(38,166,154,.85)';
     const yv=yFn2(b.volume), bh=Math.max(1,h2-padT2-padB2-(yv-padT2));
-    return `<rect x="${(xi(i)-bw/2).toFixed(1)}" y="${yv.toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" fill="${col}"/>`;
+    // 量柱宽度对齐对应蜡烛 (barW存在时用蜡烛实际宽度; 否则用bw) — 20260928
+    const cxv=(barW&&barW[i]&&barW[i].cx!=null)?barW[i].cx:xi(i);
+    const wv=(barW&&barW[i]&&barW[i].cw)?barW[i].cw:(bw||3);
+    return `<rect x="${(cxv-wv/2).toFixed(1)}" y="${yv.toFixed(1)}" width="${wv.toFixed(1)}" height="${bh.toFixed(1)}" fill="${col}"/>`;
   }).join('');
   // 5日均量线
   const vmaPath=(()=>{ let p='',st=false;
@@ -6336,7 +6343,7 @@ function kdSubPanels(bars, cfg){
   const p2=`<div class="sa-chart" id="${cid2}" style="height:${h2}px;margin-top:2px"><svg viewBox="0 0 ${w} ${h2}" style="width:100%;height:100%" preserveAspectRatio="none">
     <line x1="${padL}" y1="${yFn2(vmax).toFixed(1)}" x2="${w-padR}" y2="${yFn2(vmax).toFixed(1)}" stroke="rgba(255,255,255,.05)"/>
     ${vbars}${vmaPath}${volMarks}
-    ${_sqT(padL, 9, `fill="#9fb0c6" font-size="9"`, '成交量')}
+    ${_sqT(padL, 9, `fill="#9fb0c6" font-size="9"`, tf==='week'?'周成交量':(tf==='month'?'月成交量':'成交量'))}
   </svg></div>`;
 
   // ---- 面板3: KDJ副图 ----
@@ -6357,9 +6364,15 @@ function kdSubPanels(bars, cfg){
   const cid3='kd'+(++_chartSeq);
   _chartReg[cid3]={bars, w, h:h3, padL, padR, n, sync:syncName,
     tipFn:(b,i)=>`<b>${esc(b.day||'')}</b><br>K ${K[i].toFixed(1)} · D ${D[i].toFixed(1)} · <b>J ${J[i].toFixed(1)}</b>`};
+  // 周/月KDJ副图 (20260928): 叠加 80~100 超买带(微红) 与 0~20 超卖带(微绿), 更直观
+  const kdjBands=(tf==='week'||tf==='month')?
+    `<rect x="${padL}" y="${yFn3(100)}" width="${w-padL-padR}" height="${yFn3(80)-yFn3(100)}" fill="rgba(255,77,79,.07)"/>`+
+    `<rect x="${padL}" y="${yFn3(20)}" width="${w-padL-padR}" height="${yFn3(0)-yFn3(20)}" fill="rgba(38,166,154,.07)"/>`
+    : '';
   // 底部日期轴并入KDJ面板
   const dates=[0,Math.floor(n/2),n-1].map(i=>_sqT(xi(i), h3-1, `fill="#5a6a82" font-size="8" text-anchor="middle"`, (bars[i].day||'').slice(2))).join('');
-  const p3final=`<div class="sa-chart" id="${cid3}" style="height:${h3}px;margin-top:2px"><svg viewBox="0 0 ${w} ${h3}" style="width:100%;height:100%" preserveAspectRatio="none">${refLines}${line(K,'#e8eef6',1)}${line(D,'#f5c842',1)}${line(J,'#a06bff',1)}${_sqT(padL, 9, `fill="#e8eef6" font-size="9"`, 'K')}${_sqT(padL+12, 9, `fill="#f5c842" font-size="9"`, 'D')}${_sqT(padL+24, 9, `fill="#a06bff" font-size="9"`, 'J')}${dates}</svg></div>`;
+  const kLeg=tf==='week'?'周K':(tf==='month'?'月K':'K');  // 图例标签随周期 (20260928)
+  const p3final=`<div class="sa-chart" id="${cid3}" style="height:${h3}px;margin-top:2px"><svg viewBox="0 0 ${w} ${h3}" style="width:100%;height:100%" preserveAspectRatio="none">${kdjBands}${refLines}${line(K,'#e8eef6',1)}${line(D,'#f5c842',1)}${line(J,'#a06bff',1)}${_sqT(padL, 9, `fill="#e8eef6" font-size="9"`, kLeg)}${_sqT(padL+(kLeg.length>1?18:12), 9, `fill="#f5c842" font-size="9"`, 'D')}${_sqT(padL+(kLeg.length>1?30:24), 9, `fill="#a06bff" font-size="9"`, 'J')}<text x="${w-padR}" y="8" font-size="8" text-anchor="end" fill="#5a6a82">${tf==='week'?'(周KDJ · 9,3,3)':(tf==='month'?'(月KDJ · 9,3,3)':'')}</text>${dates}</svg></div>`;
   return {volHtml:p2, kdjHtml:p3final};
 }
 function kdMultiChart(bars, opt){
