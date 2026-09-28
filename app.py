@@ -5080,11 +5080,21 @@ def run_screen(conds=None) -> dict:
     if not spot:
         raise RuntimeError("全市场行情快照连续3次拉取失败")
     # 2. 预过滤: 按 conds 剔除门, 减少K线拉取量
+    # 20260928: 剔除北交所(京市) —— symbol 带 bj 前缀, 或6位代码以 43/83/87/88/92 开头
+    def _is_bse(sym_or_code: str) -> bool:
+        s = str(sym_or_code or "").lower()
+        if s.startswith("bj"):
+            return True
+        digits = "".join(ch for ch in s if ch.isdigit())
+        code6 = digits[-6:] if len(digits) >= 6 else digits
+        return code6.startswith(("43", "83", "87", "88", "92"))
     candidates = []
     for r in spot:
         code = r.get("code", "")
         name = r.get("name", "")
         if "d3" in conds and ("ST" in name or "退" in name or "*ST" in name):
+            continue
+        if _is_bse(code) or _is_bse(r.get("symbol") or ""):
             continue
         candidates.append(r)
 
