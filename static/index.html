@@ -6275,8 +6275,8 @@ function kdSubPanels(bars, cfg){
   const n=bars.length;
   if(n<2) return {volHtml:'', kdjHtml:''};
   // ---- 面板2: 成交量副图 ----
-  // 20260928: 主图(stretch=true, 个股分析)再加高; 浮窗(stretch=false)保持原高以免弹窗溢出
-  const h2=stretch?102:80, padT2=12, padB2=6;  // 加高使量柱更清晰
+  // 20260928: 主图(stretch=true, 个股分析)与浮窗(stretch=false)均加高副图
+  const h2=stretch?102:88, padT2=12, padB2=6;  // 加高使量柱更清晰
   const vmax=Math.max(...bars.map(b=>b.volume))||1;
   const yFn2=v=>padT2+(1-v/vmax)*(h2-padT2-padB2);
   // 极致底量标记 (20260927 逐bar窗口版, 与后端 classify_bottom_volume 一致):
@@ -6330,7 +6330,7 @@ function kdSubPanels(bars, cfg){
   </svg></div>`;
 
   // ---- 面板3: KDJ副图 ----
-  const h3=stretch?118:92, padT3=12, padB3=6;  // 20260928: 主图再加高, 浮窗保持原高
+  const h3=stretch?118:100, padT3=12, padB3=6;  // 主图与浮窗均加高
   const jmin=Math.min(0,...J)-5, jmax=Math.max(100,...J)+5;
   const yFn3=v=>padT3+(jmax-v)/(jmax-jmin)*(h3-padT3-padB3);
   const line=(arr,col,wd)=>{ let p='',st=false;
