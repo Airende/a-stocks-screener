@@ -44,6 +44,13 @@
   .chan-pd .cpd{padding:2px 10px;font-size:11px;line-height:18px;border-radius:999px;background:var(--panel2);color:var(--sub);font-weight:600;border:1px solid var(--border);transition:.12s}
   .chan-pd .cpd:hover{color:var(--txt)}
   .chan-pd .cpd.on{background:var(--brand,#a06bff);border-color:var(--brand,#a06bff);color:#fff}
+  /* 浮窗 日/周 周期切换小按钮 (20260928): 不占空间查看周K+周KDJ */
+  .kd-pd{display:inline-flex;align-items:center;gap:2px;margin:0 6px;vertical-align:middle}
+  .kd-pd-btn{padding:0 8px;font-size:11px;line-height:17px;border-radius:999px;background:var(--panel2);color:var(--sub);font-weight:600;border:1px solid var(--border);cursor:pointer;user-select:none;transition:.12s}
+  .kd-pd-btn:hover{color:var(--txt)}
+  .kd-pd-btn.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  /* 浮窗图表容器: 切换周期时只替换此区域 */
+  .kd-chartbox{width:100%}
   /* 缠论结构整体外框 */
   .chan-box{background:var(--panel2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-top:16px}
   .meta{font-size:12px;color:var(--sub)}
@@ -6580,39 +6587,64 @@ async function showKlinePreview(code, anchor){
     const ignoreBtn = `<span class="kd-mk-btn kd-mk-ignore${ignoreActive}" style="color:#4ade80" onclick="popupToggleIgnore('${code}','${mkName}')">×</span>`;
     pop.innerHTML = `<div style="padding:6px 10px 2px;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:space-between">
         <div>${d.name ? esc(d.name)+' ' : ''}<span class="meta cp-code"  onclick="openTHS('${code}')">${code}</span> ${chgTxt}
-        <span class="meta" style="margin-left:6px">近半年日K · 三均线 · 量 · KDJ</span>
+        <span class="kd-pd"><span class="kd-pd-btn on" data-p="day" onclick="kdPreviewPeriod(this,'${code}')">日</span><span class="kd-pd-btn" data-p="week" onclick="kdPreviewPeriod(this,'${code}')">周</span></span>
+        <span class="meta kd-pd-meta">近半年日K · 三均线 · 量 · KDJ</span>
         <span class="meta sig-status" id="${renderMarkup.c1}_status" style="margin-left:8px;color:#6b7d95">信号加载中…</span></div>
         <div class="kd-mk-bar">${mkBtns}${ignoreBtn}</div>
-      </div>` + renderMarkup.html;
+      </div><div class="kd-chartbox"></div>`;
+    pop.querySelector('.kd-chartbox').innerHTML = renderMarkup.html;
     _kdPlace(pop, anchor);
-    bindChartInteractivity(pop);  // 三个面板各自绑定十字光标+悬浮 (20260906)
+    bindChartInteractivity(pop.querySelector('.kd-chartbox'));  // 三个面板各自绑定十字光标+悬浮 (20260906)
     // 20260920: K线先渲染, 历史信号异步加载后注入对应日期K线上方 (标注小字, 不阻塞浮窗)
-    // 同一股票历史信号缓存, 避免反复请求慢接口(~3s)
-    (async()=>{
-      const stEl = document.getElementById(renderMarkup.c1+'_status');
-      const setSt = t => { if(stEl){ stEl.textContent = t; stEl.style.color = '#6b7d95'; } };
-      let m=null;
-      if(_histSigCache && code in _histSigCache) m=_histSigCache[code];
-      else{
-        try{
-          const r = await fetch('/api/stock/hist-signals?code=' + encodeURIComponent(code));
-          const j = await r.json();
-          if(j.dates){
-            m={}; (j.dates||[]).forEach(dd => { m[dd.date] = dd.signals; });
-            _histSigCache[code]=m;
-          }
-        }catch(e){}
-      }
-      if(!renderMarkup.sig || !renderMarkup.c1) return;
-      if(!m || !Object.keys(m).length){ setSt('无信号'); return; }
-      kdAddSigs(renderMarkup.c1, renderMarkup.sig, m);
-      // 渲染后根据实际画出的标记决定状态 (可能多数日期无对应K线柱)
-      const g = document.getElementById(renderMarkup.c1+'_sig');
-      const cnt = g ? g.querySelectorAll('text').length : 0;
-      if(stEl) stEl.textContent = cnt ? '· '+cnt+'个信号' : '无信号';
-    })();
+    kdPreviewApplySig(pop, code, renderMarkup.c1, renderMarkup.sig);
   }catch(e){
     if(_kdPopup === pop) pop.innerHTML = '<div class="empty">加载失败</div>';
+  }
+}
+// 20260928: 浮窗历史信号标注注入 (从 showKlinePreview 抽出, 供切周期回日K时复用)。
+// 同一股票历史信号缓存, 避免反复请求慢接口(~3s)
+async function kdPreviewApplySig(pop, code, c1id, sigFn){
+  const stEl = pop.querySelector('.sig-status');
+  const setSt = t => { if(stEl){ stEl.textContent = t; stEl.style.color = '#6b7d95'; } };
+  if(!stEl || !sigFn || !c1id) { if(stEl) setSt(''); return; }
+  let m = (_histSigCache && code in _histSigCache) ? _histSigCache[code] : null;
+  if(!m){
+    try{
+      const r = await fetch('/api/stock/hist-signals?code=' + encodeURIComponent(code));
+      const j = await r.json();
+      if(j.dates){ m={}; (j.dates||[]).forEach(dd => { m[dd.date] = dd.signals; }); _histSigCache[code]=m; }
+    }catch(e){}
+  }
+  if(!m || !Object.keys(m).length){ setSt('无信号'); return; }
+  kdAddSigs(c1id, sigFn, m);
+  const g = document.getElementById(c1id+'_sig');
+  const cnt = g ? g.querySelectorAll('text').length : 0;
+  if(stEl) stEl.textContent = cnt ? '· '+cnt+'个信号' : '无信号';
+}
+// 20260928: 浮窗 日/周 周期切换 (不占空间在同一浮窗查看周K+周KDJ)。
+// 周K用 dailyToWeekly 聚合日线得到, 复用同一紧凑三面板; 信号标注仅日K模式注入。
+async function kdPreviewPeriod(btn, code){
+  const pop = btn && btn.closest && btn.closest('.kd-preview');
+  if(!pop) return;
+  const period = btn.getAttribute('data-p');
+  pop.querySelectorAll('.kd-pd-btn').forEach(b=>b.classList.toggle('on', b===btn));
+  const d = _kdCache[code];
+  if(!d || !d.bars || !d.bars.length) return;
+  const daily = d.bars;
+  const bars = period==='week' ? dailyToWeekly(daily) : daily;
+  const q = kdMultiChart(bars, {code, name:d.name, chan: period==='day' ? (d.chan||null) : null});
+  const box = pop.querySelector('.kd-chartbox');
+  if(!box) return;
+  box.innerHTML = (q && q.div) ? q.div : '<div class="empty">无数据</div>';
+  bindChartInteractivity(box);
+  const metaEl = pop.querySelector('.kd-pd-meta');
+  if(metaEl) metaEl.textContent = (period==='week'?'近期周K · 三均线 · 量 · KDJ':'近半年日K · 三均线 · 量 · KDJ');
+  const stEl = pop.querySelector('.sig-status');
+  if(period==='day'){
+    if(stEl){ stEl.textContent = '信号加载中…'; stEl.style.color = '#6b7d95'; }
+    kdPreviewApplySig(pop, code, q.c1, q.sig);
+  } else if(stEl){
+    stEl.textContent = '';  // 周K不叠加日线信号标注
   }
 }
 document.addEventListener('mouseover', e => {
