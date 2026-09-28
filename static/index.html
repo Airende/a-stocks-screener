@@ -3802,18 +3802,12 @@ function buildMiniChart(bars, pivots, opt){
     ? (i=>{ const b=bars[i]||{}; const p=(align.pos[b._e]!=null)?align.pos[b._e]:((align.pos[b.day]!=null)?align.pos[b.day]:i);
             return padL+(p+0.5)*(plotW/align.total); })
     : (i=>padL+i*xStep+xStep/2);
-  // 动态调整蜡烛宽度 (20260928): 周/月K在align公共时间轴上按"末交易日"定位,
-  // 当最后一根(或任意)是仅含1~2个交易日/紧邻前一根的bar时, 固定宽度会压到相邻蜡烛导致重叠。
-  // 计算相邻蜡烛的实际最小间距, 蜡烛宽度最多占该间距的70%, 保证永不重叠。
-  let bw=Math.max(2, xStep*0.6); // 蜡烛体宽度(默认)
-  if(align && n>1){
-    let minGap=Infinity;
-    for(let i=1;i<n;i++){
-      const gap=xi(i)-xi(i-1);
-      if(gap>0) minGap=Math.min(minGap,gap);
-    }
-    if(minGap<Infinity) bw=Math.min(bw, Math.max(1, minGap*0.7)); // 最大占用间距的70%
-  }
+  // 光源模式下的蜡烛宽度 (20260928): 周/月K在align公共时间轴上按"末交易日"定位。
+  // 每个周K对应约5个日K宽度(节假日例外)。为避免与前一根重叠且不把所有蜡烛压细,
+  // 蜡烛体不采用全局min间距瘦身, 而是逐根按"该周实际交易日跨度"定宽, 中心对准该周中间,
+  // 这样正常周宽约=5个日K, 而在进行的最后1周(仅几天)只占其真实天数, 右侧自然留出空位。
+  const dayU= align ? (plotW/align.total) : (xStep/1);   // 单个交易日对应的像素宽
+  let bw=Math.max(2, xStep*0.6); // 蜡烛体宽度(默认, 非align模式用)
   // 主图svg按容器宽横向拉伸(preserveAspectRatio=none), 文字字形会被拉宽:
   // 所有文字用 scale(1/kX,1) 反向缩放保持方正 (20260925)
   const _hostW=((document.getElementById('pane-stock')||{}).clientWidth)||0;
@@ -3848,15 +3842,26 @@ function buildMiniChart(bars, pivots, opt){
   };
   // 蜡烛体
   const candles=bars.map((b,i)=>{
-    const x=xi(i);
+    // 蜡烛中心与宽度 (20260928): align 模式下, 中心对准该周的中间交易日, 宽度≈该周工作日跨度
+    // (正常周≈5个日K, 进行中的最后一周按其真实天数, 右侧留空位)。非align模式退化为 xi/bw。
+    let cx=xi(i), cw=bw;
+    if(align){
+      const ps=align.pos[b._s], pe=align.pos[b._e];
+      if(ps!=null && pe!=null){
+        const mid=(ps+pe)/2;                 // 该周中间(日线下标, 可为小数)
+        cx=padL+(mid+0.5)*dayU;              // 中心落在中间交易日
+        const span=(pe-ps)+1;                // 该周实际交易日数(节假日例外)
+        cw=Math.max(1, span*dayU*0.7);       // 宽度约=日K宽度的70% × 交易日数
+      }
+    }
     const chg=b.chg||0;
     const up=chg>=0;
     const col=up?'#ff4d4f':'#26a69a';
     const yO=y(b.open), yC=y(b.close);
     const yH=y(b.high), yL=y(b.low);
     const bodyTop=Math.min(yO,yC), bodyH=Math.max(1,Math.abs(yC-yO));
-    let s=`<line x1="${x.toFixed(1)}" y1="${yH.toFixed(1)}" x2="${x.toFixed(1)}" y2="${yL.toFixed(1)}" stroke="${col}" stroke-width="1"/>`;
-    s+=`<rect x="${(x-bw/2).toFixed(1)}" y="${bodyTop.toFixed(1)}" width="${bw.toFixed(1)}" height="${bodyH.toFixed(1)}" fill="${col}"/>`;
+    let s=`<line x1="${cx.toFixed(1)}" y1="${yH.toFixed(1)}" x2="${cx.toFixed(1)}" y2="${yL.toFixed(1)}" stroke="${col}" stroke-width="1"/>`;
+    s+=`<rect x="${(cx-cw/2).toFixed(1)}" y="${bodyTop.toFixed(1)}" width="${cw.toFixed(1)}" height="${bodyH.toFixed(1)}" fill="${col}"/>`;
     return s;
   }).join('');
   // 价格刻度
