@@ -878,9 +878,9 @@
               box-shadow:0 8px 24px rgba(0,0,0,.45);overflow:hidden;width:724px}
   .kd-preview.show{display:block}
   .kd-preview .sa-chart{border:none;border-radius:0;background:transparent}
-  /* 浮窗 周K迷你图 (20260928): 近半年/一年周K + 仅KDJ副图, 不带标识;
-       静态块布局, 由调用方右对齐放到日K上方, 不叠盖日K */
-  .kd-weekly{width:auto;background:rgba(30,44,64,.94);border:1px solid var(--border);border-radius:8px;
+  /* 浮窗右上角 周K迷你图 (20260928): 近半年周K + 仅KDJ副图, 不带标识; 绝对定位到日K右上角 */
+  .kd-weekly{position:absolute;top:6px;right:10px;width:200px;z-index:6;
+             background:rgba(30,44,64,.94);border:1px solid var(--border);border-radius:8px;
              padding:5px 7px 4px;box-shadow:0 6px 16px rgba(0,0,0,.4)}
   .kd-weekly .wk-title{font-size:10px;color:var(--sub);margin-bottom:2px;display:flex;justify-content:space-between;gap:6px;white-space:nowrap}
   /* 窄屏适配: tab横向滚动 / 隐藏次要列 / 条件单列 */
@@ -6513,9 +6513,7 @@ function kdWeeklyMini(bars){
   const wb=dailyToWeekly(bars);
   const n=wb.length;
   if(n<2) return '';
-  // 自适应宽度: 按 ~5px/根 的比例, 与日K单日宽度接近 (日K半年130根≈646px→~5px/根), 限制在合理范围
-  const w=Math.max(150, Math.min(380, Math.round(n*5)));
-  const padL=4;
+  const w=180, padL=4;
   // ---- 蜡烛主图 (仅蜡烛) ----
   const ch=92, padT=8, padB=10;
   const hi=Math.max(...wb.map(b=>b.high)), lo=Math.min(...wb.map(b=>b.low));
@@ -6549,10 +6547,10 @@ function kdWeeklyMini(bars){
     return p?`<path d="${p}" fill="none" stroke="${col}" stroke-width="${wd}"/>`:''; };
   const kdj=line(K,'#e8eef6',1)+line(D,'#f5c842',1)+line(J,'#a06bff',1);
   const ws=(wb[0].day||'').slice(5), we=(wb[n-1].day||'').slice(5);
-  return `<div class="kd-weekly" style="width:${w+14}px">
-    <div class="wk-title"><span>周K 一年</span><span style="color:#9fb0c6">${ws}~${we}</span></div>
-    <svg viewBox="0 0 ${w} ${ch}" style="width:${w}px;height:${ch}px;display:block">${cap}</svg>
-    <svg viewBox="0 0 ${w} ${dh}" style="width:${w}px;height:${dh}px;display:block">${kdj}<text x="${padL}" y="7" font-size="7" fill="#9fb0c6">K</text><text x="${padL+10}" y="7" font-size="7" fill="#f5c842">D</text><text x="${padL+20}" y="7" font-size="7" fill="#a06bff">J</text></svg>
+  return `<div class="kd-weekly">
+    <div class="wk-title"><span>周K 近半年</span><span style="color:#9fb0c6">${ws}~${we}</span></div>
+    <svg viewBox="0 0 ${w} ${ch}" style="width:100%;height:${ch}px;display:block">${cap}</svg>
+    <svg viewBox="0 0 ${w} ${dh}" style="width:100%;height:${dh}px;display:block">${kdj}<text x="${padL}" y="7" font-size="7" fill="#9fb0c6">K</text><text x="${padL+10}" y="7" font-size="7" fill="#f5c842">D</text><text x="${padL+20}" y="7" font-size="7" fill="#a06bff">J</text></svg>
   </div>`;
 }
 // 浮窗标记按钮: 点击切换忽略 (×) (20260907)
@@ -6606,16 +6604,15 @@ async function showKlinePreview(code, anchor){
   _kdPlace(pop, anchor);
   try{
     if(!_kdCache[code]){
-      // 拉取一年(260根): 日K取最近130根显示, 周K迷你图用整年数据 (20260928)
-      const r = await fetch('/api/kline?code=' + encodeURIComponent(code) + '&datalen=260');
+      // 近半年显示(130根: 122根显示+8根前视余量), 保证"近5日曾出底"在浮窗精确标全
+      const r = await fetch('/api/kline?code=' + encodeURIComponent(code) + '&datalen=130');
       const d = await r.json();
       if(!d.bars || !d.bars.length){ pop.innerHTML = '<div class="empty">无K线数据</div>'; return; }
       _kdCache[code] = d;
     }
     if(_kdPopup !== pop) return;  // 鼠标已移走, 丢弃过期弹框
     const d = _kdCache[code];
-    const bars = d.bars.slice(-130);   // 日K显示近半年(130根)
-    const weekBars = d.bars;           // 周K迷你图用整年
+    const bars = d.bars;
     // 20260920: 先渲染K线, 历史信号异步加载后注入, 不阻塞浮窗显示
     const q=kdMultiChart(bars, {code, name:d.name, chan:d.chan});
     const renderMarkup = q && q.div ? {html:q.div, c1:q.c1, sig:q.sig} : {html:(q||''), c1:'', sig:null};
@@ -6637,9 +6634,7 @@ async function showKlinePreview(code, anchor){
         <span class="meta" style="margin-left:6px">近半年日K · 三均线 · 量 · KDJ</span>
         <span class="meta sig-status" id="${renderMarkup.c1}_status" style="margin-left:8px;color:#6b7d95">信号加载中…</span></div>
         <div class="kd-mk-bar">${mkBtns}${ignoreBtn}</div>
-      </div>
-      <div style="display:flex;justify-content:flex-end;margin:2px 10px 0">${kdWeeklyMini(weekBars)}</div>
-      <div>` + renderMarkup.html + '</div>';
+      </div><div style="position:relative">` + renderMarkup.html + kdWeeklyMini(bars) + '</div>';
     _kdPlace(pop, anchor);
     bindChartInteractivity(pop);  // 三个面板各自绑定十字光标+悬浮 (20260906)
     // 20260920: K线先渲染, 历史信号异步加载后注入对应日期K线上方 (标注小字, 不阻塞浮窗)
