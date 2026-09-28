@@ -6839,6 +6839,54 @@ def classify_bottom_volume(bars: list[dict]) -> bool:
     return False
 
 
+def classify_volume_stall(bars: list[dict]) -> bool:
+    """放量滞涨 (20260928, 近5日回溯版): 判定最近5个交易日内是否有任一K线出现"放量滞涨"。
+    与"地量低价"同一套口径: 近5日回溯 + 量能 + 价 + 精炼A/B二选一。
+    量(放量) = 当日成交量 ≥ 前5日均量×1.8 且 ≥ 前20日均量×1.5 (显著放量)。
+    价(滞涨) = 当日涨幅 ≤ +3%(相对昨收,排除涨停/大涨) 且 收盘位于当日振幅下半区(≤(高+低)/2, 冲高回落/高开低走)。
+    精炼(二选一): A 高位滞涨 = 收盘处近122日高低区间上沿≥50% (高位放量滞涨更偏主力出货);
+                  B 上影滞涨 = 上影线长度 ≥ 实体长度 (长上影=上方抛压大, 拉不动)。
+    A/B 二选一命中即算。数据不足(≤20日)或量能/价格异常返回False。"""
+    n = len(bars)
+    V5, V20, LOOK, NEAR = 5, 20, 122, 5
+    if n <= V20 + 1:
+        return False
+    for i in range(max(V20, n - NEAR), n):
+        last = bars[i]
+        vol = float(last.get("volume") or 0)
+        if vol <= 0:
+            continue
+        a5 = sum(float(b["volume"]) for b in bars[i - V5:i]) / V5
+        a20 = sum(float(b["volume"]) for b in bars[i - V20:i]) / V20
+        if a5 <= 0 or a20 <= 0:
+            continue
+        # 量: 显著放量
+        if not (vol >= a5 * 1.8 and vol >= a20 * 1.5):
+            continue
+        o = float(last.get("open") or last["close"])
+        h, l, c = float(last["high"]), float(last["low"]), float(last["close"])
+        prevc = float(bars[i - 1]["close"])
+        if prevc <= 0:
+            continue
+        pct = (c - prevc) / prevc * 100.0
+        # 价: 滞涨 = 涨幅小 且 冲高回落(收盘≤当日振幅中线)
+        mid = (h + l) / 2.0
+        if pct > 3.0 or mid <= 0 or c > mid:
+            continue
+        # 精炼 A: 高位(近122日高低区间上沿≥50%)
+        st = max(0, i - LOOK)
+        win = bars[st:i + 1]
+        p_hi = max(float(b["high"]) for b in win)
+        p_lo = min(float(b["low"]) for b in win)
+        high_zone = p_hi > p_lo and (c - p_lo) / (p_hi - p_lo) >= 0.5
+        # 精炼 B: 长上影 = 上影线 ≥ 实体长度
+        body = abs(c - o)
+        upper_shadow = body > 0 and (h - max(c, o)) >= body
+        if high_zone or upper_shadow:
+            return True
+    return False
+
+
 def classify_ma_pattern(bars: list[dict]) -> str | None:
     """分类均线形态, 返回形态名或None"""
     if len(bars) < 70:
@@ -7276,6 +7324,9 @@ def _run_ma_screen_thread():
             # 极致底量低价 (20260925): 量击穿60日地量或量比≤0.6, 价处近半年下沿18%
             if classify_bottom_volume(bars):
                 pats.append("地量低价")
+            # 放量滞涨 (20260928): 显著放量但价格滞涨(涨幅小+冲高回落), 精炼A高位/B上影二选一
+            if classify_volume_stall(bars):
+                pats.append("放量滞涨")
             # 缠论日线买点 (20260926): 最近一个1买/2买/3买 → 各自缠论tab
             _cb = _chan_day_buy_type(bars)
             if _cb and _cb in _CHAN_BUY_TAB:
