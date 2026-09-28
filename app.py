@@ -5059,6 +5059,19 @@ def _set_screen_progress(msg: str) -> None:
         pass
 
 
+def _is_bse(sym_or_code: str) -> bool:
+    """判定是否为北交所(京市)股票: symbol 带 bj 前缀, 或6位代码以 43/83/87/88/92 开头。
+
+    主筛选(run_screen)与均线形态筛选(_ma_scan_job)共用此判定, 保证口径一致 (20260928)。
+    """
+    s = str(sym_or_code or "").lower()
+    if s.startswith("bj"):
+        return True
+    digits = "".join(ch for ch in s if ch.isdigit())
+    code6 = digits[-6:] if len(digits) >= 6 else digits
+    return code6.startswith(("43", "83", "87", "88", "92"))
+
+
 def run_screen(conds=None) -> dict:
     if conds is None:
         conds = set(COND_DEFAULT)
@@ -5080,14 +5093,7 @@ def run_screen(conds=None) -> dict:
     if not spot:
         raise RuntimeError("全市场行情快照连续3次拉取失败")
     # 2. 预过滤: 按 conds 剔除门, 减少K线拉取量
-    # 20260928: 剔除北交所(京市) —— symbol 带 bj 前缀, 或6位代码以 43/83/87/88/92 开头
-    def _is_bse(sym_or_code: str) -> bool:
-        s = str(sym_or_code or "").lower()
-        if s.startswith("bj"):
-            return True
-        digits = "".join(ch for ch in s if ch.isdigit())
-        code6 = digits[-6:] if len(digits) >= 6 else digits
-        return code6.startswith(("43", "83", "87", "88", "92"))
+    # 20260928: 剔除北交所(京市) —— 调用模块级 _is_bse 判定 (与均线形态筛选口径一致)
     candidates = []
     for r in spot:
         code = r.get("code", "")
@@ -7265,6 +7271,7 @@ def _ma_scan_job():
         # 预加载K线缓存到内存 (预筛阶段要读昨日成交额)
         _preload_kline_cache()
         # 预过滤: 排除ST/科创板/北交所, 成交额>1亿
+        # 20260928: 北交所判定统一走模块级 _is_bse (覆盖 43/83/87/88/92 及 bj 前缀), 所有 tab 一致剔除京市股票
         # 盘中(未收盘)时 spot.amount 是当日累计, 偏小不可靠, 改用昨日K线成交额
         after_close = _is_after_close()
         today_str = _latest_trade_date_str()
@@ -7275,7 +7282,7 @@ def _ma_scan_job():
             name = r.get("name", "")
             if not code or not name:
                 continue
-            if "ST" in name or code.startswith(("688", "8", "4")):
+            if "ST" in name or code.startswith("688") or _is_bse(code) or _is_bse(r.get("symbol") or ""):
                 continue
             if after_close:
                 try:
