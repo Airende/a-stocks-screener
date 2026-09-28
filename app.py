@@ -10687,6 +10687,12 @@ def api_watchlist_sync(payload: dict):
 _EW_FOR = {"sh000001": "sh000985", "sz399001": "sh000985", "sz399006": "sh000985"}
 
 
+# 分时数据并发信号量: 限制同时进行的腾讯分时请求数, 防止前端一次性并发拉取
+# 上百只分时数据时把 Uvicorn 同步线程池占满(每个请求同步等工作在最长达 timeout 秒),
+# 导致 cache_info 等其他接口排队超时、页面显示"获取失败"。超出限额的请求快速返回 429。
+_MINUTE_SEM = threading.BoundedSemaphore(8)
+
+
 @app.get("/api/minute-data")
 def api_minute_data(symbol: str = ""):
     """获取个股当日分时数据: 逐分钟 时间/价格/成交量/成交额, 并计算分时均价线(VWAP)逐点值。
@@ -10700,6 +10706,9 @@ def api_minute_data(symbol: str = ""):
     if not symbol:
         return JSONResponse({"error": "缺少 symbol 参数"}, status_code=400)
     symbol = str(symbol).strip().lower()
+    # 并发限流: 取得信号量才继续外呼腾讯; 超限额时快速返回, 避免长期占用 Uvicorn 同步线程池
+    if not _MINUTE_SEM.acquire(timeout=0.15):
+        return JSONResponse({"error": "分时服务繁忙, 请稍后重试"}, status_code=429)
     try:
         url = "https://ifzq.gtimg.cn/appstock/app/minute/query"
         r = requests.get(url, params={"code": symbol}, headers=HEADERS, timeout=10)
@@ -10804,6 +10813,7 @@ def api_minute_data(symbol: str = ""):
             except Exception:
                 ew = []
 
+        _MINUTE_SEM.release()
         return JSONResponse({
             "symbol": symbol,
             "is_index": is_index,
@@ -10813,6 +10823,7 @@ def api_minute_data(symbol: str = ""):
             "ew": ew,
         })
     except Exception as e:
+        _MINUTE_SEM.release()
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
