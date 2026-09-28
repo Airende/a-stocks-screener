@@ -878,11 +878,6 @@
               box-shadow:0 8px 24px rgba(0,0,0,.45);overflow:hidden;width:724px}
   .kd-preview.show{display:block}
   .kd-preview .sa-chart{border:none;border-radius:0;background:transparent}
-  /* 浮窗右上角 周K迷你图 (20260928): 近半年周K + 仅KDJ副图, 不带标识; 绝对定位到日K右上角 */
-  .kd-weekly{position:absolute;top:6px;right:10px;width:200px;z-index:6;
-             background:rgba(30,44,64,.94);border:1px solid var(--border);border-radius:8px;
-             padding:5px 7px 4px;box-shadow:0 6px 16px rgba(0,0,0,.4)}
-  .kd-weekly .wk-title{font-size:10px;color:var(--sub);margin-bottom:2px;display:flex;justify-content:space-between;gap:6px;white-space:nowrap}
   /* 窄屏适配: tab横向滚动 / 隐藏次要列 / 条件单列 */
   @media (max-width:760px){
     .main-tabs{overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
@@ -6507,52 +6502,6 @@ function kdAddSigs(c1id, sig, m){
   const html = sig ? sig(m, esc) : '';
   g.innerHTML = html;
 }
-// ===== 浮窗右上角 周K迷你图 (20260928): 近半年周K + 仅KDJ副图, 不带任何标识 =====
-// 用日线聚合出周线 (near 130日 ≈ 近半年), 只画蜡烛+KDJ, 无均线/缠论/涨跌停/历史信号/zigzag等标记。
-function kdWeeklyMini(bars){
-  const wb=dailyToWeekly(bars);
-  const n=wb.length;
-  if(n<2) return '';
-  const w=180, padL=4;
-  // ---- 蜡烛主图 (仅蜡烛) ----
-  const ch=92, padT=8, padB=10;
-  const hi=Math.max(...wb.map(b=>b.high)), lo=Math.min(...wb.map(b=>b.low));
-  const rng=(hi-lo)||1;
-  const y=v=>padT+(hi-v)/rng*(ch-padT-padB);
-  const xStep=w/n, bw=Math.max(1.5,xStep*0.6);
-  const xi=i=>padL+i*xStep+xStep/2;
-  // 用循环绘制蜡烛 (仅蜡烛, 无任何标识)
-  let cap='';
-  for(let i=0;i<n;i++){
-    const b=wb[i], cx=xi(i);
-    const up=(b.chg||0)>=0; const col=up?'#ff4d4f':'#26a69a';
-    const yO=y(b.open),yC=y(b.close);
-    const top=Math.min(yO,yC), bh=Math.max(1,Math.abs(yC-yO));
-    cap+=`<line x1="${cx.toFixed(1)}" y1="${y(b.high).toFixed(1)}" x2="${cx.toFixed(1)}" y2="${y(b.low).toFixed(1)}" stroke="${col}" stroke-width="1"/>`+
-         `<rect x="${(cx-bw/2).toFixed(1)}" y="${top.toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" fill="${col}"/>`;
-  }
-  // ---- KDJ 副图 (9,3,3, 仅三条线) ----
-  const dh=44, padT3=5, padB3=9;
-  const K=[],D=[],J=[]; let pk=50,pd=50;
-  for(let i=0;i<n;i++){ let hh=-1e9,ll=1e9;
-    for(let j=Math.max(0,i-8);j<=i;j++){ hh=Math.max(hh,wb[j].high); ll=Math.min(ll,wb[j].low); }
-    const rsv=hh===ll?50:(wb[i].close-ll)/(hh-ll)*100; pk=(pk*2+rsv)/3; pd=(pd*2+pk)/3;
-    K.push(pk);D.push(pd);J.push(3*pk-2*pd); }
-  // KDJ 副图: 固定 0~100 高度并钳制越界值
-  const yK=v=>padT3+(100-Math.max(-5,Math.min(105,v)))/110*(dh-padT3-padB3);
-  const line=(arr,col,wd)=>{ let p='',st=false;
-    for(let i=0;i<n;i++){ if(isNaN(arr[i])) continue;
-      const yy=yK? yK(arr[i]) : 0;
-      p+=(st?'L':'M')+xi(i).toFixed(1)+','+yy.toFixed(1)+' '; st=true; }
-    return p?`<path d="${p}" fill="none" stroke="${col}" stroke-width="${wd}"/>`:''; };
-  const kdj=line(K,'#e8eef6',1)+line(D,'#f5c842',1)+line(J,'#a06bff',1);
-  const ws=(wb[0].day||'').slice(5), we=(wb[n-1].day||'').slice(5);
-  return `<div class="kd-weekly">
-    <div class="wk-title"><span>周K 近半年</span><span style="color:#9fb0c6">${ws}~${we}</span></div>
-    <svg viewBox="0 0 ${w} ${ch}" style="width:100%;height:${ch}px;display:block">${cap}</svg>
-    <svg viewBox="0 0 ${w} ${dh}" style="width:100%;height:${dh}px;display:block">${kdj}<text x="${padL}" y="7" font-size="7" fill="#9fb0c6">K</text><text x="${padL+10}" y="7" font-size="7" fill="#f5c842">D</text><text x="${padL+20}" y="7" font-size="7" fill="#a06bff">J</text></svg>
-  </div>`;
-}
 // 浮窗标记按钮: 点击切换忽略 (×) (20260907)
 async function popupToggleIgnore(code, name){
   const m = _MARKS[code]||{};
@@ -6634,7 +6583,7 @@ async function showKlinePreview(code, anchor){
         <span class="meta" style="margin-left:6px">近半年日K · 三均线 · 量 · KDJ</span>
         <span class="meta sig-status" id="${renderMarkup.c1}_status" style="margin-left:8px;color:#6b7d95">信号加载中…</span></div>
         <div class="kd-mk-bar">${mkBtns}${ignoreBtn}</div>
-      </div><div style="position:relative">` + renderMarkup.html + kdWeeklyMini(bars) + '</div>';
+      </div>` + renderMarkup.html;
     _kdPlace(pop, anchor);
     bindChartInteractivity(pop);  // 三个面板各自绑定十字光标+悬浮 (20260906)
     // 20260920: K线先渲染, 历史信号异步加载后注入对应日期K线上方 (标注小字, 不阻塞浮窗)
