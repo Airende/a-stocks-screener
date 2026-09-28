@@ -4326,7 +4326,6 @@ const MA_PATS=[
   ['多头排列向上发散','MA5>MA10>MA20，三线同步上行，间距扩大（不含MA60，宽松版）'],
   ['粘合向上突破','近3日MA5/MA10/MA20间距<1.5%(粘合)，现转为多头排列，突破启动'],
   ['地量低价','极致底量低价(精炼)：量=击穿近60日地量(≤min×1.15)或量比≤0.6（满足其一）；价=收盘处于近半年高低区间下沿18%；且止跌企稳(近10日未破前20日最低)+持续缩量(近10日均量≤60日均量×0.75)。地量=卖压枯竭，观察信号，买点等其后放量阳线确认'],
-  ['放量滞涨','放量滞涨(近5日回溯)：量=当日量≥前5日均量×1.8且≥前20日均量×1.5(显著放量)；价=涨幅≤+3%且收盘≤当日(高+低)/2(冲高回落/滞涨)；精炼二选一：A高位滞涨=收盘处近122日区间上沿≥50%(高位放量滞涨偏出货)，B上影滞涨=上影线≥实体(上方抛压大)。高位放量却涨不动=警惕见顶/出货'],
   // 周线均线形态 (A + 埋伏二合一, 20260920 原B/C合并为'周线·埋伏')
   ['周线A·强势主升','周线多头排列(MA5>MA10>MA20) + MA20连续4周上行 + 收盘>MA10 + 距52周高回撤<15%；否决：收盘<MA20/MA20向下/空头排列/52周位<0.5'],
   ['周线·埋伏','周线低位埋伏(原B趋势回踩+C底部反转合并)：B=上升趋势中回踩20周线低吸(MA20/MA60向上+收盘≥MA20距MA20在0~+5%+距52周高回撤<25%)；C=底部反转初期(MA20由平转升+近4周金叉+放量>20周均量×1.5+距52周低涨>20%)'],
@@ -4342,13 +4341,13 @@ const MA_PATS=[
   ['上试盘·观察池','B池：10日确认窗口内，未破信号日最低价、未放量突破的股票，附待突破价'],
   ['上试盘·已确认','C池：今日刚放量×1.01突破试盘高点 + 量比≥2 + 沪深300在MA20上方，当日收盘买入'],
 ];
-// 上试盘起始 tab: 前 13 个为 日线+周线+地量+缠论 (7日+2周+3缠, 另含放量滞涨), 13/14/15 为 A/B/C (20260926 新增缠论买卖点tab)
-const SSP_KIND_TAB_OFFSET = 13;
+// 上试盘起始 tab: 前 12 个为 日线+周线+地量+缠论 (4日+2周+3背离下跌+3缠, 放量滞涨已删), 12/13/14 为 A/B/C (20260926 新增缠论买卖点tab)
+const SSP_KIND_TAB_OFFSET = 12;
 // 子tab显示名 (20260918): 单字前缀·精简名, 表达分组 日/周/试; 仅用于渲染文本, 内部匹配仍用 p[0] 原名(后端 counts 按原名)
-// 顺序 (20260925, 与 MA_PATS 严格一一对应 0~15): 日多头→日发散→日粘合上突→日地量→日放量滞涨→周强势→
+// 顺序 (20260928, 与 MA_PATS 严格一一对应 0~14): 日多头→日发散→日粘合上突→日地量→周强势→
 //   周埋伏→日背离→日粘合下突→日空头发散→缠1/2/3买→试新信号/观察池/已确认
 const DISP_MA_NAME=[
-  '日·多头排列','日·多头发散','日·粘合上突','日·地量','日·放量滞涨',
+  '日·多头排列','日·多头发散','日·粘合上突','日·地量',
   '周·强势主升','周·埋伏',
   '日·背离','日·粘合下突','日·空头发散',
   '缠·日线1买','缠·日线2买','缠·日线3买',
@@ -6272,35 +6271,10 @@ function kdSubPanels(bars, cfg){
       if((vol<=vmin*1.15)||(vavg>0 && vol/vavg<=0.6)) m[(bars[i].day||'').slice(0,10)]=true;
     }
     return m; })();
-  // 放量滞涨标记 (20260928 逐bar窗口版, 与后端 classify_volume_stall 一致):
-  // 量=当日量≥前5日均量×1.8 且 ≥前20日均量×1.5(显著放量); 价=涨幅≤+3%且收盘≤(高+低)/2(滞涨);
-  // 精炼A高位(近122日上沿≥50%) 或 B长上影(上影≥实体) 二选一命中 → 黄色「滞」字标。
-  const stallVol=(()=>{ const m={}; const W5=5,W20=20,LOOK=122;
-    if(n<=W20 || (opt&&opt.noLimits)) return m;   // 周/月K线(noLimits)不做日线口径的放量滞涨判定
-    for(let i=W20;i<n;i++){
-      const b=bars[i]; const vol=+b.volume; if(!(vol>0)) continue;
-      let a5s=0,a20s=0;
-      for(let j=i-W5;j<i;j++) a5s+=+bars[j].volume;
-      for(let j=i-W20;j<i;j++) a20s+=+bars[j].volume;
-      const a5=a5s/W5, a20=a20s/W20;
-      if(!(a5>0&&a20>0)) continue;
-      if(!(vol>=a5*1.8 && vol>=a20*1.5)) continue;
-      const o=+b.open||+b.close, h=+b.high, l=+b.low, c=+b.close;
-      const prevc=+bars[i-1].close; if(!(prevc>0)) continue;
-      const pct=(c-prevc)/prevc*100, mid=(h+l)/2;
-      if(pct>3 || mid<=0 || c>mid) continue;      // 滞涨: 涨幅小 + 冲高回落
-      let p_hi=-1e9,p_lo=1e9; const st=Math.max(0,i-LOOK);
-      for(let j=st;j<=i;j++){ p_hi=Math.max(p_hi,+bars[j].high); p_lo=Math.min(p_lo,+bars[j].low); }
-      const high_zone=p_hi>p_lo && (c-p_lo)/(p_hi-p_lo)>=0.5;  // A 高位
-      const body=Math.abs(c-o); const upper_shadow=body>0 && (h-Math.max(c,o))>=body; // B 长上影
-      if(high_zone||upper_shadow) m[(b.day||'').slice(0,10)]=true;
-    }
-    return m; })();
   const volMarks=(()=>{ let s='';
     for(let i=0;i<n;i++){
       const day=(bars[i].day||'').slice(0,10);
       if(limitVol[day]) s+=_sqT(xi(i), yFn2(bars[i].volume)-4, `font-size="6.5" font-weight="700" text-anchor="middle" fill="#f5c842" stroke="rgba(15,22,35,.9)" stroke-width="1.4" paint-order="stroke"`, '地');
-      if(stallVol[day]) s+=_sqT(xi(i), yFn2(bars[i].volume)-4, `font-size="6.5" font-weight="700" text-anchor="middle" fill="#ffa14d" stroke="rgba(15,22,35,.9)" stroke-width="1.4" paint-order="stroke"`, '滞');
     }
     return s; })();
   const vbars=bars.map((b,i)=>{
@@ -6327,8 +6301,7 @@ function kdSubPanels(bars, cfg){
     tipFn:(b,i)=>{ const v=b.volume/1e6, r=vr[i];
       const tag=r>=1.5?'<span style="color:#ff4d4f">放量</span>':(r<=0.8?'<span style="color:#26a69a">缩量</span>':'平量');
       const ditag=limitVol[(b.day||'').slice(0,10)]?' <span style="color:#f5c842;font-weight:700">地量低价</span>':'';
-      const sttag=stallVol[(b.day||'').slice(0,10)]?' <span style="color:#ffa14d;font-weight:700">放量滞涨</span>':'';
-      return `<b>${esc(b.day||'')}</b>${ditag}${sttag}<br>量 ${v.toFixed(2)}万手 · VR ${r.toFixed(2)} ${tag}`; }};
+      return `<b>${esc(b.day||'')}</b>${ditag}<br>量 ${v.toFixed(2)}万手 · VR ${r.toFixed(2)} ${tag}`; }};
   const p2=`<div class="sa-chart" id="${cid2}" style="height:${h2}px;margin-top:2px"><svg viewBox="0 0 ${w} ${h2}" style="width:100%;height:100%" preserveAspectRatio="none">
     <line x1="${padL}" y1="${yFn2(vmax).toFixed(1)}" x2="${w-padR}" y2="${yFn2(vmax).toFixed(1)}" stroke="rgba(255,255,255,.05)"/>
     ${vbars}${vmaPath}${volMarks}
