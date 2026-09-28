@@ -6562,8 +6562,21 @@ async function showKlinePreview(code, anchor){
     if(_kdPopup !== pop) return;  // 鼠标已移走, 丢弃过期弹框
     const d = _kdCache[code];
     const bars = d.bars.slice(-130);   // 日K显示近半年(130根)
+    // 缠论索引对齐 (20260928): /api/kline 的 chan 基于全部 bars(260根)计算, 索引是0~259;
+    // 浮窗只显示后130根, 若直接叠加会导致缠论笔/中枢/买卖点错位。需按窗口偏移裁剪索引。
+    const _kf = d.bars.length - bars.length;   // 起始索引偏移(通常260-130=130)
+    const _sliceChan = (c) => {
+      if(!c || !c.ok) return c;
+      const shift = i => (i>=_kf ? i-_kf : -1);
+      const o = {ok:c.ok, strokes:[], segments:[], pivots:[], signals:[]};
+      (c.strokes||[]).forEach(s=>{ const a=shift(s.i0), b=shift(s.i1); if(a>=0&&b>=0) o.strokes.push({i0:a,i1:b,p0:s.p0,p1:s.p1}); });
+      (c.segments||[]).forEach(s=>{ const a=shift(s.i0), b=shift(s.i1); if(a>=0&&b>=0) o.segments.push({i0:a,i1:b,p0:s.p0,p1:s.p1}); });
+      (c.pivots||[]).forEach(p=>{ const a=shift(p.i0), b=shift(p.i1); if(a>=0&&b>=0) o.pivots.push({i0:a,i1:b,zg:p.zg,zd:p.zd}); });
+      (c.signals||[]).forEach(s=>{ const a=shift(s.i); if(a>=0) o.signals.push({i:a,price:s.price,side:s.side,label:s.label}); });
+      return o;
+    };
     // 20260920: 先渲染K线, 历史信号异步加载后注入, 不阻塞浮窗显示
-    const q=kdMultiChart(bars, {code, name:d.name, chan:d.chan});
+    const q=kdMultiChart(bars, {code, name:d.name, chan:_sliceChan(d.chan)});
     const renderMarkup = q && q.div ? {html:q.div, c1:q.c1, sig:q.sig} : {html:(q||''), c1:'', sig:null};
     if(_kdPopup !== pop) return;
     const last = bars[bars.length-1];
