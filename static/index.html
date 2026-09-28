@@ -1490,18 +1490,31 @@ function bindChartInteractivity(rootEl){
         hline.style.display='none'; hlbl.style.display='none';
       }
       // 跨图同步 (20260925): 悬停任意图, 竖向虚线贯穿同组日/周/月所有图
-      if(reg.sync && reg.alignPos){
-        const _hb=reg.bars[i];
-        const di=(reg.alignPos[(_hb&&(_hb._e||_hb.day))]!=null)? reg.alignPos[_hb._e||_hb.day] : i;
+      // 20260928 扩展: 浮窗三面板(K线/量/KDJ)同一系列无alignPos(等宽共用n与xi), 按bar索引直接定位
+      if(reg.sync){
         const g=_xhairSync[reg.sync];
-        if(g) for(const c of g.charts){
-          const cv=c.svg.querySelector('.xhair');
-          if(!cv) continue;
-          if(c.div===div) continue;   // 自己的已在上方设置
-          const xsD=(c.reg.w-c.reg.padL-c.reg.padR)/(c.reg.alignTotal||c.reg.n);
-          const x=c.reg.padL+(Math.min(di,(c.reg.alignTotal||c.reg.n)-1)+0.5)*xsD;
-          cv.setAttribute('x1',x.toFixed(1)); cv.setAttribute('x2',x.toFixed(1));
-          cv.style.display='';
+        if(g){
+          if(reg.alignPos){
+            const _hb=reg.bars[i];
+            const di=(reg.alignPos[(_hb&&(_hb._e||_hb.day))]!=null)? reg.alignPos[_hb._e||_hb.day] : i;
+            for(const c of g.charts){
+              const cv=c.svg.querySelector('.xhair');
+              if(!cv||c.div===div) continue;   // 自己的已在上方设置
+              const xsD=(c.reg.w-c.reg.padL-c.reg.padR)/(c.reg.alignTotal||c.reg.n);
+              const x=c.reg.padL+(Math.min(di,(c.reg.alignTotal||c.reg.n)-1)+0.5)*xsD;
+              cv.setAttribute('x1',x.toFixed(1)); cv.setAttribute('x2',x.toFixed(1));
+              cv.style.display='';
+            }
+          } else {
+            for(const c of g.charts){
+              const cv=c.svg.querySelector('.xhair');
+              if(!cv||c.div===div) continue;   // 自己的已在上方设置
+              const r=c.reg; const st=(r.w-r.padL-r.padR)/r.n;
+              const x = r.xi ? r.xi(i) : (r.padL+i*st+st/2);
+              cv.setAttribute('x1',x.toFixed(1)); cv.setAttribute('x2',x.toFixed(1));
+              cv.style.display='';
+            }
+          }
         }
       }
     });
@@ -6269,6 +6282,7 @@ function kdSubPanels(bars, cfg){
   const w=cfg.w, padL=cfg.padL, padR=cfg.padR, xi=cfg.xi, bw=cfg.bw||3, opt=cfg.opt||{};
   const stretch=!!cfg.stretch;
   const kX=cfg.kX||1;   // 主图横向拉伸系数: 文字反向缩放用 (20260925)
+  const syncName=cfg.sync||null;   // 跨图同步十字线组 (浮窗三面板共用, 20260928)
   const _sqT=(x,y,attrs,inner)=> (stretch&&kX>1.02)
     ? `<text transform="translate(${Number(x).toFixed(1)},${Number(y).toFixed(1)}) scale(${(1/kX).toFixed(3)},1)" x="0" y="0" ${attrs}>${inner}</text>`
     : `<text x="${Number(x).toFixed(1)}" y="${Number(y).toFixed(1)}" ${attrs}>${inner}</text>`;
@@ -6318,7 +6332,7 @@ function kdSubPanels(bars, cfg){
     for(let j=Math.max(0,i-5);j<i;j++){ s+=bars[j].volume; c++; }
     vr.push(c?bars[i].volume/(s/c):1); }
   const cid2='kd'+(++_chartSeq);
-  _chartReg[cid2]={bars, w, h:h2, padL, padR, n,
+  _chartReg[cid2]={bars, w, h:h2, padL, padR, n, sync:syncName,
     tipFn:(b,i)=>{ const v=b.volume/1e6, r=vr[i];
       const tag=r>=1.5?'<span style="color:#ff4d4f">放量</span>':(r<=0.8?'<span style="color:#26a69a">缩量</span>':'平量');
       const ditag=limitVol[(b.day||'').slice(0,10)]?' <span style="color:#f5c842;font-weight:700">地量低价</span>':'';
@@ -6345,7 +6359,7 @@ function kdSubPanels(bars, cfg){
     return `<line x1="${padL}" y1="${yFn3(v).toFixed(1)}" x2="${w-padR}" y2="${yFn3(v).toFixed(1)}" stroke="${col}" stroke-dasharray="3,2"/>`+lbl;
   }).join('');
   const cid3='kd'+(++_chartSeq);
-  _chartReg[cid3]={bars, w, h:h3, padL, padR, n,
+  _chartReg[cid3]={bars, w, h:h3, padL, padR, n, sync:syncName,
     tipFn:(b,i)=>`<b>${esc(b.day||'')}</b><br>K ${K[i].toFixed(1)} · D ${D[i].toFixed(1)} · <b>J ${J[i].toFixed(1)}</b>`};
   // 底部日期轴并入KDJ面板
   const dates=[0,Math.floor(n/2),n-1].map(i=>_sqT(xi(i), h3-1, `fill="#5a6a82" font-size="8" text-anchor="middle"`, (bars[i].day||'').slice(2))).join('');
@@ -6440,6 +6454,8 @@ function kdMultiChart(bars, opt){
       (lastSeg? `<text x="${w-padR-4}" y="10" font-size="9" font-weight="700" text-anchor="end" fill="${lastSeg.dir==='up'?'#ff4d4f':'#26a69a'}">${lastSeg.dir==='up'?'趋势: 上涨':'趋势: 下跌'}${lastSeg.confirmed===false?'(未确认)':''}</text>`:'');
   }
   const cid1='kd'+(++_chartSeq);
+  // 浮窗三面板跨图同步十字线 (20260928): K线/量/KDJ 共享同一 x 映射, 悬停任意一个竖向虚线贯穿全部
+  const syncName='kdprevsync'+(++_chartSeq);
   // 20260920: 历史形态信号标注 (红"多"/青"破"/蓝"强"/金"观" 等一字简称), 由调用方异步注入
   // sig 关闭 xi/yFn1/n/bars 映射, kdAddSigs 据 histSigs 渲染 <text> 挂到 #${cid1}_sig
   const sigLayerId=cid1+'_sig';
@@ -6460,7 +6476,7 @@ function kdMultiChart(bars, opt){
     }
     return out;
   };
-  _chartReg[cid1]={bars, w, h:h1, padL, padR, n,
+  _chartReg[cid1]={bars, w, h:h1, padL, padR, n, sync:syncName,
     tipFn:(b)=>{ const c=(b.chg!=null&&!isNaN(b.chg));
       const lim=limitDays[(b.day||'').slice(0,10)];
       const limTag=lim==='up'?' <span style="color:#ff4d4f;font-weight:700">涨停</span>':(lim==='down'?' <span style="color:#26a69a;font-weight:700">跌停</span>':'');
@@ -6476,7 +6492,7 @@ function kdMultiChart(bars, opt){
   </svg></div>`;
 
   // ---- 成交量+KDJ 副图 (20260925 抽为 kdSubPanels 共用, 个股分析主图同款) ----
-  const subs=kdSubPanels(bars, {w, padL, padR, xi, bw, opt, stretch:false});
+  const subs=kdSubPanels(bars, {w, padL, padR, xi, bw, opt, stretch:false, sync:syncName});
   return {div: p1+subs.volHtml+subs.kdjHtml, c1: cid1, sig};   // sig: 闭包注入历史信号标记
 }
 // 20260920: 把某股的历史形态信号标记注入到已渲染的K线面板1 (K线先显示, 信号异步补)
