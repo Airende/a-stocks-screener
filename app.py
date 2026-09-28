@@ -7228,8 +7228,19 @@ def _ma_quality_score(item: dict) -> float:
     return round(total, 2)
 
 
+# 均线/上试盘串行闸门 (20260928): 两者各自拉全市场K线耗时, 若并行会互相抢CPU/进度条
+# 通过函数包装让两个后台任务共用一个互斥锁串行执行。
+_MA_SSP_GATE = threading.Lock()
+
+
 def _run_ma_screen_thread():
-    """后台均线形态筛选线程"""
+    """后台均线形态筛选线程 (串行闸门: 与上试盘互斥, 避免同时抢CPU/进度条)"""
+    with _MA_SSP_GATE:
+        _ma_scan_job()
+
+
+def _ma_scan_job():
+    """均线形态实际执行体(整体置于串行闸门内)"""
     with _ma_state["lock"]:
         if _ma_state["running"]:
             return
@@ -7719,7 +7730,13 @@ def _ssp_hs300_above_ma20(scan_date=None):
 
 
 def _run_ssp_scan_thread():
-    """后台全市场扫描: 按均线筛选相同候选池, 产出 A/B/C 三池。"""
+    """上试盘后台全市场扫描 (串行闸门: 与均线形态互斥, 避免同时抢CPU/进度条)"""
+    with _MA_SSP_GATE:
+        _ssp_scan_job()
+
+
+def _ssp_scan_job():
+    """上试盘全市场扫描实际执行体(整体置于串行闸门内): 按均线筛选相同候选池, 产出 A/B/C 三池。"""
     with _SSP_STATE["lock"]:
         if _SSP_STATE["running"]: return
         _SSP_STATE["running"] = True
