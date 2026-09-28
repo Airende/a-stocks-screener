@@ -4759,23 +4759,6 @@ function maRowHtml(s,i){
   // 包括: 周线A/B/C + 所有遵循周线一票否决的均线/背离tab
   const curPat = MA_PATS[maCurrentTab][0];
   const showWeekly = curPat.startsWith('周线') || !curPat.startsWith('上试盘');
-  // 日周共振 / 埋伏型 标记 (20260920 优化1&2)
-  //   日多头 tab: 该股又命中周A强主升 → 日周共振
-  //   周A tab: 该股同时也在日多头池 → 日周共振
-  //   周·埋伏: 低位埋伏/低吸型(原B回踩+C底部反转合并), 与日多头几乎不重叠
-  const _DAY_BULL_NAMES=['多头排列','粘合向上突破','多头排列向上发散'];
-  const _isDayBull=(maData&&maData.patterns)?(code)=>_DAY_BULL_NAMES.some(n=>(maData.patterns[n]||[]).some(x=>x.code===code)):()=>false;
-  const _has=(...ps)=>(s.weekly_pats||[]).some(p=>ps.includes(p));
-  let resTag='';
-  if(_DAY_BULL_NAMES.includes(curPat)&&_has('周线A·强势主升'))
-    resTag='日周共振';
-  else if(curPat==='周线A·强势主升'&&_isDayBull(s.code))
-    resTag='日周共振';
-  else if(curPat==='周线·埋伏')
-    resTag='周线埋伏';
-  const resTagHtml = resTag
-    ? `<span class="res-tag ${resTag==='日周共振'?'syn':'amb'}">${resTag}</span>`
-    : '';
   let weeklyLine = '';
   if(showWeekly && s.w_ma20){
     const posColor = (s.w_pos52||0) >= 0.6 ? 'var(--up)' : ((s.w_pos52||0) < 0.3 ? 'var(--down)' : 'var(--gold)');
@@ -4784,7 +4767,7 @@ function maRowHtml(s,i){
   }
   return `<tr>
     <td class="l">${i+1}</td>
-    <td class="l">${markNameHtml(s.code,s.name,s.price)}${resTagHtml}<div class="code"><a class="cd-link"  href="https://stockpage.10jqka.com.cn/${s.code}/" target="_blank" rel="noopener" onclick="openStock('${s.code}','${s.name}',event)">${mkt(s.code)}</a></div>${weeklyLine}</td>
+    <td class="l">${markNameHtml(s.code,s.name,s.price)}<div class="code"><a class="cd-link"  href="https://stockpage.10jqka.com.cn/${s.code}/" target="_blank" rel="noopener" onclick="openStock('${s.code}','${s.name}',event)">${mkt(s.code)}</a></div>${weeklyLine}</td>
     <td class="l col-opt">${indHtml}</td>
     <td class="l col-opt">${conHtml}</td>
     <td>${fmtPct(s.change_pct)}</td>
