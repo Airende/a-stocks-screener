@@ -6326,10 +6326,13 @@ function kdSubPanels(bars, cfg){
     vr.push(c?bars[i].volume/(s/c):1); }
   const cid2='kd'+(++_chartSeq);
   _chartReg[cid2]={bars, w, h:h2, padL, padR, n, sync:syncName,
-    tipFn:(b,i)=>{ const v=b.volume/1e6, r=vr[i];
+    tipFn:(b,i)=>{ const r=vr[i];
       const tag=r>=1.5?'<span style="color:#ff4d4f">放量</span>':(r<=0.8?'<span style="color:#26a69a">缩量</span>':'平量');
       const ditag=limitVol[(b.day||'').slice(0,10)]?' <span style="color:#f5c842;font-weight:700">地量低价</span>':'';
-      return `<b>${esc(b.day||'')}</b>${ditag}<br>量 ${v.toFixed(2)}万手 · VR ${r.toFixed(2)} ${tag}`; }};
+      // 成交额 = 成交量(股)×收盘价(元) (20260928: 原"量 xx万手"改为成交额)
+      const amt=b.volume*b.close;
+      const amtTxt=(amt/1e8).toFixed(2)+'亿';
+      return `<b>${esc(b.day||'')}</b>${ditag}<br>成交额 ${amtTxt} · VR ${r.toFixed(2)} ${tag}`; }};
   const p2=`<div class="sa-chart" id="${cid2}" style="height:${h2}px;margin-top:2px"><svg viewBox="0 0 ${w} ${h2}" style="width:100%;height:100%" preserveAspectRatio="none">
     <line x1="${padL}" y1="${yFn2(vmax).toFixed(1)}" x2="${w-padR}" y2="${yFn2(vmax).toFixed(1)}" stroke="rgba(255,255,255,.05)"/>
     ${vbars}${vmaPath}${volMarks}
