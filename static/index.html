@@ -4466,8 +4466,7 @@ function renderMAHeaders(){
       <th class="ma-th" data-sort="chg">今日涨跌 <span class="sort-arrow"></span></th>
       <th class="ma-th" data-sort="price">现价 <span class="sort-arrow"></span></th>
       <th class="ma-th" data-sort="atr">ATR% <span class="sort-arrow"></span></th>
-      <th class="ma-th col-opt" data-sort="amount">成交额(亿) <span class="sort-arrow"></span></th>
-      <th class="l">买卖点</th>`;
+      <th class="ma-th col-opt" data-sort="amount">成交额(亿) <span class="sort-arrow"></span></th>`;
   }
 }
 function renderMATabs(){
@@ -4755,9 +4754,6 @@ function sspRowHtml(s, i, pool){
 }
 // 单行渲染
 function maRowHtml(s,i){
-  // 买卖点信号: 徽章 + 三数字小字 (20260906 重构, 共用 sigBadgeHtml)
-  let bsHtml = sigBadgeHtml(s);
-  bsHtml = `<div ${sigTipAttr(s)} style="cursor:help">${bsHtml}</div>`;
   // 行业/板块列: 聚合排序时显示分组计数徽标
   let indHtml = s.industry||'—';
   let conHtml = s.concept||'—';
@@ -4787,7 +4783,6 @@ function maRowHtml(s,i){
     <td>${s.price}</td>
     <td>${s.atr_pct!=null? '<span style="color:'+(s.atr_pct>=8?'var(--up)':(s.atr_pct<4?'var(--sub)':'var(--gold)'))+'">'+s.atr_pct+'%</span>':'—'}</td>
     <td class="col-opt">${s.amount_yi}</td>
-    <td class="l">${bsHtml}</td>
   </tr>`;
 }
 // 更新表头排序箭头
