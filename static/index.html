@@ -880,8 +880,8 @@
   .kd-preview .sa-chart{border:none;border-radius:0;background:transparent}
   /* 浮窗 周K迷你图 (20260928): 近半年/一年周K + 仅KDJ副图, 不带标识;
        静态块布局, 由调用方右对齐放到日K上方, 不叠盖日K */
-  .kd-weekly{width:auto;background:rgba(30,44,64,.94);border:1px solid var(--border);border-radius:8px;
-             padding:5px 7px 4px;box-shadow:0 6px 16px rgba(0,0,0,.4)}
+  .kd-weekly{width:auto;background:transparent;border:none;box-shadow:none;
+             padding:2px 0 0;display:inline-block}
   .kd-weekly .wk-title{font-size:10px;color:var(--sub);margin-bottom:2px;display:flex;justify-content:space-between;gap:6px;white-space:nowrap}
   /* 窄屏适配: tab横向滚动 / 隐藏次要列 / 条件单列 */
   @media (max-width:760px){
@@ -6638,7 +6638,7 @@ async function showKlinePreview(code, anchor){
         <span class="meta sig-status" id="${renderMarkup.c1}_status" style="margin-left:8px;color:#6b7d95">信号加载中…</span></div>
         <div class="kd-mk-bar">${mkBtns}${ignoreBtn}</div>
       </div>
-      <div style="display:flex;justify-content:flex-end;margin:2px 10px 0">${kdWeeklyMini(weekBars)}</div>
+      <div style="display:flex;justify-content:flex-end;padding:0 10px;margin:-6px 0 12px">${kdWeeklyMini(weekBars)}</div>
       <div>` + renderMarkup.html + '</div>';
     _kdPlace(pop, anchor);
     bindChartInteractivity(pop);  // 三个面板各自绑定十字光标+悬浮 (20260906)
