@@ -6,8 +6,8 @@ LOG="/workspace/keepalive.log"
 PIDFILE="/workspace/.uvicorn.pid"
 
 ensure_venv() {
-    # 沙箱可能周期性清理 .venv, 缺失时自动重建并安装依赖
-    if [ -x ".venv/bin/python" ]; then
+    # 沙箱可能周期性清理 .venv 或仅清掉依赖; 缺失 key 依赖时自动重建安装
+    if [ -x ".venv/bin/python" ] && ".venv/bin/python" -c "import uvicorn, fastapi, requests, numpy" 2>/dev/null; then
         return 0
     fi
     echo "[$(date '+%F %T')] .venv missing, rebuilding..." >> "$LOG"
@@ -22,7 +22,7 @@ start_server() {
     ensure_venv
     echo "[$(date '+%F %T')] starting uvicorn..." >> "$LOG"
     PY=".venv/bin/python"; [ -x "$PY" ] || PY="$(command -v python3 || command -v python)"
-    nohup "$PY" -m uvicorn app:app --host 127.0.0.1 --port 8000 > /workspace/uvicorn.log 2>&1 &
+    nohup "$PY" -m uvicorn app:app --host 0.0.0.0 --port 8000 > /workspace/uvicorn.log 2>&1 &
     echo $! > "$PIDFILE"
     sleep 2
     if kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
