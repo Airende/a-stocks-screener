@@ -1683,32 +1683,28 @@ def det_early_signal(bars, today=None) -> dict:
             hit5 = False
         _c("短线企稳", hit5)
 
-        # 近几个月方向过滤(20260929): 只要'小幅上升'; 剔除 长时间横盘 与 长期下跌
-        #   ret40 = 近40交易日收盘相对40日前收盘涨跌幅;  amp40 = 近40日振幅
-        #   下跌(ret40<0)→剔除; 横盘(amp40<8% 且 |ret40|<5%)→剔除; 上升(ret40≥0且非横盘)→保留
+        # 整体趋势过滤(20260929): 只保留'整体上升趋势'确立的票
+        #   核心：MA60 相对60个交易日前上行(中长期均线上扬=近半年重心上移)
+        #   → 剔除 长期下跌 / 长时间横盘(MA60 走平或下行)。
+        #   注: 不强求"现价站上MA60", 因为低位启动前多为刚起步票, 现价常在MA60附近/下方。
         trend_ok = False
         try:
-            if len(closes) >= 41:
-                anchor = closes[-41]
-                ret40 = cur / anchor - 1 if anchor > 0 else 0.0
-                hi40 = max(highs[-40:])
-                lo40 = min(lows[-40:])
-                amp40 = hi40 / lo40 - 1 if lo40 > 0 else 1.0
-                if ret40 < 0:
-                    trend_ok = False                     # 长期下跌 → 剔除
-                elif amp40 < 0.08 and abs(ret40) < 0.05:
-                    trend_ok = False                     # 长时间横盘 → 剔除
-                else:
-                    trend_ok = True                      # 近几月小幅上升 → 保留
+            if len(closes) >= 61:
+                ts60 = sma(closes, 60)
+                ma60_now = ts60[-1]
+                ma60_prev = ts60[-61]
+                if ma60_now and ma60_prev and ma60_prev > 0 and ma60_now == ma60_now:
+                    if ma60_now > ma60_prev:
+                        trend_ok = True       # MA60 上扬 → 整体上升
         except Exception:
             trend_ok = False
         if not trend_ok:
-            hit_list.append("(排除:横盘或下跌)")
+            hit_list.append("(排除:非上升趋势)")
 
         date = today or (bars[-1].get("day") or bars[-1].get("date") or "")
         val = lambda x: (round(float(x), 2) if not (x is None or (isinstance(x, float) and math.isnan(x))) else None)
         return {
-            "hit": score[0] == 5 and trend_ok,  # 全部满足且近几月小幅上升 才入池
+            "hit": score[0] == 5 and trend_ok,  # 全部满足且整体上升趋势 才入池
             "score": score[0],
             "detail": hit_list,
             "date": date,
