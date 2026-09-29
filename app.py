@@ -7171,6 +7171,28 @@ PATTERNS_NEED_WEEKLY_VETO = {
 }
 
 
+def _weekly_display_snap(bars: list[dict]) -> dict:
+    """仅作展示用的周线快照 (20260930): 当股票未通过周线一票否决时,
+    前置列表的"52周位"仍需显示, 因此独立计算位置/高低点等展示字段。
+    不参与任何否决/筛选逻辑。周线数据不足时返回空。"""
+    weekly = _aggregate_weekly(bars)
+    if len(weekly) < 20:
+        return {}
+    closes = [b["close"] for b in weekly]
+    highs = [b["high"] for b in weekly]
+    lows = [b["low"] for b in weekly]
+    ma20a = sma(closes, 20)
+    ma20v = ma20a[-1] if (len(ma20a) and not math.isnan(ma20a[-1])) else 0
+    c = closes[-1]
+    high52 = max(highs[-52:]) if len(highs) >= 1 else max(highs)
+    low52 = min(lows[-52:]) if len(lows) >= 1 else min(lows)
+    pos52 = (c - low52) / (high52 - low52) if high52 > low52 else 1.0
+    return {"w_ma5": 0, "w_ma10": 0, "w_ma20": round(ma20v, 2),
+            "w_ma30": 0, "w_ma60": 0,
+            "w_pos52": round(pos52, 3), "w_high52": round(high52, 2), "w_low52": round(low52, 2),
+            "w_vol_boost": False}
+
+
 def _weekly_veto_check(bars: list[dict]) -> tuple[bool, dict]:
     """周线一票否决检查 (作为底仓逻辑, 同时应用于日线向上形态)。
     返回 (是否通过否决, 周线指标快照)。
@@ -7479,6 +7501,10 @@ def _ma_scan_job():
             pat = classify_ma_pattern(bars)  # 均线形态; 可能为None(此时仅可能命中背离tab)
             # 周线均线形态筛选 (A/B/C三类 + 一票否决)
             weekly_pats, weekly_snap = classify_weekly_ma_pattern(bars)
+            # 未通过周线否决时, weekly_snap 为空 → 补充"仅展示"周线快照, 使前置列表52周位照常显示 (20260930)
+            _veto_pass_orig = bool(weekly_snap)
+            if not _veto_pass_orig:
+                weekly_snap = _weekly_display_snap(bars)
             closes = [b["close"] for b in bars]
             ma5 = sma(closes, 5)
             ma10 = sma(closes, 10)
@@ -7519,8 +7545,8 @@ def _ma_scan_job():
             macd_bottom = _calc_macd_bottom_diverge(closes, lows_a, dif_arr)
             # 收集该股票命中的所有 tab (均线形态 + 背离 + 周线形态可同时命中)
             pats = []
-            # 周线一票否决: weekly_snap 非空=通过, 空=未通过
-            veto_pass = bool(weekly_snap)
+            # 周线一票否决: 用补充快照前的原始状态判断 (20260930)
+            veto_pass = _veto_pass_orig
             if pat and ma_pass:
                 if pat in PATTERNS_NEED_WEEKLY_VETO and not veto_pass:
                     pass  # 周线否决未通过, 剔除
