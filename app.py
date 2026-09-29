@@ -1636,25 +1636,23 @@ def det_early_signal(bars, today=None) -> dict:
     try:
         if not bars or len(bars) < 60:
             return {"hit": False, "detail": ["数据不足"]}
-        # --- 缠论结构 (strokes内 i 为原始K线下标) ---
+        # --- 缠论结构 (strokes/segments 内 i 为原始K线下标) ---
         ch = chan_analysis(bars, start_dir="auto")
         streaks = ch.get("strokes") or []
-        # 完成的笔 = 全部相邻分型连线中, 除去最末一段(尚未被反向分型封闭=未完成笔)
-        # 最近3个完成的笔 = completed 的最后3条
+        segs = ch.get("segments") or []
         details = []
         up_line = False
         bottom_flag = False
-        if len(streaks) >= 4:
-            completed = streaks[:-1]          # 排除最末未完成笔
-            if len(completed) >= 3:
-                s3 = completed[-3:]
-                # 2) 3笔连接成的线段向上: 首笔向上 + 末笔向上 + 末端价高于首笔起点价(整体抬升)
-                up_line = (s3[0]["dir"] == "up" and s3[-1]["dir"] == "up"
-                           and s3[-1]["p1"] > s3[0]["p0"])
-            unfinished = streaks[-1]          # 最新未完成的笔
-            bottom_flag = _early_bottom_in(bars, unfinished["i0"], unfinished["i1"])
+        # 2) 最新连接的线段方向向上: 取缠论已划分的"最新一条线段"(由≥3笔构成),
+        #    其方向即用户在K线浮窗看到的最后走势方向 —— 向下则剔除(如 中矿资源)。
+        if segs:
+            last_seg = segs[-1]
+            up_line = last_seg.get("dir") == "up"
+        # 3) 最新未完成的笔(strokes[-1])期间出现「底」标识
+        if streaks:
+            bottom_flag = _early_bottom_in(bars, streaks[-1]["i0"], streaks[-1]["i1"])
         else:
-            details.append("缠论笔画不足(需≥4)")
+            details.append("缠论笔画不足")
 
         if up_line:
             details.append("最近3完成笔线段向上")
