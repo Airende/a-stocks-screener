@@ -1597,6 +1597,110 @@ def calc_kdj(highs: list[float], lows: list[float], closes: list[float],
     return k, d, j
 
 
+def det_early_signal(bars, today=None) -> dict:
+    """独立选股信号「低位启动前」: 提前捕获 长期横盘收敛→地量低价→缠论背驰→即将放量突破 的票。
+    只用于发现池(early), 不参与 check_stock 逻辑。hit=True 表示全部条件满足即可入池。
+    全程 try/except 包裹, 绝不因单票数据问题抛异常影响扫描。"""
+    try:
+        if not bars or len(bars) < 120:
+            return {"hit": False, "detail": ["数据不足"]}
+        closes = [float(b["close"]) for b in bars]
+        highs = [float(b["high"]) for b in bars]
+        lows = [float(b["low"]) for b in bars]
+        vols = [float(b.get("volume", 0) or 0) for b in bars]
+        cur = closes[-1]
+        hit_list = []
+        score = [0]
+
+        def _c(name, cond):
+            if cond:
+                score[0] += 1
+                hit_list.append(name)
+
+        # 1 长期横盘收敛(放宽): 近60根振幅<30% 且 MA20/MA60 均线粘合
+        win_hi = max(highs[-60:])
+        win_lo = min(lows[-60:])
+        amp = (win_hi - win_lo) / cur if cur else 1.0
+        ma20 = sma(closes, 20)[-1]
+        ma60 = sma(closes, 60)[-1]
+        ma_glue = False
+        try:
+            if ma60 and not math.isnan(ma60) and ma60 != 0:
+                ma_glue = abs(ma20 - ma60) / ma60 < 0.08
+        except Exception:
+            ma_glue = False
+        _c("横盘收敛", amp < 0.30 and ma_glue)
+
+        # 2 地量区: 近5日均量<近60日均量x0.6 且 近60根存在地量(<=均量x0.5)
+        v5 = sum(vols[-5:]) / 5
+        v60 = sum(vols[-60:]) / 60
+        min60 = min(vols[-60:])
+        _c("地量区", v60 > 0 and v5 < v60 * 0.6 and min60 <= v60 * 0.5)
+
+        # 3 低价企稳: (close-区间低)/(区间高-区间低)<0.35 且 近20根未创新低
+        pos = (cur - win_lo) / (win_hi - win_lo) if win_hi > win_lo else 1.0
+        low20 = min(lows[-20:])
+        _c("低价企稳", pos < 0.35 and low20 > win_lo * 0.97)
+
+        # 4 日KDJ低位: J<35 或 刚低位金叉(K>D且前一日K<=D且K<40)
+        K, D, J = calc_kdj(highs, lows, closes)
+        j = J[-1]
+        kk, dd = K[-1], D[-1]
+        prev_k, prev_d = K[-2], D[-2]
+        try:
+            if math.isnan(j):
+                j = 50.0
+        except Exception:
+            j = 50.0
+        kdj_low = False
+        try:
+            kdj_low = (j < 35) or (kk > dd and prev_k <= prev_d and kk < 40)
+        except Exception:
+            kdj_low = False
+        _c("日KDJ低位", kdj_low)
+
+        # 5 周KDJ低位: 周线聚合后周J<45
+        wj = 50.0
+        try:
+            wk = _agg_week(bars)
+            if len(wk) >= 9:
+                wK, wD, wJ = calc_kdj(
+                    [b["high"] for b in wk], [b["low"] for b in wk], [b["close"] for b in wk])
+                wj = wJ[-1]
+                if math.isnan(wj):
+                    wj = 50.0
+        except Exception:
+            wj = 50.0
+        _c("周KDJ低位", wj < 45)
+
+        # 6 缠论背驰企稳(近似): (a) KDJ底背离 True 或 (b) 近5日企稳
+        hit6 = False
+        try:
+            if _calc_kdj_bottom_diverge(closes, highs, lows, J):
+                hit6 = True
+            else:
+                up_bar = any(closes[i] >= closes[i - 1] for i in range(-5, 0))
+                recent_lo = min(lows[-3:])
+                prev10_lo = min(lows[-10:-3]) if len(lows) >= 10 else min(lows[:-3])
+                hit6 = up_bar and recent_lo >= prev10_lo
+        except Exception:
+            hit6 = False
+        _c("缠论背驰企稳", hit6)
+
+        date = today or (bars[-1].get("day") or bars[-1].get("date") or "")
+        val = lambda x: (round(float(x), 2) if not (x is None or (isinstance(x, float) and math.isnan(x))) else None)
+        return {
+            "hit": score[0] == 6,  # 全部满足即入池
+            "score": score[0],
+            "detail": hit_list,
+            "date": date,
+            "j": val(j),
+            "wj": val(wj),
+        }
+    except Exception:  # noqa: BLE001
+        return {"hit": False, "detail": ["error"]}
+
+
 # ============================================================
 # 交易日工具 (工作日近似, 不含节假日)
 # ============================================================
@@ -5130,10 +5234,25 @@ def run_screen(conds=None) -> dict:
                     break
                 time.sleep(0.5 * (attempt + 1))
             if not bars:
-                return None
-            return check_stock(r, bars, conds)
+                return None, None
+            # 独立通道: 提前·低位启动前信号 (与 check_stock 互不影响)
+            chgs = daily_changes(bars)
+            early = None
+            try:
+                d = det_early_signal(bars)
+                if d.get("hit"):
+                    early = {
+                        "code": r.get("code"), "symbol": r.get("symbol"), "name": r.get("name"),
+                        "close": bars[-1]["close"],
+                        "chg": round(chgs[-1], 2) if not math.isnan(chgs[-1]) else 0,
+                        "found": d.get("date"), "j": d.get("j"), "wj": d.get("wj"),
+                        "detail": d.get("detail"), "score": d.get("score"),
+                    }
+            except Exception:  # noqa: BLE001
+                early = None
+            return check_stock(r, bars, conds), early
         except Exception:  # noqa: BLE001
-            return None
+            return None, None
 
     # 激活组与必选/可选分组
     # gA(趋势结构) gD(风控) 为必选组: 激活时必须通过, 否则不纳入
@@ -5146,15 +5265,18 @@ def run_screen(conds=None) -> dict:
     flex_threshold = max(0, n_flex - 1) if n_flex > 0 else 0
 
     results: list[dict] = []
+    early: list[dict] = []
     futs = [POOL.submit(work, r) for r in candidates]
     # 20260909: as_completed + result 均加超时, 避免个别 fetch_kline 卡死拖死全扫描
     # 20260910: 全局并发降至6后总耗时上升, 超时放宽到30分钟
     for f in as_completed(futs, timeout=1800):
         try:
-            res = f.result(timeout=120)
+            res, early_rec = f.result(timeout=120)
         except Exception:  # noqa: BLE001
-            res = None
+            res, early_rec = None, None
         done_cnt[0] += 1
+        if early_rec:
+            early.append(early_rec)
         if not res:
             if done_cnt[0] % 100 == 0 or done_cnt[0] == total_cand:
                 _set_screen_progress(f"拉取K线 {done_cnt[0]}/{total_cand}…")
@@ -5222,6 +5344,8 @@ def run_screen(conds=None) -> dict:
         "near_count": len(near),
         "exact": exact,
         "stocks": near,  # 接近满足列表
+        "early": early[:200],  # 低位启动前·发现池 (轻量截断控制载荷)
+        "early_count": len(early),
         "conds": sorted(conds),
         "n_active": n_active,
         "active": active_g,
@@ -5265,6 +5389,8 @@ def _run_screen_thread(conds=None):
                 "matched": data.get("matched"), "near_count": data.get("near_count"),
                 "exact": (data.get("exact") or [])[:100],
                 "stocks": (data.get("stocks") or [])[:60],
+                "early": [[r.get("code"), r.get("name"), r.get("found")]
+                          for r in (data.get("early") or [])],
             })
         except Exception as ae:  # noqa: BLE001
             print(f"[archive] 筛选结果归档失败: {ae}", flush=True)
@@ -8079,6 +8205,11 @@ def _collect_day_signals(rec: dict, code6: str):
             if _stock_code6(it.get("code", "")) == code6:
                 hits.append({"name": name, "ch": glyph[0], "color": glyph[1]})
                 break
+    # 低位启动前·发现池: rec["screen"]["early"] 每项为 [code, name, found]
+    for it in (rec.get("screen") or {}).get("early") or []:
+        if _stock_code6(it[0]) == code6:
+            hits.append({"name": "低位启动前", "ch": "启", "color": "#e8890c"})
+            break
     return hits
 
 

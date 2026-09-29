@@ -1089,6 +1089,20 @@
         <tbody id="tbodyNear"></tbody>
       </table>
     </div>
+
+    <div class="sec-h" style="margin-top:24px" id="earlyHead">低位启动前·发现池 <span class="cnt" id="earlyCnt">0</span></div>
+    <div class="tbl-wrap">
+      <table id="tblEarly">
+        <thead><tr>
+          <th class="l">#</th><th class="l">股票</th>
+          <th>今日涨跌</th><th>现价</th>
+          <th title="日线KDJ的J值">日J</th><th title="周线KDJ的J值">周J</th>
+          <th class="l">发现日期</th>
+          <th class="l">满足条件</th>
+        </tr></thead>
+        <tbody id="tbodyEarly"></tbody>
+      </table>
+    </div>
   </div>
 
   <!-- Tab3: 个股分析 -->
@@ -1673,6 +1687,49 @@ function rowHTML(s,i,near){
     <td class="l col-opt">${tags}</td>
   </tr>`;
 }
+// ===== 低位启动前·发现池 =====
+function earlyRowHTML(e,i){
+  const dl=(e.detail||[]).map(x=>`<span class="tag">${esc(x)}</span>`).join(' ')||'—';
+  const detTxt=esc((e.detail||[]).join('、'));
+  const found=e.found||'';
+  const jv=(e.j==null)?'—':e.j, wv=(e.wj==null)?'—':e.wj;
+  return `<tr class="early-tr" data-found="${esc(found)}" data-name="${esc(e.name||'')}" style="cursor:help">
+    <td class="l">${i+1}</td>
+    <td class="l">${markNameHtml(e.code,e.name,e.close)}<div class="code"><a class="cd-link"  href="https://stockpage.10jqka.com.cn/${e.code}/" target="_blank" rel="noopener" onclick="openStock('${e.code}','${e.name}',event)">${mkt(e.code)}</a></div></td>
+    <td>${fmtPct(e.chg)}</td>
+    <td>${e.close}</td>
+    <td>${jv}</td>
+    <td>${wv}</td>
+    <td class="l">${esc(found)||'—'}</td>
+    <td class="l"><span style="cursor:help" title="${detTxt}">${dl}</span></td>
+  </tr>`;
+}
+// 行级 hover toast: 于 {found} 发现此票 (跟随鼠标, 移出隐藏)
+let _earlyTip=null;
+function showEarlyTip(found,name){
+  if(!_earlyTip){ _earlyTip=document.createElement('div'); _earlyTip.id='earlyTip'; document.body.appendChild(_earlyTip); }
+  _earlyTip.style.cssText='position:fixed;z-index:99999;pointer-events:none;display:block;background:var(--panel2);color:var(--txt);padding:8px 12px;border-radius:8px;font-size:12.5px;line-height:1.5;border:1px solid var(--border);box-shadow:0 4px 18px rgba(0,0,0,.35);max-width:320px';
+  const nm=name?'<b>'+esc(name)+'</b><br/>':'';
+  _earlyTip.innerHTML = nm+'于 <b>'+esc(found)+'</b> 发现此票';
+}
+function moveEarlyTip(ev){
+  if(!_earlyTip) return;
+  _earlyTip.style.left=(ev.clientX+14)+'px';
+  _earlyTip.style.top=(ev.clientY+14)+'px';
+}
+function hideEarlyTip(){ if(_earlyTip) _earlyTip.style.display='none'; }
+(function(){
+  document.body.addEventListener('mouseover', ev=>{
+    const tr=(ev.target&&ev.target.closest)?ev.target.closest('.early-tr'):null;
+    if(tr) showEarlyTip(tr.dataset.found, tr.dataset.name);
+  });
+  document.body.addEventListener('mousemove', moveEarlyTip);
+  document.body.addEventListener('mouseout', ev=>{
+    const tr=(ev.target&&ev.target.closest)?ev.target.closest('.early-tr'):null;
+    const to=(ev.relatedTarget&&ev.relatedTarget.closest)?ev.relatedTarget.closest('.early-tr'):null;
+    if(tr && !to) hideEarlyTip();
+  });
+})();
 function render(d, syncConds=true){
   const na=d.n_active||4;
   const act=d.active||{gA:1,gB:1,gC:1,gD:1};
@@ -1695,6 +1752,12 @@ function render(d, syncConds=true){
   $('#tbodyNear').innerHTML = !nr.length
     ? '<tr><td colspan="12" class="empty">暂无接近满足的标的</td></tr>'
     : nr.map((s,i)=>rowHTML(s,i,true)).join('');
+  // 低位启动前·发现池 (独立信号, 与 exact/stocks 无关; 无分页一次全展示)
+  const ew=d.early||[];
+  $('#earlyHead').innerHTML = `低位启动前·发现池 <span class="cnt">${ew.length}</span>`;
+  $('#tbodyEarly').innerHTML = !ew.length
+    ? '<tr><td colspan="8" class="empty">暂无「低位启动前」标的 (需同时满足: 横盘收敛/地量区/低价企稳/日KDJ低位/周KDJ低位/缠论背驰企稳)</td></tr>'
+    : ew.map((e,i)=>earlyRowHTML(e,i)).join('');
   // 同步勾选状态为本次筛选使用的conds (刷新操作不打断用户未提交的勾选)
   if(syncConds && Array.isArray(d.conds) && d.conds.length){
     renderConds(d.conds);
