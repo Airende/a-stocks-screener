@@ -7503,6 +7503,17 @@ def _ma_scan_job():
                 ma_pass = ok
             # 背离判定: KDJ/MACD底背离 → 合并为"日线背离" tab (20260920 二合一)
             k_arr, d_arr, j_arr = calc_kdj(highs_a, lows_a, closes)
+            # 日J / 周J (20260930): 均线形态列表全 tab 展示, 供前端在"现价"后显示
+            day_j = round(j_arr[-1], 2) if (len(j_arr) > 0 and not math.isnan(j_arr[-1])) else None
+            week_j = None
+            _wk_bars = _aggregate_weekly(bars)
+            if len(_wk_bars) >= 3:
+                _wk_h = [b["high"] for b in _wk_bars]
+                _wk_l = [b["low"] for b in _wk_bars]
+                _wk_c = [b["close"] for b in _wk_bars]
+                _wk, _wd, _wj = calc_kdj(_wk_h, _wk_l, _wk_c)
+                if len(_wj) > 0 and not math.isnan(_wj[-1]):
+                    week_j = round(_wj[-1], 2)
             dif_arr, _dea_arr, _hist_arr = calc_macd(closes)
             kdj_bottom = _calc_kdj_bottom_diverge(closes, highs_a, lows_a, j_arr)
             macd_bottom = _calc_macd_bottom_diverge(closes, lows_a, dif_arr)
@@ -7542,6 +7553,8 @@ def _ma_scan_job():
                 "code": cand["code"], "name": cand["name"],
                 "price": round(closes[-1], 2),
                 "change_pct": round(chg, 2),
+                "day_j": day_j,
+                "week_j": week_j,
                 "atr_pct": round(atr_pct, 2),
                 "atr_shrink": bool(atr_shrink),
                 "kdj_db": bool(kdj_bottom),

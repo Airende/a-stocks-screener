@@ -4219,7 +4219,7 @@ let maSortMode='atr';
 let maSortDir='desc';
 let maFilterConcept=null; // 当前选中的板块筛选(null=全部)
 // 数值列排序: data-sort → 股票字段名 (20260925)
-const MA_NUMERIC_SORTS={chg:'change_pct',price:'price',atr:'atr_pct',amount:'amount_yi'};
+const MA_NUMERIC_SORTS={chg:'change_pct',price:'price',day_j:'day_j',week_j:'week_j',atr:'atr_pct',amount:'amount_yi'};
 let maQuickFilter=''; // 快速过滤: 代码/名称子串(大小写不敏感)
 // ATR过滤勾选项 (20260918): 多选满足其一, 默认选中第二、三个
 let maAtrConds = [];  // ATR过滤UI已移除(20260925): 不过滤, 列表仍显示ATR%列
@@ -4267,7 +4267,6 @@ function renderMAHeaders(){
       ${extra}
       <th class="l">买卖点</th>`;
   } else {
-    const isEarly = MA_PATS[maCurrentTab][0]==='低位启动前';
     el.innerHTML = `
       <th class="l ma-th" data-sort="default" >#</th>
       <th class="l ma-th" data-sort="default" >股票</th>
@@ -4275,9 +4274,10 @@ function renderMAHeaders(){
       <th class="l ma-th col-opt" data-sort="concept" >所属板块 <span class="sort-arrow"></span></th>
       <th class="ma-th" data-sort="chg">今日涨跌 <span class="sort-arrow"></span></th>
       <th class="ma-th" data-sort="price">现价 <span class="sort-arrow"></span></th>
+      <th class="ma-th" data-sort="day_j">日J <span class="sort-arrow"></span></th>
+      <th class="ma-th" data-sort="week_j">周J <span class="sort-arrow"></span></th>
       <th class="ma-th" data-sort="atr">ATR% <span class="sort-arrow"></span></th>
-      <th class="ma-th col-opt" data-sort="amount">成交额(亿) <span class="sort-arrow"></span></th>
-      ${isEarly?`<th class="ma-th">日J</th><th class="ma-th">周J</th>`:''}`;
+      <th class="ma-th col-opt" data-sort="amount">成交额(亿) <span class="sort-arrow"></span></th>`;
   }
 }
 function renderMATabs(){
@@ -4586,13 +4586,8 @@ function maRowHtml(s,i){
     const boostTag = s.w_vol_boost ? ' <span style="color:var(--gold)">🔥放量</span>' : '';
     weeklyLine = `<div class="code" style="color:var(--sub);font-size:11px">52周位:<span style="color:${posColor}">${((s.w_pos52||0)*100).toFixed(2)}%</span>${boostTag}</div>`;
   }
-  // 低位启动前 tab: 附加 日J/周J 列 (20260930, 发现日期列已删)
-  let earlyCells = '';
-  if(curPat==='低位启动前'){
-    const jv = (v)=> (v!=null&&!isNaN(v)) ? '<span style="color:'+(v<30?'var(--down)':(v>=80?'var(--sub)':'var(--gold)'))+';font-weight:600">'+ Number(v).toFixed(1) +'</span>' : '—';
-    earlyCells = `<td>${jv(s.early_j)}</td>
-      <td>${jv(s.early_wj)}</td>`;
-  }
+  // 日J/周J (20260930): 全 tab 展示, 过百标红 (var(--up) 红色系), 低于30弱, 高值警示
+  const jv = (v)=> (v!=null&&!isNaN(v)) ? '<span style="color:'+(v>=100?'var(--up)':(v>=80?'var(--sub)':(v<30?'var(--down)':'var(--gold)')))+';font-weight:600">'+ Number(v).toFixed(1) +'</span>' : '—';
   return `<tr class="${curPat==='低位启动前'?'early-row':''}">
     <td class="l">${i+1}</td>
     <td class="l">${markNameHtml(s.code,s.name,s.price)}<div class="code"><a class="cd-link"  href="https://stockpage.10jqka.com.cn/${s.code}/" target="_blank" rel="noopener" onclick="openStock('${s.code}','${s.name}',event)">${mkt(s.code)}</a></div>${weeklyLine}</td>
@@ -4600,9 +4595,10 @@ function maRowHtml(s,i){
     <td class="l col-opt">${conHtml}</td>
     <td>${fmtPct(s.change_pct)}</td>
     <td>${s.price}</td>
+    <td>${jv(s.day_j)}</td>
+    <td>${jv(s.week_j)}</td>
     <td>${s.atr_pct!=null? '<span style="color:'+(s.atr_pct>=8?'var(--up)':(s.atr_pct<4?'var(--sub)':'var(--gold)'))+'">'+s.atr_pct+'%</span>':'—'}</td>
     <td class="col-opt">${s.amount_yi}</td>
-    ${earlyCells}
   </tr>`;
 }
 // 更新表头排序箭头
