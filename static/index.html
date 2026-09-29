@@ -5054,7 +5054,7 @@ async function loadIndicesRealtime(){
   try{
     const r=await fetch('/api/market-indices-realtime');
     const d=await r.json();
-    _idxTickMs = d.trading ? 1000 : 60000;
+    _idxTickMs = d.trading ? 3000 : 60000;
     if(_lastSnap && _lastSnap.indices){
       const rtMap={};
       (d.indices||[]).forEach(x=>rtMap[x.symbol]=x);
