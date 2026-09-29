@@ -4270,14 +4270,14 @@ function renderMAHeaders(){
     el.innerHTML = `
       <th class="l ma-th" data-sort="default" >#</th>
       <th class="l ma-th" data-sort="default" >股票</th>
-      <th class="l ma-th col-opt" data-sort="industry" >行业 <span class="sort-arrow"></span></th>
-      <th class="l ma-th col-opt" data-sort="concept" >所属板块 <span class="sort-arrow"></span></th>
-      <th class="ma-th" data-sort="chg">今日涨跌 <span class="sort-arrow"></span></th>
       <th class="ma-th" data-sort="price">现价 <span class="sort-arrow"></span></th>
+      <th class="ma-th" data-sort="chg">今日涨跌 <span class="sort-arrow"></span></th>
       <th class="ma-th" data-sort="day_j">日J <span class="sort-arrow"></span></th>
       <th class="ma-th" data-sort="week_j">周J <span class="sort-arrow"></span></th>
+      <th class="ma-th col-opt" data-sort="amount">成交额(亿) <span class="sort-arrow"></span></th>
       <th class="ma-th" data-sort="atr">ATR% <span class="sort-arrow"></span></th>
-      <th class="ma-th col-opt" data-sort="amount">成交额(亿) <span class="sort-arrow"></span></th>`;
+      <th class="l ma-th col-opt" data-sort="industry" >行业 <span class="sort-arrow"></span></th>
+      <th class="l ma-th col-opt" data-sort="concept" >所属板块 <span class="sort-arrow"></span></th>`;
   }
 }
 function renderMATabs(){
@@ -4591,14 +4591,14 @@ function maRowHtml(s,i){
   return `<tr class="${curPat==='低位启动前'?'early-row':''}">
     <td class="l">${i+1}</td>
     <td class="l">${markNameHtml(s.code,s.name,s.price)}<div class="code"><a class="cd-link"  href="https://stockpage.10jqka.com.cn/${s.code}/" target="_blank" rel="noopener" onclick="openStock('${s.code}','${s.name}',event)">${mkt(s.code)}</a></div>${weeklyLine}</td>
-    <td class="l col-opt">${indHtml}</td>
-    <td class="l col-opt">${conHtml}</td>
-    <td>${fmtPct(s.change_pct)}</td>
     <td>${s.price}</td>
+    <td>${fmtPct(s.change_pct)}</td>
     <td>${jv(s.day_j)}</td>
     <td>${jv(s.week_j)}</td>
-    <td>${s.atr_pct!=null? '<span style="color:'+(s.atr_pct>=8?'var(--up)':(s.atr_pct<4?'var(--sub)':'var(--gold)'))+'">'+s.atr_pct+'%</span>':'—'}</td>
     <td class="col-opt">${s.amount_yi}</td>
+    <td>${s.atr_pct!=null? '<span style="color:'+(s.atr_pct>=8?'var(--up)':(s.atr_pct<4?'var(--sub)':'var(--gold)'))+'">'+s.atr_pct+'%</span>':'—'}</td>
+    <td class="l col-opt">${indHtml}</td>
+    <td class="l col-opt">${conHtml}</td>
   </tr>`;
 }
 // 更新表头排序箭头
