@@ -1683,30 +1683,32 @@ def det_early_signal(bars, today=None) -> dict:
             hit5 = False
         _c("短线企稳", hit5)
 
-        # 硬否决(20260929): 近几个月(近60交易日)阴跌的票一律剔除
-        #   阴跌 = MA5<MA10<MA20(空头排列) 且 近20日均值<前20日均值(重心下移) 且 近20日低点<前20日低点(低点走低)
-        declining = False
+        # 近几个月方向过滤(20260929): 只要'小幅上升'; 剔除 长时间横盘 与 长期下跌
+        #   ret40 = 近40交易日收盘相对40日前收盘涨跌幅;  amp40 = 近40日振幅
+        #   下跌(ret40<0)→剔除; 横盘(amp40<8% 且 |ret40|<5%)→剔除; 上升(ret40≥0且非横盘)→保留
+        trend_ok = False
         try:
-            if len(closes) >= 60:
-                ma5 = sum(closes[-5:]) / 5
-                ma10 = sum(closes[-10:]) / 10
-                ma20 = sum(closes[-20:]) / 20
-                if ma5 < ma10 < ma20:
-                    recent20 = sum(closes[-20:]) / 20
-                    prev20 = sum(closes[-40:-20]) / 20
-                    lo_recent20 = min(closes[-20:])
-                    lo_prev20 = min(closes[-40:-20])
-                    if recent20 < prev20 and lo_recent20 < lo_prev20:
-                        declining = True
+            if len(closes) >= 41:
+                anchor = closes[-41]
+                ret40 = cur / anchor - 1 if anchor > 0 else 0.0
+                hi40 = max(highs[-40:])
+                lo40 = min(lows[-40:])
+                amp40 = hi40 / lo40 - 1 if lo40 > 0 else 1.0
+                if ret40 < 0:
+                    trend_ok = False                     # 长期下跌 → 剔除
+                elif amp40 < 0.08 and abs(ret40) < 0.05:
+                    trend_ok = False                     # 长时间横盘 → 剔除
+                else:
+                    trend_ok = True                      # 近几月小幅上升 → 保留
         except Exception:
-            declining = False
-        if declining:
-            hit_list.append("(排除:近几月阴跌)")
+            trend_ok = False
+        if not trend_ok:
+            hit_list.append("(排除:横盘或下跌)")
 
         date = today or (bars[-1].get("day") or bars[-1].get("date") or "")
         val = lambda x: (round(float(x), 2) if not (x is None or (isinstance(x, float) and math.isnan(x))) else None)
         return {
-            "hit": score[0] == 5 and not declining,  # 全部满足且非近几月阴跌 才入池
+            "hit": score[0] == 5 and trend_ok,  # 全部满足且近几月小幅上升 才入池
             "score": score[0],
             "detail": hit_list,
             "date": date,
