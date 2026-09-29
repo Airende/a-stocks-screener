@@ -1643,11 +1643,13 @@ def det_early_signal(bars, today=None) -> dict:
         details = []
         up_line = False
         bottom_flag = False
-        # 2) 最新连接的线段方向向上: 取缠论已划分的"最新一条线段"(由≥3笔构成),
-        #    其方向即用户在K线浮窗看到的最后走势方向 —— 向下则剔除(如 中矿资源)。
+        # 2) 最新连接的线段方向向上: 取缠论"最新一条线段"(由≥3笔构成, 方向即浮窗所见)
+        #    + 收紧: 线段终点价 ≥ 起点价×1.02 —— 向上且明显抬升(≥2%), 排除"微抬/勉强向上"。
         if segs:
             last_seg = segs[-1]
             up_line = last_seg.get("dir") == "up"
+            if up_line and last_seg.get("p1") and last_seg.get("p0") and last_seg["p0"] > 0:
+                up_line = last_seg["p1"] >= last_seg["p0"] * 1.02
         # 3) 最新未完成的笔(strokes[-1])期间出现「底」标识
         if streaks:
             bottom_flag = _early_bottom_in(bars, streaks[-1]["i0"], streaks[-1]["i1"])
