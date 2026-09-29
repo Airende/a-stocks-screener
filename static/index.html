@@ -470,6 +470,8 @@
   .ma-th:hover{color:var(--accent)}
   .ma-th .sort-arrow{display:inline-block;width:12px;font-size:10px;color:var(--accent);margin-left:2px}
   .ma-th.active-sort{color:var(--accent)}
+  /* 均线形态列表: 数字列居中 (现价/今日涨跌/日J/周J/成交额/ATR%) 20260930 */
+  #tblMA td.ma-c{text-align:center}
   .ma-grp-badge{display:inline-block;font-size:10px;color:var(--sub);background:var(--tag);border-radius:3px;padding:0 4px;margin-left:4px}
   /* 日周共振/埋伏型标签 (20260920): 共振=淡金(淡化), 周线回踩/底部反转=中性底色 */
   .res-tag{display:inline-block;font-size:10px;font-weight:600;border-radius:3px;padding:0 4px;margin-left:4px;vertical-align:middle}
@@ -4591,12 +4593,12 @@ function maRowHtml(s,i){
   return `<tr class="${curPat==='低位启动前'?'early-row':''}">
     <td class="l">${i+1}</td>
     <td class="l">${markNameHtml(s.code,s.name,s.price)}<div class="code"><a class="cd-link"  href="https://stockpage.10jqka.com.cn/${s.code}/" target="_blank" rel="noopener" onclick="openStock('${s.code}','${s.name}',event)">${mkt(s.code)}</a></div>${weeklyLine}</td>
-    <td>${s.price}</td>
-    <td>${fmtPct(s.change_pct)}</td>
-    <td>${jv(s.day_j)}</td>
-    <td>${jv(s.week_j)}</td>
-    <td class="col-opt">${s.amount_yi}</td>
-    <td>${s.atr_pct!=null? '<span style="color:'+(s.atr_pct>=8?'var(--up)':(s.atr_pct<4?'var(--sub)':'var(--gold)'))+'">'+s.atr_pct+'%</span>':'—'}</td>
+    <td class="ma-c">${s.price}</td>
+    <td class="ma-c">${fmtPct(s.change_pct)}</td>
+    <td class="ma-c">${jv(s.day_j)}</td>
+    <td class="ma-c">${jv(s.week_j)}</td>
+    <td class="ma-c col-opt">${s.amount_yi}</td>
+    <td class="ma-c">${s.atr_pct!=null? '<span style="color:'+(s.atr_pct>=8?'var(--up)':(s.atr_pct<4?'var(--sub)':'var(--gold)'))+'">'+s.atr_pct+'%</span>':'—'}</td>
     <td class="l col-opt">${indHtml}</td>
     <td class="l col-opt">${conHtml}</td>
   </tr>`;
