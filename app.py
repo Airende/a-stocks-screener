@@ -1597,119 +1597,82 @@ def calc_kdj(highs: list[float], lows: list[float], closes: list[float],
     return k, d, j
 
 
-def det_early_signal(bars, today=None) -> dict:
-    """独立选股信号「低位启动前」(20260929 第2版): 先放量后底量+低价企稳+日/周KDJ低位+短线企稳。
-    只用于发现池(early)/均线低位启动前tab, 不参与 check_stock 逻辑。hit=True 表示全部条件满足即可入池。
-    全程 try/except 包裹, 绝不因单票数据问题抛异常影响扫描。"""
+def _early_bottom_in(bars, i0, i1) -> bool:
+    """在 bars 的 K线区间 [i0,i1] 内, 判定任一天是否出现「底」标识(极致底量)。
+    口径与该bar前60根一致: 量 ≤ 前60日最低量×1.15 或 量 ≤ 前60日均量×0.6, 满足其一。
+    注: 与 classify_bottom_volume / K线浮窗"底量低价"标注的"底"标识口径保持一致(纯量能)。"""
     try:
-        if not bars or len(bars) < 120:
-            return {"hit": False, "detail": ["数据不足"]}
-        closes = [float(b["close"]) for b in bars]
-        highs = [float(b["high"]) for b in bars]
-        lows = [float(b["low"]) for b in bars]
-        vols = [float(b.get("volume", 0) or 0) for b in bars]
-        cur = closes[-1]
-        hit_list = []
-        score = [0]
-
-        def _c(name, cond):
-            if cond:
-                score[0] += 1
-                hit_list.append(name)
-
-        W = 60          # 量能基准窗口: 前60根(与'底'标识口径一致)
-        NEAR = 5        # 底量回溯窗口: 最近5个交易日
-        win_hi = max(highs[-60:])
-        win_lo = min(lows[-60:])
-
-        # 1 放量后底量: 先有一波放量(前60日峰值量≥60日均量x1.8); 再近5日内出现'底'标识量能
-        #   (底量口径=该bar前60根: 量≤最低量x1.15 或 量≤均量x0.6, 满足其一, 与 classify_bottom_volume 一致)
-        v60_all = sum(vols[-60:]) / 60
-        pre = vols[-60:-5] or vols[-60:]
-        peak = max(pre) if pre else 0.0
-        had_surge = v60_all > 0 and peak >= v60_all * 1.8
-        near_bottom = False
-        for i in range(max(W, len(vols) - NEAR), len(vols)):
-            v = vols[i]
-            if v <= 0:
+        n = len(bars)
+        W = 60
+        a = max(i0, W)
+        b = min(i1, n - 1)
+        if a > b or a >= n:
+            return False
+        for i in range(a, b + 1):
+            vol = float(bars[i].get("volume") or 0)
+            if vol <= 0:
                 continue
-            seg = vols[i - W:i]
-            vmin = min(seg) if seg else 0.0
-            vavg = sum(seg) / W if len(seg) == W else 0.0
+            prev = bars[i - W:i]
+            if len(prev) < W:
+                continue
+            vmin = min(float(p["volume"]) for p in prev)
+            vavg = sum(float(p["volume"]) for p in prev) / W
             if vavg <= 0 or vmin <= 0:
                 continue
-            if (v <= vmin * 1.15) or (v <= vavg * 0.6):
-                near_bottom = True
-                break
-        _c("放量后底量", v60_all > 0 and had_surge and near_bottom)
+            if (vol <= vmin * 1.15) or (vol <= vavg * 0.6):
+                return True
+    except Exception:  # noqa: BLE001
+        return False
+    return False
 
-        # 2 低价企稳: (现价-区间低)/(区间高-区间低)<0.35 且 近20根未创新低
-        pos = (cur - win_lo) / (win_hi - win_lo) if win_hi > win_lo else 1.0
-        low20 = min(lows[-20:])
-        _c("低价企稳", pos < 0.35 and low20 > win_lo * 0.97)
 
-        # 3 日KDJ低位: J<80
-        K, D, J = calc_kdj(highs, lows, closes)
-        j = J[-1]
-        try:
-            if math.isnan(j):
-                j = 50.0
-        except Exception:
-            j = 50.0
-        _c("日KDJ低位", j < 80)
+def det_early_signal(bars, today=None) -> dict:
+    """独立选股信号「低位启动前」(20260929 第3版, 全新条件):
+      1. ATR% ≥ 3            —— 由前端 ATR 过滤承担
+      2. 缠论最近 3 个完成的笔, 连接的线段方向向上
+      3. 最新未完成的笔期间出现「底」标识(极致底量)
+    只用于发现池(early)/均线低位启动前tab, 不参与 check_stock 逻辑。hit=True 表示全部满足即可入池。
+    全程 try/except 包裹, 绝不因单票数据问题抛异常影响扫描。"""
+    try:
+        if not bars or len(bars) < 60:
+            return {"hit": False, "detail": ["数据不足"]}
+        # --- 缠论结构 (strokes内 i 为原始K线下标) ---
+        ch = chan_analysis(bars, start_dir="auto")
+        streaks = ch.get("strokes") or []
+        # 完成的笔 = 全部相邻分型连线中, 除去最末一段(尚未被反向分型封闭=未完成笔)
+        # 最近3个完成的笔 = completed 的最后3条
+        details = []
+        up_line = False
+        bottom_flag = False
+        if len(streaks) >= 4:
+            completed = streaks[:-1]          # 排除最末未完成笔
+            if len(completed) >= 3:
+                s3 = completed[-3:]
+                # 2) 3笔连接成的线段向上: 首笔向上 + 末笔向上 + 末端价高于首笔起点价(整体抬升)
+                up_line = (s3[0]["dir"] == "up" and s3[-1]["dir"] == "up"
+                           and s3[-1]["p1"] > s3[0]["p0"])
+            unfinished = streaks[-1]          # 最新未完成的笔
+            bottom_flag = _early_bottom_in(bars, unfinished["i0"], unfinished["i1"])
+        else:
+            details.append("缠论笔画不足(需≥4)")
 
-        # 4 周KDJ低位: 周线聚合后 周J<80 (20260929 不再要求≥9根周K)
-        wj = 50.0
-        try:
-            wk = _agg_week(bars)
-            if wk:
-                wK, wD, wJ = calc_kdj(
-                    [b["high"] for b in wk], [b["low"] for b in wk], [b["close"] for b in wk])
-                wj = wJ[-1]
-                if math.isnan(wj):
-                    wj = 50.0
-        except Exception:
-            wj = 50.0
-        _c("周KDJ低位", wj < 80)
+        if up_line:
+            details.append("最近3完成笔线段向上")
+        else:
+            details.append("非向上线段")
+        if bottom_flag:
+            details.append("末笔内出现底标识")
+        else:
+            details.append("末笔内无底标识")
 
-        # 5 短线企稳 (20260929 已移除日KDJ底背离分支): 近5日有阳线 + 近3日最低≥前10日最低
-        hit5 = False
-        try:
-            up_bar = any(closes[i] >= closes[i - 1] for i in range(-5, 0))
-            recent_lo = min(lows[-3:])
-            prev10_lo = min(lows[-10:-3]) if len(lows) >= 10 else min(lows[:-3])
-            hit5 = up_bar and recent_lo >= prev10_lo
-        except Exception:
-            hit5 = False
-        _c("短线企稳", hit5)
-
-        # 整体趋势过滤(20260929): 只保留'整体上升趋势'确立的票
-        #   核心：MA60 相对60个交易日前上行(中长期均线上扬=近半年重心上移)
-        #   → 剔除 长期下跌 / 长时间横盘(MA60 走平或下行)。
-        #   注: 不强求"现价站上MA60", 因为低位启动前多为刚起步票, 现价常在MA60附近/下方。
-        trend_ok = False
-        try:
-            if len(closes) >= 61:
-                ts60 = sma(closes, 60)
-                ma60_now = ts60[-1]
-                ma60_prev = ts60[-61]
-                if ma60_now and ma60_prev and ma60_prev > 0 and ma60_now == ma60_now:
-                    if ma60_now > ma60_prev:
-                        trend_ok = True       # MA60 上扬 → 整体上升
-        except Exception:
-            trend_ok = False
-        if not trend_ok:
-            hit_list.append("(排除:非上升趋势)")
-
-        date = today or (bars[-1].get("day") or bars[-1].get("date") or "")
-        val = lambda x: (round(float(x), 2) if not (x is None or (isinstance(x, float) and math.isnan(x))) else None)
+        hit = up_line and bottom_flag
         return {
-            "hit": score[0] == 5 and trend_ok,  # 全部满足且整体上升趋势 才入池
-            "score": score[0],
-            "detail": hit_list,
-            "date": date,
-            "j": val(j),
-            "wj": val(wj),
+            "hit": hit,
+            "score": (1 if up_line else 0) + (1 if bottom_flag else 0),
+            "detail": details,
+            "date": today or (bars[-1].get("day") or bars[-1].get("date") or ""),
+            "j": None,   # 新条件不含KDJ, 前端该列显示"-"
+            "wj": None,
         }
     except Exception:  # noqa: BLE001
         return {"hit": False, "detail": ["error"]}
