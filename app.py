@@ -1642,24 +1642,17 @@ def det_early_signal(bars, today=None) -> dict:
         low20 = min(lows[-20:])
         _c("低价企稳", pos < 0.35 and low20 > win_lo * 0.97)
 
-        # 4 日KDJ低位: J<35 或 刚低位金叉(K>D且前一日K<=D且K<40)
+        # 4 日KDJ低位: 放宽 —— J<80 即算低位
         K, D, J = calc_kdj(highs, lows, closes)
         j = J[-1]
-        kk, dd = K[-1], D[-1]
-        prev_k, prev_d = K[-2], D[-2]
         try:
             if math.isnan(j):
                 j = 50.0
         except Exception:
             j = 50.0
-        kdj_low = False
-        try:
-            kdj_low = (j < 35) or (kk > dd and prev_k <= prev_d and kk < 40)
-        except Exception:
-            kdj_low = False
-        _c("日KDJ低位", kdj_low)
+        _c("日KDJ低位", j < 80)
 
-        # 5 周KDJ低位: 周线聚合后周J<45
+        # 5 周KDJ低位: 放宽 —— 周线聚合后周J<80
         wj = 50.0
         try:
             wk = _agg_week(bars)
@@ -1671,7 +1664,7 @@ def det_early_signal(bars, today=None) -> dict:
                     wj = 50.0
         except Exception:
             wj = 50.0
-        _c("周KDJ低位", wj < 45)
+        _c("周KDJ低位", wj < 80)
 
         # 6 缠论背驰企稳(近似): (a) KDJ底背离 True 或 (b) 近5日企稳
         hit6 = False
@@ -6868,7 +6861,9 @@ MA_PATTERNS = ["多头排列", "多头排列向上发散", "粘合向上突破",
                "日线背离",
                "周线A·强势主升", "周线·埋伏",
                # 缠论日线买卖点分组 (20260926): 最近一个出现的日线买点类型
-               "缠论·日线一买", "缠论·日线二买", "缠论·日线三买"]
+               "缠论·日线一买", "缠论·日线二买", "缠论·日线三买",
+               # 低位启动前 (20260929): 提前捕获 横盘收敛→地量低价→缠论背驰 的蓄势票
+               "低位启动前"]
 
 
 _CHAN_BUY_TAB = {"一买": "缠论·日线一买", "二买": "缠论·日线二买", "三买": "缠论·日线三买"}
@@ -7510,6 +7505,10 @@ def _ma_scan_job():
             _cb = _chan_day_buy_type(bars)
             if _cb and _cb in _CHAN_BUY_TAB:
                 pats.append(_CHAN_BUY_TAB[_cb])
+            # 低位启动前 (20260929): 提前地量信号, 命中加入自己的tab (独立判定, 与其他形态可并存)
+            _early = det_early_signal(bars)
+            if _early.get("hit"):
+                pats.append("低位启动前")
             if not pats:
                 return None
             # 买卖点分析
@@ -7555,6 +7554,10 @@ def _ma_scan_job():
                 "w_low52": weekly_snap.get("w_low52", 0),
                 "w_vol_boost": weekly_snap.get("w_vol_boost", False),
                 "weekly_pats": weekly_pats,
+                # 低位启动前 (20260929): 发现日期/日J/周J, 供前端该tab展示
+                "early_found": _early.get("date", ""),
+                "early_j": _early.get("j"),
+                "early_wj": _early.get("wj"),
             }
         futs = [POOL.submit(process_stock, c) for c in cands]
         for f in as_completed(futs):
@@ -8169,6 +8172,7 @@ _MA_SIG_GLYPH = {
     "上试盘·新信号":    ("观", "#f5c842"),
     "上试盘·观察池":    ("等", "#f5c842"),
     "上试盘·已确认":    ("买", "#f5c842"),
+    "低位启动前":       ("启", "#f5c842"),
 }
 # 上试盘归档的字段名 → 上试盘形态名 (ssp 用数组而非 patterns)
 _SSP_POOL_FIELD = [("new_signals", "上试盘·新信号"),

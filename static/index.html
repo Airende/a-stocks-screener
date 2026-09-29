@@ -4454,21 +4454,24 @@ const MA_PATS=[
   ['缠论·日线一买','日线缠论 一买：空头抛压衰竭、力度背驰确认底部（第一类买点），下跌趋势反转的介入契机'],
   ['缠论·日线二买','日线缠论 二买：一买后回抽不破前低（形成次低点），安全介入点'],
   ['缠论·日线三买','日线缠论 三买：突破最后中枢后回抽不回中枢，强势追涨点'],
+  // 低位启动前 (20260929): 提前捕获 横盘收敛→地量低价→KDJ低位→缠论背驰 的蓄势票
+  ['低位启动前','低位启动前·蓄势票：长期横盘收敛(近60日振幅<30%且MA20/MA60粘合) + 底量低价(近5日均量≤60日均量×0.6) + 低价企稳 + 日KDJ低位(J<80) + 周KDJ低位(周J<80) + 缠论背驰企稳。提前于多头排列发现，供底部蓄势跟踪'],
   // 上试盘策略 3 个池子（对应说明书 A/B/C 三栏）
   ['上试盘·新信号','A池：今日刚出现长上影试盘日，观察不买；待后续放量突破再入场'],
   ['上试盘·观察池','B池：10日确认窗口内，未破信号日最低价、未放量突破的股票，附待突破价'],
   ['上试盘·已确认','C池：今日刚放量×1.01突破试盘高点 + 量比≥2 + 沪深300在MA20上方，当日收盘买入'],
 ];
-// 上试盘起始 tab: 前 12 个为 日线+周线+地量+缠论 (4日+2周+3背离下跌+3缠, 放量滞涨已删), 12/13/14 为 A/B/C (20260926 新增缠论买卖点tab)
-const SSP_KIND_TAB_OFFSET = 12;
+// 上试盘起始 tab: 前 13 个为 日线+周线+地量+缠论+低位启动前 (4日+2周+3背离下跌+3缠+1低位, 放量滞涨已删), 13/14/15 为 A/B/C (20260929 新增低位启动前tab)
+const SSP_KIND_TAB_OFFSET = 13;
 // 子tab显示名 (20260918): 单字前缀·精简名, 表达分组 日/周/试; 仅用于渲染文本, 内部匹配仍用 p[0] 原名(后端 counts 按原名)
-// 顺序 (20260928, 与 MA_PATS 严格一一对应 0~14): 日多头→日发散→日粘合上突→日地量→周强势→
-//   周埋伏→日背离→日粘合下突→日空头发散→缠1/2/3买→试新信号/观察池/已确认
+// 顺序 (20260929, 与 MA_PATS 严格一一对应 0~15): 日多头→日发散→日粘合上突→日地量→周强势→
+//   周埋伏→日背离→日粘合下突→日空头发散→缠1/2/3买→低位启动前→试新信号/观察池/已确认
 const DISP_MA_NAME=[
   '日·多头排列','日·多头发散','日·粘合上突','日·地量',
   '周·强势主升','周·埋伏',
   '日·背离','日·粘合下突','日·空头发散',
   '缠·日线1买','缠·日线2买','缠·日线3买',
+  '日·低位启动前',
   '试·新信号','试·观察池','试·已确认'
 ];
 let maCurrentTab=0;
@@ -4526,6 +4529,7 @@ function renderMAHeaders(){
       ${extra}
       <th class="l">买卖点</th>`;
   } else {
+    const isEarly = MA_PATS[maCurrentTab][0]==='低位启动前';
     el.innerHTML = `
       <th class="l ma-th" data-sort="default" >#</th>
       <th class="l ma-th" data-sort="default" >股票</th>
@@ -4534,7 +4538,8 @@ function renderMAHeaders(){
       <th class="ma-th" data-sort="chg">今日涨跌 <span class="sort-arrow"></span></th>
       <th class="ma-th" data-sort="price">现价 <span class="sort-arrow"></span></th>
       <th class="ma-th" data-sort="atr">ATR% <span class="sort-arrow"></span></th>
-      <th class="ma-th col-opt" data-sort="amount">成交额(亿) <span class="sort-arrow"></span></th>`;
+      <th class="ma-th col-opt" data-sort="amount">成交额(亿) <span class="sort-arrow"></span></th>
+      ${isEarly?`<th class="l ma-th">发现日期</th><th class="ma-th">日J</th><th class="ma-th">周J</th>`:''}`;
   }
 }
 function renderMATabs(){
@@ -4543,6 +4548,7 @@ function renderMATabs(){
     "粘合向下突破":"跌","空头排列向下发散":"空","日线背离":"背","地量低价":"地",
     "周线A·强势主升":"周","周线·埋伏":"伏",
     "缠论·日线一买":"1买","缠论·日线二买":"2买","缠论·日线三买":"3买",
+    "低位启动前":"启",
     "上试盘·新信号":"观","上试盘·观察池":"等","上试盘·已确认":"买"};
   // 上试盘 3 个 tab 用 sspData.counts 显示数量
   const sspCounts=(sspData&&sspData.counts)||{};
@@ -4842,7 +4848,20 @@ function maRowHtml(s,i){
     const boostTag = s.w_vol_boost ? ' <span style="color:var(--gold)">🔥放量</span>' : '';
     weeklyLine = `<div class="code" style="color:var(--sub);font-size:11px">52周位:<span style="color:${posColor}">${((s.w_pos52||0)*100).toFixed(2)}%</span>${boostTag}</div>`;
   }
-  return `<tr>
+  // 低位启动前 tab: 附加 发现日期/日J/周J 列 (20260929), 且整行 hover 时在鼠标处提示发现日期
+  let earlyCells = '';
+  let earlyTip = '';
+  if(curPat==='低位启动前'){
+    const found = s.early_found || s.date || '—';
+    const jv = (v)=> (v!=null&&!isNaN(v)) ? '<span style="color:'+(v<30?'var(--down)':(v>=80?'var(--sub)':'var(--gold)'))+';font-weight:600">'+ Number(v).toFixed(1) +'</span>' : '—';
+    earlyCells = `<td style="color:var(--gold);font-weight:600">${found}</td>
+      <td>${jv(s.early_j)}</td>
+      <td>${jv(s.early_wj)}</td>`;
+    if(found && found!=='—'){
+      earlyTip = ` data-found="${esc(found)}"`;
+    }
+  }
+  return `<tr${earlyTip} class="${curPat==='低位启动前'?'early-row':''}">
     <td class="l">${i+1}</td>
     <td class="l">${markNameHtml(s.code,s.name,s.price)}<div class="code"><a class="cd-link"  href="https://stockpage.10jqka.com.cn/${s.code}/" target="_blank" rel="noopener" onclick="openStock('${s.code}','${s.name}',event)">${mkt(s.code)}</a></div>${weeklyLine}</td>
     <td class="l col-opt">${indHtml}</td>
@@ -4851,6 +4870,7 @@ function maRowHtml(s,i){
     <td>${s.price}</td>
     <td>${s.atr_pct!=null? '<span style="color:'+(s.atr_pct>=8?'var(--up)':(s.atr_pct<4?'var(--sub)':'var(--gold)'))+'">'+s.atr_pct+'%</span>':'—'}</td>
     <td class="col-opt">${s.amount_yi}</td>
+    ${earlyCells}
   </tr>`;
 }
 // 更新表头排序箭头
@@ -6744,6 +6764,27 @@ document.addEventListener('mouseout', e => {
   // 移入弹框内部不隐藏(弹框可交互), 否则隐藏
   if(to && to.closest && ((_kdPopup && _kdPopup.contains(to)) || to.closest('a.nm') === a)) return;
   _kdHide();
+});
+
+// 低位启动前: 鼠标所在行的发现日期跟随提示 (20260929) —— 避免与股票名K线预览(a.nm)抢占同一弹层
+let _earlyTipEl=null, _earlyTipTimer=null;
+function _showEarlyTip(x, y, found){
+  const el = _earlyTipEl || (()=>{ const d=document.createElement('div'); d.style.cssText='position:fixed;z-index:99999;pointer-events:none;background:rgba(20,25,34,.94);color:#f5c842;font-size:12px;padding:5px 10px;border-radius:6px;border:1px solid rgba(245,200,66,.35);box-shadow:0 4px 14px rgba(0,0,0,.4);white-space:nowrap;transition:opacity .12s;'; document.body.appendChild(d); return (_earlyTipEl=d); })();
+  const nx = Math.min(x+14, window.innerWidth - 180), ny = Math.min(y-14, window.innerHeight - 36);
+  el.style.left=nx+'px'; el.style.top=Math.max(6,ny)+'px'; el.style.opacity='1';
+  el.textContent = '📅 于 ' + found + ' 发现此票';
+}
+function _hideEarlyTip(){ if(_earlyTipEl){ _earlyTipEl.style.opacity='0'; clearTimeout(_earlyTipTimer); _earlyTipTimer=setTimeout(()=>{ if(_earlyTipEl && _earlyTipEl.style.opacity==='0') _earlyTipEl.style.display='none'; },150);} }
+document.addEventListener('mouseover', e => {
+  const r = e.target && e.target.closest ? e.target.closest('tr.early-row[data-found]') : null;
+  // 悬停在股票名(a.nm)上时优先显示K线预览, 不抢占
+  const onName = e.target && e.target.closest ? e.target.closest('a.nm') : null;
+  if(r && !onName){
+    clearTimeout(_earlyTipTimer);
+    _earlyTipTimer = setTimeout(()=>{ if(_earlyTipEl) _earlyTipEl.style.display='block'; _showEarlyTip(e.clientX, e.clientY, r.getAttribute('data-found')); }, 420);
+  } else {
+    _hideEarlyTip();
+  }
 });
 
 connectEvents();  // SSE 订阅后端状态流: 进度实时推送 + 数据变更触发拉取, 轮询保留作断连兜底 (20260906)
