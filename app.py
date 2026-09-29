@@ -1643,6 +1643,10 @@ def det_early_signal(bars, today=None) -> dict:
         details = []
         up_line = False
         bottom_flag = False
+        # "最后一完成笔向上" (20260930): 最新一笔(streaks[-1])方向必须向上。
+        # 用于剔除"超跌反弹、整体趋势仍向下"的票(如双一科技 300690: 最后1笔 25.43→22.11 向下)。
+        # 注: 该规则会连同剔除最后1笔向下的在列票(含赛轮轮胎/太阳纸业)，用户已确认接受。
+        last_stroke_up = bool(streaks) and streaks[-1].get("dir") == "up"
         # 2) 最新连接的线段方向向上 + 推进要求:
         #    取缠论"最新一条线段"(由≥3笔构成, 方向即浮窗所见); 且从线段内前3笔看,
         #    第3笔终点价 ≥ 第1笔高点价×1.02 —— 上涨推进并能明显突破前高, 排除"微抬/勉强向上"。
@@ -1683,10 +1687,14 @@ def det_early_signal(bars, today=None) -> dict:
         else:
             details.append("末笔内无底标识")
 
-        hit = up_line and bottom_flag
+        if last_stroke_up:
+            details.append("最后一笔向上")
+        else:
+            details.append("最后一笔非向上")
+        hit = up_line and bottom_flag and last_stroke_up
         return {
             "hit": hit,
-            "score": (1 if up_line else 0) + (1 if bottom_flag else 0),
+            "score": (1 if up_line else 0) + (1 if bottom_flag else 0) + (1 if last_stroke_up else 0),
             "detail": details,
             "date": today or (bars[-1].get("day") or bars[-1].get("date") or ""),
             "j": None,   # 新条件不含KDJ, 前端该列显示"-"
@@ -6899,6 +6907,10 @@ _ma_state = {"data": None, "running": False, "error": None, "progress": "",
              "ts": 0.0, "lock": threading.Lock(),
              "atr_conds": []}  # ATR过滤UI已移除(20260925): 默认不过滤, 列表仍显示ATR%列
 _MA_CACHE_TTL = 300  # 5分钟
+# 收盘后K线全量刷新 (20260930): 交易当日盘中落盘的K线缓存停在盘中结构, 缠论笔/线段会误判
+# (如"低位启动前"把最新向下线段误当向上)。收盘后首个MA扫描对全部候选K线 force 重拉一次,
+# 使判定基于收盘最终K线; 当日已刷新过则跳过,避免每日多次全量拉取。
+_MA_KLINE_REFRESH_DATE: str = ""
 
 # ============================================================
 # 盘中现价冻结 (20260920 稳定化)
@@ -7433,6 +7445,12 @@ def _ma_scan_job():
                 continue
             cands.append({"code": code, "name": name, "row": r})
         _ma_state["progress"] = f"预筛 {len(cands)} 只, 并发拉取K线中…"
+        # 收盘后全量刷新(20260930): 当日首个收盘后扫描强制重拉全部K线缓存,
+        # 使缠论笔/线段基于收盘最终K线, 消除盘中旧缓存误判(如"低位启动前"最新段被误判向上)。
+        # 触发条件: 当天≥15:00(当日收盘后), 或最新交易日已非今天(凌晨/次日后 = 上一交易日早已收盘)。
+        global _MA_KLINE_REFRESH_DATE
+        _cal_ds = datetime.now(_BJ_TZ).strftime("%Y%m%d")
+        force_refresh = _MA_KLINE_REFRESH_DATE != today_str and (after_close or _cal_ds != today_str)
         results = {p: [] for p in MA_PATTERNS}
         done = [0]
         total = len(cands)
@@ -7444,7 +7462,7 @@ def _ma_scan_job():
             bars = None
             for _attempt in range(3):
                 try:
-                    bars = fetch_kline(symbol, datalen=300)
+                    bars = fetch_kline(symbol, datalen=300, force=force_refresh)
                     if bars and len(bars) >= 70:
                         break
                 except Exception:  # noqa: BLE001
@@ -7608,6 +7626,9 @@ def _ma_scan_job():
             _ma_state["data"] = out
             _ma_state["running"] = False
             _ma_state["ts"] = time.time()
+        # 收盘后K线全量刷新成功 → 记录当日已刷新 (20260930)
+        if force_refresh:
+            _MA_KLINE_REFRESH_DATE = today_str
     except Exception as e:  # noqa: BLE001
         with _ma_state["lock"]:
             _ma_state["error"] = str(e)
