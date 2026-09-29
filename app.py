@@ -1655,7 +1655,17 @@ def det_early_signal(bars, today=None) -> dict:
                     inner = [s for s in streaks if s["i0"] >= s0 and s["i1"] <= s1]
                     if len(inner) >= 3 and inner[0].get("p1") and inner[2].get("p1") \
                             and inner[0]["p1"] > 0:
+                        # 第3笔终点 ≥ 第1笔高点×1.02(推进突破前高)
                         up_line = inner[2]["p1"] >= inner[0]["p1"] * 1.02
+                        if up_line:
+                            # "启动前"约束: 向上线段累计涨幅不宜过大(排除已暴涨的票,
+                            # 如百合花 59→92.85 +56%), 且中途回调不能过深(排除破坏性巨震)。
+                            seg_rise = inner[2]["p1"] / inner[0]["p0"] - 1 if inner[0]["p0"] > 0 else 9
+                            blow_back = 0.0
+                            if inner[1].get("p0") and inner[0].get("p0") and inner[1]["p0"] > 0:
+                                blow_back = 1 - inner[1]["p1"] / inner[1]["p0"]
+                            if seg_rise > 0.40 or blow_back > 0.30:  # 涨幅>40% 或 中途回撤>30%
+                                up_line = False
                 except Exception:  # noqa: BLE001
                     up_line = False
         # 3) 最新未完成的笔(strokes[-1])期间出现「底」标识
