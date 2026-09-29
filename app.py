@@ -1631,11 +1631,15 @@ def det_early_signal(bars, today=None) -> dict:
             ma_glue = False
         _c("横盘收敛", amp < 0.30 and ma_glue)
 
-        # 2 地量区: 近5日均量<近60日均量x0.6 且 近60根存在地量(<=均量x0.5)
+        # 2 放量后底量区(20260929): 须先有一波放量(前60日内峰值量能≥60日均量x1.8), 再缩量回落到当前地量
         v5 = sum(vols[-5:]) / 5
         v60 = sum(vols[-60:]) / 60
         min60 = min(vols[-60:])
-        _c("地量区", v60 > 0 and v5 < v60 * 0.6 and min60 <= v60 * 0.5)
+        pre = vols[-60:-5]  # 底量前的窗口(排除最近5日, 保证放量发生在底量之前)
+        pre = pre or vols[-60:]
+        peak = max(pre) if pre else 0.0
+        had_surge = peak >= v60 * 1.8
+        _c("放量后底量", v60 > 0 and had_surge and v5 < v60 * 0.6 and min60 <= v60 * 0.5)
 
         # 3 低价企稳: (close-区间低)/(区间高-区间低)<0.35 且 近20根未创新低
         pos = (cur - win_lo) / (win_hi - win_lo) if win_hi > win_lo else 1.0

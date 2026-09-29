@@ -4492,8 +4492,8 @@ function passMaAtr(s, patOverride){
   // (20260927) 日·地量(地量低价)tab 也纳入 ATR%<3 硬过滤, 过滤掉低波动标的
   // patOverride: 供 tab 徽章计数按各自 pattern 判定, 不依赖全局 maCurrentTab (20260927)
   const curPat = (typeof patOverride==='string') ? patOverride : MA_PATS[maCurrentTab][0];
-  // (20260929) 低位启动前: 本就是 横盘收敛/底量低价 的低波动蓄势票, 豁免 ATR%<3 硬过滤, 否则会被全部筛掉
-  if(curPat.includes('背离') || curPat.startsWith('周线') || curPat==='低位启动前') return true;
+  // (20260929) 低位启动前: 按用户要求 ATR%<3 依旧过滤, 不再豁免
+  if(curPat.includes('背离') || curPat.startsWith('周线')) return true;
   // (2026-09-26) 硬过滤: ATR%<3 直接排除 (需求: 均线形态筛选过滤掉低波动标的)
   if(s.atr_pct != null && s.atr_pct < 3) return false;
   if(!maAtrConds.length) return true;
