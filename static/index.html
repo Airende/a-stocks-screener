@@ -973,7 +973,6 @@
 
   <div class="main-tabs" id="mainTabs">
     <div class="main-tab active" data-pane="pane-ma">均线形态筛选</div>
-    <div class="main-tab" data-pane="pane-early">低位启动前</div>
     <div class="main-tab" data-pane="pane-stock">个股分析</div>
     <div class="main-tab" data-pane="pane-marks">标记管理</div>
     <div class="main-tab" data-pane="pane-history">历史信号</div>
@@ -1019,26 +1018,7 @@
     </div>
   </div>
 
-  <!-- Tab2: 低位启动前·发现池 (20260930: 原"选股条件"页签精简, 仅保留此独立区块) -->
-  <div class="tab-pane" id="pane-early">
-    <!-- 后台扫描进度条 -->
-    <div id="screenProg" class="prog-line"><span class="prog-txt"></span><div class="prog-bar"><i></i></div></div>
-    <div class="sec-h" id="earlyHead">低位启动前·发现池 <span class="cnt" id="earlyCnt">0</span></div>
-    <div class="tbl-wrap">
-      <table id="tblEarly">
-        <thead><tr>
-          <th class="l">#</th><th class="l">股票</th>
-          <th>今日涨跌</th><th>现价</th>
-          <th title="日线KDJ的J值">日J</th><th title="周线KDJ的J值">周J</th>
-          <th class="l">发现日期</th>
-          <th class="l">满足条件</th>
-        </tr></thead>
-        <tbody id="tbodyEarly"></tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- Tab3: 个股分析 -->
+  <!-- Tab2: 个股分析 -->
   <div class="tab-pane" id="pane-stock">
     <div class="card" style="border-radius:12px">
       <div class="card-b" id="saBody" style="display:block;padding-top:14px">
@@ -1620,78 +1600,10 @@ function rowHTML(s,i,near){
     <td class="l col-opt">${tags}</td>
   </tr>`;
 }
-// ===== 低位启动前·发现池 =====
-function earlyRowHTML(e,i){
-  const dl=(e.detail||[]).map(x=>`<span class="tag">${esc(x)}</span>`).join(' ')||'—';
-  const detTxt=esc((e.detail||[]).join('、'));
-  const found=e.found||'';
-  const jv=(e.j==null)?'—':e.j, wv=(e.wj==null)?'—':e.wj;
-  return `<tr class="early-tr" data-found="${esc(found)}" data-name="${esc(e.name||'')}" style="cursor:help">
-    <td class="l">${i+1}</td>
-    <td class="l">${markNameHtml(e.code,e.name,e.close)}<div class="code"><a class="cd-link"  href="https://stockpage.10jqka.com.cn/${e.code}/" target="_blank" rel="noopener" onclick="openStock('${e.code}','${e.name}',event)">${mkt(e.code)}</a></div></td>
-    <td>${fmtPct(e.chg)}</td>
-    <td>${e.close}</td>
-    <td>${jv}</td>
-    <td>${wv}</td>
-    <td class="l">${esc(found)||'—'}</td>
-    <td class="l"><span style="cursor:help" title="${detTxt}">${dl}</span></td>
-  </tr>`;
-}
-// 行级 hover toast: 于 {found} 发现此票 (跟随鼠标, 移出隐藏)
-let _earlyTip=null;
-function showEarlyTip(found,name){
-  if(!_earlyTip){ _earlyTip=document.createElement('div'); _earlyTip.id='earlyTip'; document.body.appendChild(_earlyTip); }
-  _earlyTip.style.cssText='position:fixed;z-index:99999;pointer-events:none;display:block;background:var(--panel2);color:var(--txt);padding:8px 12px;border-radius:8px;font-size:12.5px;line-height:1.5;border:1px solid var(--border);box-shadow:0 4px 18px rgba(0,0,0,.35);max-width:320px';
-  const nm=name?'<b>'+esc(name)+'</b><br/>':'';
-  _earlyTip.innerHTML = nm+'于 <b>'+esc(found)+'</b> 发现此票';
-}
-function moveEarlyTip(ev){
-  if(!_earlyTip) return;
-  _earlyTip.style.left=(ev.clientX+14)+'px';
-  _earlyTip.style.top=(ev.clientY+14)+'px';
-}
-function hideEarlyTip(){ if(_earlyTip) _earlyTip.style.display='none'; }
-(function(){
-  document.body.addEventListener('mouseover', ev=>{
-    const tr=(ev.target&&ev.target.closest)?ev.target.closest('.early-tr'):null;
-    if(tr) showEarlyTip(tr.dataset.found, tr.dataset.name);
-  });
-  document.body.addEventListener('mousemove', moveEarlyTip);
-  document.body.addEventListener('mouseout', ev=>{
-    const tr=(ev.target&&ev.target.closest)?ev.target.closest('.early-tr'):null;
-    const to=(ev.relatedTarget&&ev.relatedTarget.closest)?ev.relatedTarget.closest('.early-tr'):null;
-    if(tr && !to) hideEarlyTip();
-  });
-})();
 function render(d, syncConds=true){
   _lastScreenMeta = {updated: d.updated, cached: d.cached, running: d.running};
   _lastScreenData = d;
   syncStatusStrip();
-  // 低位启动前·发现池 (独立信号, 20260930 精简页签后仅保留此块)
-  const ew=d.early||[];
-  $('#earlyHead').innerHTML = `低位启动前·发现池 <span class="cnt">${ew.length}</span>`;
-  $('#tbodyEarly').innerHTML = !ew.length
-    ? '<tr><td colspan="8" class="empty">暂无「低位启动前」标的 (需同时满足: ATR≥3% + 缠论最近3完成笔线段向上 + 末端笔后K线出现底标识)</td></tr>'
-    : ew.map((e,i)=>earlyRowHTML(e,i)).join('');
-}
-// ===== 低位启动前·发现池引导启动 (20260930: 原条件勾选/完全命中/接近满足已删) =====
-async function bootEarly(){
-  const poll=async()=>{
-    try{
-      const r=await fetch('/api/screen');
-      const d=await r.json();
-      if(d.universe>0 && !d.running){ render(d,false); return; }
-      setTimeout(poll,4000);
-    }catch(e){ setTimeout(poll,6000); }
-  };
-  try{
-    const r=await fetch('/api/screen');
-    const d=await r.json();
-    if(d.universe>0 && !d.running){ render(d,false); return; }
-    // 尚无结果/仍在跑 → 触发后台筛选(沿用上次conds), 再轮询
-    try{ await fetch('/api/screen/refresh',{method:'POST'}); }catch(_){}
-  }catch(e){ try{ await fetch('/api/screen/refresh',{method:'POST'}); }catch(_){} }
-  setTimeout(poll,4000);
 }
 
 // ===== 本地缓存管理 =====
@@ -4279,7 +4191,7 @@ const MA_PATS=[
   ['缠论·日线二买','日线缠论 二买：一买后回抽不破前低（形成次低点），安全介入点'],
   ['缠论·日线三买','日线缠论 三买：突破最后中枢后回抽不回中枢，强势追涨点'],
   // 低位启动前 (20260929): 提前捕获 横盘收敛→地量低价→KDJ低位→缠论背驰 的蓄势票
-  ['低位启动前','低位启动前·蓄势票：ATR≥3% + 缠论最近3个完成的笔连接成的线段向上 + 最新未完成的笔期间出现「底」标识(极致底量)。用于提前于多头排列发现底部蓄势票'],
+  ['低位启动前','低位启动前·蓄势票：缠论最近3个完成的笔连接成的线段向上 + 末端笔后K线出现「底」标识(极致底量)。用于提前于多头排列发现底部蓄势票'],
   // 上试盘策略 3 个池子（对应说明书 A/B/C 三栏）
   ['上试盘·新信号','A池：今日刚出现长上影试盘日，观察不买；待后续放量突破再入场'],
   ['上试盘·观察池','B池：10日确认窗口内，未破信号日最低价、未放量突破的股票，附待突破价'],
@@ -4316,8 +4228,9 @@ function passMaAtr(s, patOverride){
   // (20260927) 日·地量(地量低价)tab 也纳入 ATR%<3 硬过滤, 过滤掉低波动标的
   // patOverride: 供 tab 徽章计数按各自 pattern 判定, 不依赖全局 maCurrentTab (20260927)
   const curPat = (typeof patOverride==='string') ? patOverride : MA_PATS[maCurrentTab][0];
-  // (20260929) 低位启动前: 按用户要求 ATR%<3 依旧过滤, 不再豁免
-  if(curPat.includes('背离') || curPat.startsWith('周线')) return true;
+  // (20260930) 低位启动前: 移除ATR过滤条件, 不再按 ATR%<3 排除
+  // (背离/周线 tab 本就不受 ATR 限制)
+  if(curPat==='低位启动前' || curPat.includes('背离') || curPat.startsWith('周线')) return true;
   // (2026-09-26) 硬过滤: ATR%<3 直接排除 (需求: 均线形态筛选过滤掉低波动标的)
   if(s.atr_pct != null && s.atr_pct < 3) return false;
   if(!maAtrConds.length) return true;
@@ -4364,7 +4277,7 @@ function renderMAHeaders(){
       <th class="ma-th" data-sort="price">现价 <span class="sort-arrow"></span></th>
       <th class="ma-th" data-sort="atr">ATR% <span class="sort-arrow"></span></th>
       <th class="ma-th col-opt" data-sort="amount">成交额(亿) <span class="sort-arrow"></span></th>
-      ${isEarly?`<th class="l ma-th">发现日期</th><th class="ma-th">日J</th><th class="ma-th">周J</th>`:''}`;
+      ${isEarly?`<th class="ma-th">日J</th><th class="ma-th">周J</th>`:''}`;
   }
 }
 function renderMATabs(){
@@ -4673,20 +4586,14 @@ function maRowHtml(s,i){
     const boostTag = s.w_vol_boost ? ' <span style="color:var(--gold)">🔥放量</span>' : '';
     weeklyLine = `<div class="code" style="color:var(--sub);font-size:11px">52周位:<span style="color:${posColor}">${((s.w_pos52||0)*100).toFixed(2)}%</span>${boostTag}</div>`;
   }
-  // 低位启动前 tab: 附加 发现日期/日J/周J 列 (20260929), 且整行 hover 时在鼠标处提示发现日期
+  // 低位启动前 tab: 附加 日J/周J 列 (20260930, 发现日期列已删)
   let earlyCells = '';
-  let earlyTip = '';
   if(curPat==='低位启动前'){
-    const found = s.early_found || s.date || '—';
     const jv = (v)=> (v!=null&&!isNaN(v)) ? '<span style="color:'+(v<30?'var(--down)':(v>=80?'var(--sub)':'var(--gold)'))+';font-weight:600">'+ Number(v).toFixed(1) +'</span>' : '—';
-    earlyCells = `<td style="color:var(--gold);font-weight:600">${found}</td>
-      <td>${jv(s.early_j)}</td>
+    earlyCells = `<td>${jv(s.early_j)}</td>
       <td>${jv(s.early_wj)}</td>`;
-    if(found && found!=='—'){
-      earlyTip = ` data-found="${esc(found)}"`;
-    }
   }
-  return `<tr${earlyTip} class="${curPat==='低位启动前'?'early-row':''}">
+  return `<tr class="${curPat==='低位启动前'?'early-row':''}">
     <td class="l">${i+1}</td>
     <td class="l">${markNameHtml(s.code,s.name,s.price)}<div class="code"><a class="cd-link"  href="https://stockpage.10jqka.com.cn/${s.code}/" target="_blank" rel="noopener" onclick="openStock('${s.code}','${s.name}',event)">${mkt(s.code)}</a></div>${weeklyLine}</td>
     <td class="l col-opt">${indHtml}</td>
@@ -4824,8 +4731,6 @@ function downloadText(fname, content){
 }
 $('#maExportBtn').onclick=exportMATabCodes;
 
-// 启动: 低位启动前·发现池 (20260930: 不再依赖选股条件勾选)
-bootEarly();
 // 均线形态筛选: 页载先查缓存, 有结果则只渲染不重扫
 renderMATabs();
 bindMASortHeaders();
@@ -6580,27 +6485,6 @@ document.addEventListener('mouseout', e => {
   // 移入弹框内部不隐藏(弹框可交互), 否则隐藏
   if(to && to.closest && ((_kdPopup && _kdPopup.contains(to)) || to.closest('a.nm') === a)) return;
   _kdHide();
-});
-
-// 低位启动前: 鼠标所在行的发现日期跟随提示 (20260929) —— 避免与股票名K线预览(a.nm)抢占同一弹层
-let _earlyTipEl=null, _earlyTipTimer=null;
-function _showEarlyTip(x, y, found){
-  const el = _earlyTipEl || (()=>{ const d=document.createElement('div'); d.style.cssText='position:fixed;z-index:99999;pointer-events:none;background:rgba(20,25,34,.94);color:#f5c842;font-size:12px;padding:5px 10px;border-radius:6px;border:1px solid rgba(245,200,66,.35);box-shadow:0 4px 14px rgba(0,0,0,.4);white-space:nowrap;transition:opacity .12s;'; document.body.appendChild(d); return (_earlyTipEl=d); })();
-  const nx = Math.min(x+14, window.innerWidth - 180), ny = Math.min(y-14, window.innerHeight - 36);
-  el.style.left=nx+'px'; el.style.top=Math.max(6,ny)+'px'; el.style.opacity='1';
-  el.textContent = '📅 于 ' + found + ' 发现此票';
-}
-function _hideEarlyTip(){ if(_earlyTipEl){ _earlyTipEl.style.opacity='0'; clearTimeout(_earlyTipTimer); _earlyTipTimer=setTimeout(()=>{ if(_earlyTipEl && _earlyTipEl.style.opacity==='0') _earlyTipEl.style.display='none'; },150);} }
-document.addEventListener('mouseover', e => {
-  const r = e.target && e.target.closest ? e.target.closest('tr.early-row[data-found]') : null;
-  // 悬停在股票名(a.nm)上时优先显示K线预览, 不抢占
-  const onName = e.target && e.target.closest ? e.target.closest('a.nm') : null;
-  if(r && !onName){
-    clearTimeout(_earlyTipTimer);
-    _earlyTipTimer = setTimeout(()=>{ if(_earlyTipEl) _earlyTipEl.style.display='block'; _showEarlyTip(e.clientX, e.clientY, r.getAttribute('data-found')); }, 420);
-  } else {
-    _hideEarlyTip();
-  }
 });
 
 connectEvents();  // SSE 订阅后端状态流: 进度实时推送 + 数据变更触发拉取, 轮询保留作断连兜底 (20260906)
