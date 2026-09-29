@@ -1683,10 +1683,30 @@ def det_early_signal(bars, today=None) -> dict:
             hit5 = False
         _c("短线企稳", hit5)
 
+        # 硬否决(20260929): 近几个月(近60交易日)阴跌的票一律剔除
+        #   阴跌 = MA5<MA10<MA20(空头排列) 且 近20日均值<前20日均值(重心下移) 且 近20日低点<前20日低点(低点走低)
+        declining = False
+        try:
+            if len(closes) >= 60:
+                ma5 = sum(closes[-5:]) / 5
+                ma10 = sum(closes[-10:]) / 10
+                ma20 = sum(closes[-20:]) / 20
+                if ma5 < ma10 < ma20:
+                    recent20 = sum(closes[-20:]) / 20
+                    prev20 = sum(closes[-40:-20]) / 20
+                    lo_recent20 = min(closes[-20:])
+                    lo_prev20 = min(closes[-40:-20])
+                    if recent20 < prev20 and lo_recent20 < lo_prev20:
+                        declining = True
+        except Exception:
+            declining = False
+        if declining:
+            hit_list.append("(排除:近几月阴跌)")
+
         date = today or (bars[-1].get("day") or bars[-1].get("date") or "")
         val = lambda x: (round(float(x), 2) if not (x is None or (isinstance(x, float) and math.isnan(x))) else None)
         return {
-            "hit": score[0] == 5,  # 全部满足即入池 (20260929 条件由6条精简为5条)
+            "hit": score[0] == 5 and not declining,  # 全部满足且非近几月阴跌 才入池
             "score": score[0],
             "detail": hit_list,
             "date": date,
