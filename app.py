@@ -1672,9 +1672,14 @@ def det_early_signal(bars, today=None) -> dict:
                             up_line = False
             except Exception:  # noqa: BLE001
                 up_line = False
-        # 3) 最新未完成的笔(strokes[-1])期间出现「底」标识
+        # 3) 「末端笔之后的K线」出现「底」标识 (20260930):
+        #    不再检测"末端笔内部区间[i0,i1]"整段, 而是只看末端笔(streaks[-1])结束后
+        #    的最右端K线(从 streaks[-1]["i1"] 至当前末根)。要求"底"(极致底量)出现在
+        #    最近/当前, 而非埋在前段内部, 从而更贴近"刚见底、待启动"的时点。
+        #    注: 若末端笔已延伸到末根, 则该区间退化为仅末几根。
         if streaks:
-            bottom_flag = _early_bottom_in(bars, streaks[-1]["i0"], streaks[-1]["i1"])
+            n = len(bars)
+            bottom_flag = _early_bottom_in(bars, streaks[-1]["i1"], n - 1)
         else:
             details.append("缠论笔画不足")
 
@@ -1683,9 +1688,9 @@ def det_early_signal(bars, today=None) -> dict:
         else:
             details.append("非向上线段")
         if bottom_flag:
-            details.append("末笔内出现底标识")
+            details.append("末端笔后K线出现底标识")
         else:
-            details.append("末笔内无底标识")
+            details.append("末端笔后K线无底标识")
 
         if last_stroke_up:
             details.append("最后一笔向上")
