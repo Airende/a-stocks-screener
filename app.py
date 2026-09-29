@@ -1598,8 +1598,8 @@ def calc_kdj(highs: list[float], lows: list[float], closes: list[float],
 
 
 def det_early_signal(bars, today=None) -> dict:
-    """独立选股信号「低位启动前」: 提前捕获 长期横盘收敛→地量低价→缠论背驰→即将放量突破 的票。
-    只用于发现池(early), 不参与 check_stock 逻辑。hit=True 表示全部条件满足即可入池。
+    """独立选股信号「低位启动前」(20260929 第2版): 先放量后底量+低价企稳+日/周KDJ低位+短线企稳。
+    只用于发现池(early)/均线低位启动前tab, 不参与 check_stock 逻辑。hit=True 表示全部条件满足即可入池。
     全程 try/except 包裹, 绝不因单票数据问题抛异常影响扫描。"""
     try:
         if not bars or len(bars) < 120:
@@ -1617,36 +1617,38 @@ def det_early_signal(bars, today=None) -> dict:
                 score[0] += 1
                 hit_list.append(name)
 
-        # 1 长期横盘收敛(放宽): 近60根振幅<30% 且 MA20/MA60 均线粘合
+        W = 60          # 量能基准窗口: 前60根(与'底'标识口径一致)
+        NEAR = 5        # 底量回溯窗口: 最近5个交易日
         win_hi = max(highs[-60:])
         win_lo = min(lows[-60:])
-        amp = (win_hi - win_lo) / cur if cur else 1.0
-        ma20 = sma(closes, 20)[-1]
-        ma60 = sma(closes, 60)[-1]
-        ma_glue = False
-        try:
-            if ma60 and not math.isnan(ma60) and ma60 != 0:
-                ma_glue = abs(ma20 - ma60) / ma60 < 0.08
-        except Exception:
-            ma_glue = False
-        _c("横盘收敛", amp < 0.30 and ma_glue)
 
-        # 2 放量后底量区(20260929): 须先有一波放量(前60日内峰值量能≥60日均量x1.8), 再缩量回落到当前地量
-        v5 = sum(vols[-5:]) / 5
-        v60 = sum(vols[-60:]) / 60
-        min60 = min(vols[-60:])
-        pre = vols[-60:-5]  # 底量前的窗口(排除最近5日, 保证放量发生在底量之前)
-        pre = pre or vols[-60:]
+        # 1 放量后底量: 先有一波放量(前60日峰值量≥60日均量x1.8); 再近5日内出现'底'标识量能
+        #   (底量口径=该bar前60根: 量≤最低量x1.15 或 量≤均量x0.6, 满足其一, 与 classify_bottom_volume 一致)
+        v60_all = sum(vols[-60:]) / 60
+        pre = vols[-60:-5] or vols[-60:]
         peak = max(pre) if pre else 0.0
-        had_surge = peak >= v60 * 1.8
-        _c("放量后底量", v60 > 0 and had_surge and v5 < v60 * 0.6 and min60 <= v60 * 0.5)
+        had_surge = v60_all > 0 and peak >= v60_all * 1.8
+        near_bottom = False
+        for i in range(max(W, len(vols) - NEAR), len(vols)):
+            v = vols[i]
+            if v <= 0:
+                continue
+            seg = vols[i - W:i]
+            vmin = min(seg) if seg else 0.0
+            vavg = sum(seg) / W if len(seg) == W else 0.0
+            if vavg <= 0 or vmin <= 0:
+                continue
+            if (v <= vmin * 1.15) or (v <= vavg * 0.6):
+                near_bottom = True
+                break
+        _c("放量后底量", v60_all > 0 and had_surge and near_bottom)
 
-        # 3 低价企稳: (close-区间低)/(区间高-区间低)<0.35 且 近20根未创新低
+        # 2 低价企稳: (现价-区间低)/(区间高-区间低)<0.35 且 近20根未创新低
         pos = (cur - win_lo) / (win_hi - win_lo) if win_hi > win_lo else 1.0
         low20 = min(lows[-20:])
         _c("低价企稳", pos < 0.35 and low20 > win_lo * 0.97)
 
-        # 4 日KDJ低位: 放宽 —— J<80 即算低位
+        # 3 日KDJ低位: J<80
         K, D, J = calc_kdj(highs, lows, closes)
         j = J[-1]
         try:
@@ -1656,11 +1658,11 @@ def det_early_signal(bars, today=None) -> dict:
             j = 50.0
         _c("日KDJ低位", j < 80)
 
-        # 5 周KDJ低位: 放宽 —— 周线聚合后周J<80
+        # 4 周KDJ低位: 周线聚合后 周J<80 (20260929 不再要求≥9根周K)
         wj = 50.0
         try:
             wk = _agg_week(bars)
-            if len(wk) >= 9:
+            if wk:
                 wK, wD, wJ = calc_kdj(
                     [b["high"] for b in wk], [b["low"] for b in wk], [b["close"] for b in wk])
                 wj = wJ[-1]
@@ -1670,24 +1672,21 @@ def det_early_signal(bars, today=None) -> dict:
             wj = 50.0
         _c("周KDJ低位", wj < 80)
 
-        # 6 缠论背驰企稳(近似): (a) KDJ底背离 True 或 (b) 近5日企稳
-        hit6 = False
+        # 5 短线企稳 (20260929 已移除日KDJ底背离分支): 近5日有阳线 + 近3日最低≥前10日最低
+        hit5 = False
         try:
-            if _calc_kdj_bottom_diverge(closes, highs, lows, J):
-                hit6 = True
-            else:
-                up_bar = any(closes[i] >= closes[i - 1] for i in range(-5, 0))
-                recent_lo = min(lows[-3:])
-                prev10_lo = min(lows[-10:-3]) if len(lows) >= 10 else min(lows[:-3])
-                hit6 = up_bar and recent_lo >= prev10_lo
+            up_bar = any(closes[i] >= closes[i - 1] for i in range(-5, 0))
+            recent_lo = min(lows[-3:])
+            prev10_lo = min(lows[-10:-3]) if len(lows) >= 10 else min(lows[:-3])
+            hit5 = up_bar and recent_lo >= prev10_lo
         except Exception:
-            hit6 = False
-        _c("缠论背驰企稳", hit6)
+            hit5 = False
+        _c("短线企稳", hit5)
 
         date = today or (bars[-1].get("day") or bars[-1].get("date") or "")
         val = lambda x: (round(float(x), 2) if not (x is None or (isinstance(x, float) and math.isnan(x))) else None)
         return {
-            "hit": score[0] == 6,  # 全部满足即入池
+            "hit": score[0] == 5,  # 全部满足即入池 (20260929 条件由6条精简为5条)
             "score": score[0],
             "detail": hit_list,
             "date": date,
