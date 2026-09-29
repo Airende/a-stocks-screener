@@ -1647,31 +1647,31 @@ def det_early_signal(bars, today=None) -> dict:
         # 用于剔除"超跌反弹、整体趋势仍向下"的票(如双一科技 300690: 最后1笔 25.43→22.11 向下)。
         # 注: 该规则会连同剔除最后1笔向下的在列票(含赛轮轮胎/太阳纸业)，用户已确认接受。
         last_stroke_up = bool(streaks) and streaks[-1].get("dir") == "up"
-        # 2) 最新连接的线段方向向上 + 推进要求:
-        #    取缠论"最新一条线段"(由≥3笔构成, 方向即浮窗所见); 且从线段内前3笔看,
-        #    第3笔终点价 ≥ 第1笔高点价×1.02 —— 上涨推进并能明显突破前高, 排除"微抬/勉强向上"。
-        if segs:
-            last_seg = segs[-1]
+        # 2) "全局最末3笔" 判定 (20260930): 直接取缠论最末3笔 streaks[-3:]
+        #    (不再限定在某条确认段内, 也包含最后确认段结束点之后仍在延伸的笔)。
+        #    要求 第3笔终点价 ≥ 第1笔高点价×1.02 —— 最近3笔整体净上涨且明显突破前高。
+        #    * 修正: 原"最后段内嵌3笔"逻辑让 合百集团(000417) 误判入池:
+        #      其最末段 [10] 5.57→7.15 段内三笔 首高6.14/第三高7.15 → 7.15≥6.14×1.02 判为向上;
+        #      但全局最末3笔为 [..→7.15, 7.15→5.46, 5.46→5.97], 第3终点5.97 < 第1高点7.15×1.02,
+        #      应剔除。改用全局最末3笔后判为不满足, 正确剔除。
+        if len(streaks) >= 3:
             up_line = False
-            if last_seg.get("dir") == "up":
-                try:
-                    s0, s1 = last_seg["i0"], last_seg["i1"]
-                    inner = [s for s in streaks if s["i0"] >= s0 and s["i1"] <= s1]
-                    if len(inner) >= 3 and inner[0].get("p1") and inner[2].get("p1") \
-                            and inner[0]["p1"] > 0:
-                        # 第3笔终点 ≥ 第1笔高点×1.02(推进突破前高)
-                        up_line = inner[2]["p1"] >= inner[0]["p1"] * 1.02
-                        if up_line:
-                            # "启动前"约束: 向上线段累计涨幅不宜过大(排除已暴涨的票,
-                            # 如百合花 59→92.85 +56%), 且中途回调不能过深(排除破坏性巨震)。
-                            seg_rise = inner[2]["p1"] / inner[0]["p0"] - 1 if inner[0]["p0"] > 0 else 9
-                            blow_back = 0.0
-                            if inner[1].get("p0") and inner[0].get("p0") and inner[1]["p0"] > 0:
-                                blow_back = 1 - inner[1]["p1"] / inner[1]["p0"]
-                            if seg_rise > 0.40 or blow_back > 0.30:  # 涨幅>40% 或 中途回撤>30%
-                                up_line = False
-                except Exception:  # noqa: BLE001
-                    up_line = False
+            f, m, t = streaks[-3], streaks[-2], streaks[-1]
+            try:
+                if f.get("p1") and t.get("p1") and f["p1"] > 0:
+                    # 第3笔终点 ≥ 第1笔高点×1.02(推进突破前高)
+                    up_line = t["p1"] >= f["p1"] * 1.02
+                    if up_line:
+                        # "启动前"约束: 三笔累计涨幅不宜过大(排除已暴涨的票,
+                        # 如百合花 59→92.85 +56%), 且中途回调不能过深(排除破坏性巨震)。
+                        seg_rise = t["p1"] / f["p0"] - 1 if f["p0"] > 0 else 9
+                        blow_back = 0.0
+                        if m.get("p0") and m["p0"] > 0:
+                            blow_back = 1 - m["p1"] / m["p0"]
+                        if seg_rise > 0.40 or blow_back > 0.30:  # 涨幅>40% 或 中途回撤>30%
+                            up_line = False
+            except Exception:  # noqa: BLE001
+                up_line = False
         # 3) 最新未完成的笔(strokes[-1])期间出现「底」标识
         if streaks:
             bottom_flag = _early_bottom_in(bars, streaks[-1]["i0"], streaks[-1]["i1"])
