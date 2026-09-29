@@ -1643,13 +1643,21 @@ def det_early_signal(bars, today=None) -> dict:
         details = []
         up_line = False
         bottom_flag = False
-        # 2) 最新连接的线段方向向上: 取缠论"最新一条线段"(由≥3笔构成, 方向即浮窗所见)
-        #    + 收紧: 线段终点价 ≥ 起点价×1.02 —— 向上且明显抬升(≥2%), 排除"微抬/勉强向上"。
+        # 2) 最新连接的线段方向向上 + 推进要求:
+        #    取缠论"最新一条线段"(由≥3笔构成, 方向即浮窗所见); 且从线段内前3笔看,
+        #    第3笔终点价 ≥ 第1笔高点价×1.02 —— 上涨推进并能明显突破前高, 排除"微抬/勉强向上"。
         if segs:
             last_seg = segs[-1]
-            up_line = last_seg.get("dir") == "up"
-            if up_line and last_seg.get("p1") and last_seg.get("p0") and last_seg["p0"] > 0:
-                up_line = last_seg["p1"] >= last_seg["p0"] * 1.02
+            up_line = False
+            if last_seg.get("dir") == "up":
+                try:
+                    s0, s1 = last_seg["i0"], last_seg["i1"]
+                    inner = [s for s in streaks if s["i0"] >= s0 and s["i1"] <= s1]
+                    if len(inner) >= 3 and inner[0].get("p1") and inner[2].get("p1") \
+                            and inner[0]["p1"] > 0:
+                        up_line = inner[2]["p1"] >= inner[0]["p1"] * 1.02
+                except Exception:  # noqa: BLE001
+                    up_line = False
         # 3) 最新未完成的笔(strokes[-1])期间出现「底」标识
         if streaks:
             bottom_flag = _early_bottom_in(bars, streaks[-1]["i0"], streaks[-1]["i1"])
