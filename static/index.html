@@ -1226,6 +1226,8 @@ const fmtPct = v=>{
   const cls=x>0?'up':(x<0?'down':'flat');
   return `<span class="${cls}">${x>0?'+':''}${x.toFixed(2)}%</span>`;
 };
+// 价格统一保留2位小数 (20260930)
+const p2 = v=> (v==null||isNaN(v)) ? '—' : Number(v).toFixed(2);
 const bar = (v,max=40)=>{
   const w=Math.min(100,Math.abs(v)/max*100);
   const col=v>=0?'var(--up)':'var(--down)';
@@ -1592,7 +1594,7 @@ function rowHTML(s,i,near){
     <td class="l col-opt">${s.industry}</td>
     <td class="l col-opt">${s.concept}</td>
     <td>${fmtPct(s.change_pct)}</td>
-    <td>${s.price}</td>
+    <td>${p2(s.price)}</td>
     <td class="col-opt">${s.float_mv_yi}</td>
     <td class="col-opt">${s.amount_yi}</td>
     <td class="col-opt"><span style="color:${bcol};font-weight:600">${(+s.bias||0).toFixed(2)}%</span></td>
@@ -4560,7 +4562,7 @@ function sspRowHtml(s, i, pool){
     <td class="l col-opt">${s.industry||'—'}</td>
     <td class="l col-opt">${s.concept||'—'}</td>
     <td>${fmtPct(s.change_pct)}</td>
-    <td>${s.price||'—'}</td>
+    <td>${p2(s.price)}</td>
     <td class="col-opt">${amt!=null? amt : (s.amount_yi||'—')}</td>
     ${extra}
     <td class="l">${bsBrief}</td>
@@ -4593,7 +4595,7 @@ function maRowHtml(s,i){
   return `<tr class="${curPat==='低位启动前'?'early-row':''}">
     <td class="l">${i+1}</td>
     <td class="l">${markNameHtml(s.code,s.name,s.price)}<div class="code"><a class="cd-link"  href="https://stockpage.10jqka.com.cn/${s.code}/" target="_blank" rel="noopener" onclick="openStock('${s.code}','${s.name}',event)">${mkt(s.code)}</a></div>${weeklyLine}</td>
-    <td class="ma-c">${s.price}</td>
+    <td class="ma-c">${p2(s.price)}</td>
     <td class="ma-c">${fmtPct(s.change_pct)}</td>
     <td class="ma-c">${jv(s.day_j)}</td>
     <td class="ma-c">${jv(s.week_j)}</td>
@@ -5948,7 +5950,7 @@ async function renderMkTable(){
           <div class="code"><a class="cd-link"  href="https://stockpage.10jqka.com.cn/${s.code}/" target="_blank" rel="noopener" onclick="openStock('${s.code}','${s.name}',event)">${mkt(s.code)}</a></div>
         </td>
         <td class="l">${s.industry||'—'}</td>
-        <td>${s.price||'—'}</td>
+        <td>${p2(s.price)}</td>
         <td style="color:${chgClr}">${chg}</td>
         <td>${s.amount_yi||'—'}</td>
       </tr>`;
@@ -6575,7 +6577,7 @@ function renderHistory(rec){
   if(sb && sc){
     const rows = [...(sc.exact||[]), ...(sc.stocks||[])];
     sb.innerHTML = rows.length
-      ? rows.slice(0,120).map((s,i) => `<tr><td class="l">${i+1}</td><td class="l">${markNameHtml(s.code,s.name,s.price)}</td><td class="l col-opt">${esc(s.industry||'')}</td><td>${fmtPct(s.change_pct)}</td><td>${s.price}</td><td>${s.atr_pct!=null? s.atr_pct+'%':'—'}</td><td class="l">${sigBadgeHtml(s)}</td></tr>`).join('')
+      ? rows.slice(0,120).map((s,i) => `<tr><td class="l">${i+1}</td><td class="l">${markNameHtml(s.code,s.name,s.price)}</td><td class="l col-opt">${esc(s.industry||'')}</td><td>${fmtPct(s.change_pct)}</td><td>${p2(s.price)}</td><td>${s.atr_pct!=null? s.atr_pct+'%':'—'}</td><td class="l">${sigBadgeHtml(s)}</td></tr>`).join('')
       : '<tr><td colspan="7" class="empty">无</td></tr>';
   }
   // ---- 填充行: 均线(每形态前5) ----
@@ -6584,7 +6586,7 @@ function renderHistory(rec){
     const rows = [];
     Object.entries(ma.patterns||{}).forEach(([p, list]) => { (list||[]).slice(0,5).forEach(s => rows.push({p, s})); });
     mb.innerHTML = rows.length
-      ? rows.map(({p,s}) => `<tr><td class="l">${esc(p)}</td><td class="l">${markNameHtml(s.code,s.name,s.price)}</td><td class="l col-opt">${esc(s.industry||'')}</td><td>${fmtPct(s.change_pct)}</td><td>${s.price}</td><td class="l">${sigBadgeHtml(s)}</td></tr>`).join('')
+      ? rows.map(({p,s}) => `<tr><td class="l">${esc(p)}</td><td class="l">${markNameHtml(s.code,s.name,s.price)}</td><td class="l col-opt">${esc(s.industry||'')}</td><td>${fmtPct(s.change_pct)}</td><td>${p2(s.price)}</td><td class="l">${sigBadgeHtml(s)}</td></tr>`).join('')
       : '<tr><td colspan="6" class="empty">无</td></tr>';
   }
   // ---- 填充行: 上试盘 ----
@@ -6595,7 +6597,7 @@ function renderHistory(rec){
           const note = pool === 'A·新信号' ? `待突破 ${s.break_price||'—'} / 作废 ${s.invalidate_price||'—'}`
             : (pool === 'B·观察' ? `剩余${s.remain_days!=null ? s.remain_days+'天' : '—'} · 突破 ${s.break_price||'—'}`
             : `入场 ${s.entry_price||'—'} / 止损 ${s.stop_price||'—'} / 目标 ${s.target_price||'—'}`);
-          return `<tr><td class="l">${pool}</td><td class="l">${markNameHtml(s.code,s.name,s.price)}</td><td>${fmtPct(s.change_pct)}</td><td>${s.price||'—'}</td><td class="l" style="font-size:11px;color:var(--sub)">${note}</td></tr>`;
+          return `<tr><td class="l">${pool}</td><td class="l">${markNameHtml(s.code,s.name,s.price)}</td><td>${fmtPct(s.change_pct)}</td><td>${p2(s.price)}</td><td class="l" style="font-size:11px;color:var(--sub)">${note}</td></tr>`;
         }).join('')
       : '<tr><td colspan="5" class="empty">无</td></tr>';
   }
