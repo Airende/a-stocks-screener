@@ -4332,22 +4332,6 @@ function renderMATabs(){
     };
   });
   $('#maDesc').textContent=MA_PATS[maCurrentTab][1];
-  // SSP 环境标签（大盘是否允许入场）和更新时间
-  let sspInfo = '';
-  if(_isSspTab() && sspData){
-    const tag = sspData.mkt_filter
-      ? '<span class="ssp-mkt ok">🟢 沪深300在MA20上方 · 允许买入</span>'
-      : '<span class="ssp-mkt no">🔴 沪深300破MA20 · 弱市慎买（确认信号仅供跟踪参考，不自动剔除）</span>';
-    const up = sspData.updated ? `更新：${sspData.updated}` : '';
-    sspInfo = `<div style="margin:6px 0 8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">${tag}${up?`<span class="meta">${up}</span>`:''}</div>`;
-  }
-  // 附加信息插入到 maTabs 下面的描述和分布之间
-  const descEl = document.getElementById('maDesc');
-  if(descEl && descEl.nextSibling && descEl.nextSibling.id === 'sspEnvInfo') descEl.nextSibling.remove();
-  if(sspInfo && descEl){
-    const d=document.createElement('div'); d.id='sspEnvInfo'; d.innerHTML = sspInfo;
-    descEl.after(d);
-  }
 }
 // 分布统计: 板块(模糊按子概念拆分聚合)
 function renderMADist(stocks){
