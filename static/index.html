@@ -6523,36 +6523,13 @@ function histCalInit(){
 function renderHistDates(){
   const box = $('#histDates'); if(!box) return;
   if(!histDates.length){ box.innerHTML = '<span class="sa-hist-empty">暂无归档</span>'; return; }
-  histCalInit();
-  const pad = n => String(n).padStart(2, '0');
-  const days = new Date(histCalY, histCalM, 0).getDate();
-  const firstDow = (new Date(histCalY, histCalM - 1, 1).getDay() + 6) % 7; // 0=周一
-  const set = new Set(histDates);
-  let h = '<div class="cal">' +
-    '<div class="cal-head">' +
-      '<button type="button" class="cal-nav" data-delta="-1">‹</button>' +
-      '<span class="cal-title">' + histCalY + '-' + pad(histCalM) + '</span>' +
-      '<button type="button" class="cal-nav" data-delta="1">›</button>' +
-    '</div><div class="cal-grid">' +
-    ['一','二','三','四','五','六','日'].map(w => '<div class="cal-dow">' + w + '</div>').join('');
-  for(let i=0; i<firstDow; i++) h += '<div class="cal-cell blank"></div>';
-  for(let i=1; i<=days; i++){
-    const ds = histCalY + '-' + pad(histCalM) + '-' + pad(i);
-    if(set.has(ds)) h += '<div class="cal-cell has' + (ds===histCurrentDate?' sel':'') + '" data-d="' + ds + '">' + i + '</div>';
-    else h += '<div class="cal-cell off">' + i + '</div>';
-  }
-  h += '</div></div>';
-  box.innerHTML = h;
+  // 横向单条日期标签 (20261001): 不再用大日历占位, 改为横向滚动条
+  box.innerHTML = '<div style="display:flex;gap:6px;overflow-x:auto;padding:2px 0 4px">' +
+    histDates.map(ds =>
+      '<div class="hist-date' + (ds===histCurrentDate?' sel':'') + '" data-d="' + ds + '" style="flex:0 0 auto;padding:5px 12px;font-size:12px;border-radius:6px;background:var(--panel2);border:1px solid var(--border);cursor:pointer;font-variant-numeric:tabular-nums">' + ds + '</div>'
+    ).join('') + '</div>';
   box.onclick = (e) => {
-    const nav = e.target.closest('.cal-nav');
-    if(nav){
-      histCalM += Number(nav.dataset.delta);
-      if(histCalM < 1){ histCalM = 12; histCalY--; }
-      else if(histCalM > 12){ histCalM = 1; histCalY++; }
-      renderHistDates();
-      return;
-    }
-    const cell = e.target.closest('.cal-cell.has');
+    const cell = e.target.closest('.hist-date');
     if(cell && cell.dataset.d) selectHistDate(cell.dataset.d);
   };
 }
