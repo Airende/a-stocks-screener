@@ -1599,7 +1599,7 @@ def calc_kdj(highs: list[float], lows: list[float], closes: list[float],
 
 def _early_bottom_in(bars, i0, i1) -> bool:
     """在 bars 的 K线区间 [i0,i1] 内, 判定任一天是否出现「底」标识(极致底量)。
-    口径与该bar前60根一致: 量 ≤ 前60日最低量×1.15 或 量 ≤ 前60日均量×0.6, 满足其一。
+    口径与该bar前60根一致: 量 ≤ 前60日最低量×1.10 或 量 ≤ 前60日均量×0.50, 满足其一。
     注: 与 classify_bottom_volume / K线浮窗"底量低价"标注的"底"标识口径保持一致(纯量能)。"""
     try:
         n = len(bars)
@@ -1619,7 +1619,7 @@ def _early_bottom_in(bars, i0, i1) -> bool:
             vavg = sum(float(p["volume"]) for p in prev) / W
             if vavg <= 0 or vmin <= 0:
                 continue
-            if (vol <= vmin * 1.15) or (vol <= vavg * 0.6):
+            if (vol <= vmin * 1.10) or (vol <= vavg * 0.50):
                 return True
     except Exception:  # noqa: BLE001
         return False
@@ -6968,7 +6968,7 @@ def _apply_frozen_today_bar(bars: list[dict], symbol: str, today_date: str,
 
 def classify_bottom_volume(bars: list[dict]) -> bool:
     """极致底量低价 (20260927, 近5日回溯版): 判定最近5个交易日内是否有任一K线出过"底量低价"。
-    基础(逐bar): 量 = 击穿该bar前60日地量(≤min×1.15) 或 量比(对前60日均量)≤0.6 满足其一;
+    基础(逐bar): 量 = 击穿该bar前60日地量(≤min×1.10) 或 量比(对前60日均量)≤0.50 满足其一;
                 价 = 该bar收盘处于其前122根(近半年)高低区间下沿18% (仅列表/选股口径, K线浮窗标注为纯量能)。
     精炼(逐bar, 二选一, 与往期口径一致): A止跌企稳 / B持续缩量。
     单日出底 = 观察信号; 买点需其后放量阳线确认。数据不足(≤60日)或量能异常返回False。"""
@@ -6990,7 +6990,7 @@ def classify_bottom_volume(bars: list[dict]) -> bool:
         vavg = sum(float(b["volume"]) for b in prev) / W
         if vavg <= 0 or not (vmin > 0):
             continue
-        vol_ok = (vol <= vmin * 1.15) or (vol <= vavg * 0.6)
+        vol_ok = (vol <= vmin * 1.10) or (vol <= vavg * 0.50)
         if not vol_ok:
             continue
         # 价: 相对该bar前122根(近半年)高低区间下沿 (仅列表/选股口径, K线浮窗标注已改为纯量能)

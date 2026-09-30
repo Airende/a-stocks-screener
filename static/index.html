@@ -6101,23 +6101,29 @@ function kdSubPanels(bars, cfg){
   const h2=stretch?102:88, padT2=12, padB2=6;  // 加高使量柱更清晰
   const vmax=Math.max(...bars.map(b=>b.volume))||1;
   const yFn2=v=>padT2+(1-v/vmax)*(h2-padT2-padB2);
-  // 极致底量标记 (20260927 逐bar窗口版, 与后端 classify_bottom_volume 一致):
-  // 对每根bar, 量=击穿其前60根地量(≤min×1.15)或量比≤0.6(二者居其一)。满足 → 金色「地」字标。
-  // 只按量能判定, 不再要求收盘处于近半年下沿(已按要求移除价条件)。
-  const limitVol=(()=>{ const m={}; const W=60;
+  // 极致底量标记 (20261001 逐bar窗口版, 与后端 classify_bottom_volume 一致, 分两档):
+  // 严档(新): 量≤前60日最低量×1.10 或 量比≤0.50(其一) → 金色「地」字(严格地量)
+  // 宽档(旧): 严档未中但 量≤前60日最低量×1.15 或 量比≤0.60(其一) → 成交量柱顶红色圆点(边缘地量)
+  // 只按量能判定, 不再要求收盘处于近半年下沿。
+  const limitVol=(()=>{ const m={}, edge={}; const W=60;
     if(n<=W || (opt&&opt.noLimits)) return m;   // 周K线(noLimits)不做日线口径的地量判定
     for(let i=W;i<n;i++){
       const vol=+bars[i].volume; if(!(vol>0)) continue;
       let vmin=Infinity, vsum=0;
       for(let j=i-W;j<i;j++){ const v=+bars[j].volume; if(v<vmin) vmin=v; vsum+=v; }
       const vavg=vsum/W;
-      if((vol<=vmin*1.15)||(vavg>0 && vol/vavg<=0.6)) m[(bars[i].day||'').slice(0,10)]=true;
+      const day=(bars[i].day||'').slice(0,10);
+      const strict=(vol<=vmin*1.10)||(vavg>0 && vol/vavg<=0.50); // 严档 → 「地」字
+      if(strict){ m[day]=true; }
+      else if((vol<=vmin*1.15)||(vavg>0 && vol/vavg<=0.60)){ edge[day]=true; } // 宽档 → 红点
     }
-    return m; })();
+    m._edge=edge; return m; })();
+  const volEdge=(limitVol._edge||{});
   const volMarks=(()=>{ let s='';
     for(let i=0;i<n;i++){
       const day=(bars[i].day||'').slice(0,10);
       if(limitVol[day]) s+=_sqT(xi(i), yFn2(bars[i].volume)-4, `font-size="6.5" font-weight="700" text-anchor="middle" fill="#f5c842" stroke="rgba(15,22,35,.9)" stroke-width="1.4" paint-order="stroke"`, '地');
+      else if(volEdge[day]){ const cy=Math.max(padT2+3, yFn2(bars[i].volume)-2.5); s+=`<circle cx="${xi(i).toFixed(1)}" cy="${cy.toFixed(1)}" r="1.6" fill="#ff4d4f" stroke="rgba(15,22,35,.9)" stroke-width="0.4"/>`; }
     }
     return s; })();
   const vbars=bars.map((b,i)=>{
