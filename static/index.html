@@ -179,6 +179,20 @@
   .sa-hist.hide{display:none}
   /* 历史信号页: 日期选中态 (20260906) */
   .hist-date.sel{background:var(--accent)!important;color:#fff!important}
+  /* ---- 历史信号：日历样式 ---- */
+  .cal{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:8px;display:inline-block}
+  .cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+  .cal-title{font-weight:700;font-size:13px;color:var(--txt)}
+  .cal-nav{background:none;border:1px solid var(--border);border-radius:5px;color:var(--sub);cursor:pointer;width:24px;height:24px;line-height:1;font-size:15px}
+  .cal-nav:hover{background:var(--accent);color:#fff}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,34px);gap:2px}
+  .cal-dow{text-align:center;font-size:11px;color:var(--sub);padding:2px 0}
+  .cal-cell{display:flex;align-items:center;justify-content:center;width:34px;height:26px;border-radius:5px;font-size:12px}
+  .cal-cell.blank{background:none}
+  .cal-cell.off{color:var(--sub);cursor:default}
+  .cal-cell.has{background:var(--accent);color:#fff;cursor:pointer}
+  .cal-cell.has:hover{filter:brightness(1.12)}
+  .cal-cell.sel{outline:2px solid #fff;outline-offset:-2px;box-shadow:0 0 0 2px var(--accent)}
   .sa-item{padding:8px 14px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13px;border-bottom:1px solid var(--border)}
   .sa-item:hover{background:var(--panel)}
   .sa-item.sel{background:var(--panel);box-shadow:inset 3px 0 0 var(--accent)}
@@ -6477,7 +6491,7 @@ connectEvents();  // SSE 订阅后端状态流: 进度实时推送 + 数据变�
 // ============================================================
 // 历史信号复盘 (20260906): 按日回看归档的选股/均线/上试盘结果
 // ============================================================
-let histDates = [], histCurrentDate = null, histLoaded = false;
+let histDates = [], histCurrentDate = null, histLoaded = false, histCalY = 0, histCalM = 0;
 async function loadHistoryDates(){
   const box = $('#histContent');
   try{
@@ -6496,14 +6510,49 @@ async function loadHistoryDates(){
     if(box) box.innerHTML = '<div class="empty">加载失败: ' + esc(e.message||e) + '</div>';
   }
 }
+function histCalInit(){
+  if(histCalY && histCalM) return;
+  const d = histCurrentDate || (histDates[0] || '');
+  if(d && d.length === 10){
+    const [y, m] = d.split('-').map(Number);
+    if(y && m){ histCalY = y; histCalM = m; }
+  }
+}
 function renderHistDates(){
   const box = $('#histDates'); if(!box) return;
-  box.innerHTML = histDates.length
-    ? histDates.map(d => `<span class="sa-hist-item hist-date${d===histCurrentDate?' sel':''}" data-d="${d}">${d}</span>`).join('')
-    : '<span class="sa-hist-empty">暂无归档</span>';
-  box.querySelectorAll('.hist-date').forEach(el => {
-    el.onclick = () => selectHistDate(el.dataset.d);
-  });
+  if(!histDates.length){ box.innerHTML = '<span class="sa-hist-empty">暂无归档</span>'; return; }
+  histCalInit();
+  const pad = n => String(n).padStart(2, '0');
+  const days = new Date(histCalY, histCalM, 0).getDate();
+  const firstDow = (new Date(histCalY, histCalM - 1, 1).getDay() + 6) % 7; // 0=周一
+  const set = new Set(histDates);
+  let h = '<div class="cal">' +
+    '<div class="cal-head">' +
+      '<button type="button" class="cal-nav" data-delta="-1">‹</button>' +
+      '<span class="cal-title">' + histCalY + '-' + pad(histCalM) + '</span>' +
+      '<button type="button" class="cal-nav" data-delta="1">›</button>' +
+    '</div><div class="cal-grid">' +
+    ['一','二','三','四','五','六','日'].map(w => '<div class="cal-dow">' + w + '</div>').join('');
+  for(let i=0; i<firstDow; i++) h += '<div class="cal-cell blank"></div>';
+  for(let i=1; i<=days; i++){
+    const ds = histCalY + '-' + pad(histCalM) + '-' + pad(i);
+    if(set.has(ds)) h += '<div class="cal-cell has' + (ds===histCurrentDate?' sel':'') + '" data-d="' + ds + '">' + i + '</div>';
+    else h += '<div class="cal-cell off">' + i + '</div>';
+  }
+  h += '</div></div>';
+  box.innerHTML = h;
+  box.onclick = (e) => {
+    const nav = e.target.closest('.cal-nav');
+    if(nav){
+      histCalM += Number(nav.dataset.delta);
+      if(histCalM < 1){ histCalM = 12; histCalY--; }
+      else if(histCalM > 12){ histCalM = 1; histCalY++; }
+      renderHistDates();
+      return;
+    }
+    const cell = e.target.closest('.cal-cell.has');
+    if(cell && cell.dataset.d) selectHistDate(cell.dataset.d);
+  };
 }
 async function selectHistDate(d){
   histCurrentDate = d; renderHistDates();
