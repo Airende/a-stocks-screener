@@ -9943,13 +9943,21 @@ def _archive_put(date: str, section: str, payload: dict) -> None:
 
 
 def _archive_dates() -> list[str]:
-    """已归档日期列表(新→旧): 云端 keys + 本地 keys 合并去重"""
+    """已归档日期列表(新→旧): 云端 keys + 本地 keys 合并去重, 过滤非交易日(20261001)"""
     dates = set()
     for k in _kv_list("signals_"):
         if k.startswith("signals_") and len(k) == len("signals_2026-09-06"):
             dates.add(k[len("signals_"):])
     dates.update(_archive_local_load().keys())
-    return sorted(dates, reverse=True)[:_SIGNAL_KEEP_DAYS]
+
+    def _is_trading_day(s: str) -> bool:
+        """周末(六/日)视为非交易日, 过滤掉历史遗留的周末快照"""
+        try:
+            return datetime.strptime(s, "%Y-%m-%d").date().weekday() < 5
+        except ValueError:
+            return False
+
+    return sorted((d for d in dates if _is_trading_day(d)), reverse=True)[:_SIGNAL_KEEP_DAYS]
 
 
 # ============================================================
