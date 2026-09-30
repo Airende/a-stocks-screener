@@ -6296,6 +6296,12 @@ function kdMultiChart(bars, opt){
           text-anchor="middle" dominant-baseline="central" fill="${s.color||'#fff'}" stroke="rgba(15,22,35,.9)" stroke-width="1.6" paint-order="stroke" title="${escFn(s.name||'')} ${day}">${escFn(s.ch||'')}</text>`;
       });
     }
+    // 当前多头排列强标 (20261001): 独立于历史归档, 实时按均线口径(MA5>MA10>MA20)在最末K标金"多"
+    const _ni = n - 1;
+    if(_ni >= 0 && ma5[_ni] > ma10[_ni] && ma10[_ni] > ma20[_ni]){
+      const cy = Math.max(3, yFn1(bars[_ni].high) - 9);
+      out += `<text x="${xi(_ni).toFixed(1)}" y="${cy.toFixed(1)}" font-size="6" font-weight="700" text-anchor="middle" dominant-baseline="central" fill="#f5c842" stroke="rgba(15,22,35,.9)" stroke-width="1.6" paint-order="stroke" title="当前多头排列 ${bars[_ni].day}">多</text>`;
+    }
     return out;
   };
   _chartReg[cid1]={bars, w, h:h1, padL, padR, n, sync:syncName,
