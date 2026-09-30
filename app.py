@@ -8293,7 +8293,15 @@ def _collect_day_signals(rec: dict, code6: str):
         if _stock_code6(it[0]) == code6:
             hits.append({"name": "低位启动前", "ch": "启", "color": "#e8890c"})
             break
-    return hits
+    # 去重: 同一形态可能同时命中均线patterns与screen.early (如"低位启动前"),
+    # 按符号ch合并, 避免K线上同一位置叠出重复标识 (20261001)
+    seen, uniq = set(), []
+    for h in hits:
+        if h["ch"] in seen:
+            continue
+        seen.add(h["ch"])
+        uniq.append(h)
+    return uniq
 
 
 @app.get("/api/stock/hist-signals")
