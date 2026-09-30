@@ -6134,11 +6134,6 @@ function kdSubPanels(bars, cfg){
     const wv=(barW&&barW[i]&&barW[i].cw)?barW[i].cw:(bw||3);
     return `<rect x="${(cxv-wv/2).toFixed(1)}" y="${yv.toFixed(1)}" width="${wv.toFixed(1)}" height="${bh.toFixed(1)}" fill="${col}"/>`;
   }).join('');
-  // 5日均量线
-  const vmaPath=(()=>{ let p='',st=false;
-    for(let i=0;i<n;i++){ let s=0,c=0; for(let j=Math.max(0,i-4);j<=i;j++){s+=bars[j].volume;c++;}
-      const a=s/c; p+=(st?'L':'M')+xi(i).toFixed(1)+','+yFn2(a).toFixed(1)+' '; st=true; }
-    return `<path d="${p}" fill="none" stroke="#f5c842" stroke-width="0.8" stroke-dasharray="3,2"/>`; })();
   // KDJ(9,3,3) 与 VR(5日均量比)
   const K=[],D=[],J=[]; let pk=50,pd=50;
   for(let i=0;i<n;i++){ let hh=-1e9,ll=1e9;
@@ -6159,7 +6154,7 @@ function kdSubPanels(bars, cfg){
       return `<b>${esc(b.day||'')}</b>${ditag}<br>成交额 ${amtTxt} · VR ${r.toFixed(2)} ${tag}`; }};
   const p2=`<div class="sa-chart" id="${cid2}" style="height:${h2}px;margin-top:2px"><svg viewBox="0 0 ${w} ${h2}" style="width:100%;height:100%" preserveAspectRatio="none">
     <line x1="${padL}" y1="${yFn2(vmax).toFixed(1)}" x2="${w-padR}" y2="${yFn2(vmax).toFixed(1)}" stroke="rgba(255,255,255,.05)"/>
-    ${vbars}${vmaPath}${volMarks}
+    ${vbars}${volMarks}
     ${_sqT(padL, 9, `fill="#9fb0c6" font-size="9"`, tf==='week'?'周成交量':(tf==='month'?'月成交量':'成交量'))}
   </svg></div>`;
 
