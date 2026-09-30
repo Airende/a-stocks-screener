@@ -6524,10 +6524,13 @@ function renderHistDates(){
   const box = $('#histDates'); if(!box) return;
   if(!histDates.length){ box.innerHTML = '<span class="sa-hist-empty">暂无归档</span>'; return; }
   // 横向单条日期标签 (20261001): 不再用大日历占位, 改为横向滚动条
+  const dow = ['日','一','二','三','四','五','六'];
   box.innerHTML = '<div style="display:flex;gap:6px;overflow-x:auto;padding:2px 0 4px">' +
-    histDates.map(ds =>
-      '<div class="hist-date' + (ds===histCurrentDate?' sel':'') + '" data-d="' + ds + '" style="flex:0 0 auto;padding:5px 12px;font-size:12px;border-radius:6px;background:var(--panel2);border:1px solid var(--border);cursor:pointer;font-variant-numeric:tabular-nums">' + ds + '</div>'
-    ).join('') + '</div>';
+    histDates.map(ds => {
+      const y = Number(ds.slice(0,4)), m = Number(ds.slice(5,7))-1, d = Number(ds.slice(8,10));
+      const w = dow[new Date(y, m, d).getDay()];
+      return '<div class="hist-date' + (ds===histCurrentDate?' sel':'') + '" data-d="' + ds + '" style="flex:0 0 auto;padding:5px 12px;font-size:12px;border-radius:6px;background:var(--panel2);border:1px solid var(--border);cursor:pointer;font-variant-numeric:tabular-nums">' + ds + ' 周' + w + '</div>';
+    }).join('') + '</div>';
   box.onclick = (e) => {
     const cell = e.target.closest('.hist-date');
     if(cell && cell.dataset.d) selectHistDate(cell.dataset.d);
