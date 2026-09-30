@@ -6582,14 +6582,14 @@ function renderHistory(rec){
   if(sc){
     parts.push(`<div class="sec-h">选股筛选 <span class="cnt">${sc.matched||0}</span>
       <span class="meta">${esc(sc.updated||'')} · 样本 ${sc.universe||0} · 勾选${(sc.conds||[]).length}条件</span></div>`);
-    parts.push('<div class="tbl-wrap" style="max-height:420px;overflow-y:auto"><table><thead><tr><th class="l">#</th><th class="l">股票</th><th class="l col-opt">行业</th><th>今日涨跌</th><th>现价</th><th>ATR%</th><th class="l">买卖点</th></tr></thead><tbody id="histScreenBody"></tbody></table></div>');
+    parts.push('<div class="tbl-wrap" style="max-height:420px;overflow-y:auto"><table><thead><tr><th class="l">#</th><th class="l">股票</th><th class="l col-opt">行业</th><th>今日涨跌</th><th>现价</th><th>ATR%</th></tr></thead><tbody id="histScreenBody"></tbody></table></div>');
   }
   // ---- 均线 ----
   if(ma){
     const cnt = ma.counts || {};
     parts.push(`<div class="sec-h" style="margin-top:24px">均线形态 <span class="meta">${esc(ma.updated||'')} · 扫描${ma.total_stocks||0}只 · ${ma.elapsed_sec||''}s</span></div>`);
     parts.push('<div class="stats">' + Object.entries(cnt).map(([k,v]) => `<div class="stat"><div class="n">${v}</div><div class="l">${esc(k)}</div></div>`).join('') + '</div>');
-    parts.push('<div class="tbl-wrap" style="max-height:420px;overflow-y:auto"><table><thead><tr><th class="l">形态</th><th class="l">股票</th><th class="l col-opt">行业</th><th>今日涨跌</th><th>现价</th><th class="l">买卖点</th></tr></thead><tbody id="histMaBody"></tbody></table></div>');
+    parts.push('<div class="tbl-wrap" style="max-height:420px;overflow-y:auto"><table><thead><tr><th class="l">形态</th><th class="l">股票</th><th class="l col-opt">行业</th><th>今日涨跌</th><th>现价</th></tr></thead><tbody id="histMaBody"></tbody></table></div>');
   }
   // ---- 上试盘 ----
   if(ssp){
@@ -6613,8 +6613,8 @@ function renderHistory(rec){
   if(sb && sc){
     const rows = [...(sc.exact||[]), ...(sc.stocks||[])];
     sb.innerHTML = rows.length
-      ? rows.slice(0,120).map((s,i) => `<tr><td class="l">${i+1}</td><td class="l">${markNameHtml(s.code,s.name,s.price)}</td><td class="l col-opt">${esc(s.industry||'')}</td><td>${fmtPct(s.change_pct)}</td><td>${p2(s.price)}</td><td>${s.atr_pct!=null? s.atr_pct+'%':'—'}</td><td class="l">${sigBadgeHtml(s)}</td></tr>`).join('')
-      : '<tr><td colspan="7" class="empty">无</td></tr>';
+      ? rows.slice(0,120).map((s,i) => `<tr><td class="l">${i+1}</td><td class="l">${markNameHtml(s.code,s.name,s.price)}</td><td class="l col-opt">${esc(s.industry||'')}</td><td>${fmtPct(s.change_pct)}</td><td>${p2(s.price)}</td><td>${s.atr_pct!=null? s.atr_pct+'%':'—'}</td></tr>`).join('')
+      : '<tr><td colspan="6" class="empty">无</td></tr>';
   }
   // ---- 填充行: 均线(每形态前5) ----
   const mb = $('#histMaBody');
@@ -6622,8 +6622,8 @@ function renderHistory(rec){
     const rows = [];
     Object.entries(ma.patterns||{}).forEach(([p, list]) => { (list||[]).slice(0,5).forEach(s => rows.push({p, s})); });
     mb.innerHTML = rows.length
-      ? rows.map(({p,s}) => `<tr><td class="l">${esc(p)}</td><td class="l">${markNameHtml(s.code,s.name,s.price)}</td><td class="l col-opt">${esc(s.industry||'')}</td><td>${fmtPct(s.change_pct)}</td><td>${p2(s.price)}</td><td class="l">${sigBadgeHtml(s)}</td></tr>`).join('')
-      : '<tr><td colspan="6" class="empty">无</td></tr>';
+      ? rows.map(({p,s}) => `<tr><td class="l">${esc(p)}</td><td class="l">${markNameHtml(s.code,s.name,s.price)}</td><td class="l col-opt">${esc(s.industry||'')}</td><td>${fmtPct(s.change_pct)}</td><td>${p2(s.price)}</td></tr>`).join('')
+      : '<tr><td colspan="5" class="empty">无</td></tr>';
   }
   // ---- 填充行: 上试盘 ----
   const pb = $('#histSspBody');
