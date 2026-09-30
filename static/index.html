@@ -6575,39 +6575,60 @@ async function selectHistDate(d){
 }
 function renderHistory(rec){
   const box = $('#histContent'); if(!box) return;
-  const parts = [];
   const sc = rec.screen, ma = rec.ma, ssp = rec.ssp;
-  let sspRows = [];
-  // ---- 选股 ----
-  if(sc){
-    parts.push(`<div class="sec-h">选股筛选 <span class="cnt">${sc.matched||0}</span>
-      <span class="meta">${esc(sc.updated||'')} · 样本 ${sc.universe||0} · 勾选${(sc.conds||[]).length}条件</span></div>`);
-    parts.push('<div class="tbl-wrap" style="max-height:420px;overflow-y:auto"><table><thead><tr><th class="l">#</th><th class="l">股票</th><th class="l col-opt">行业</th><th>今日涨跌</th><th>现价</th><th>ATR%</th></tr></thead><tbody id="histScreenBody"></tbody></table></div>');
-  }
-  // ---- 均线 ----
+  // 收集含数据的模块, 生成子tab (20261001 对齐均线形态筛选的tab交互)
+  const mods = [];
+  if(sc) mods.push({id:'screen', label:'选股筛选', cnt:(sc.matched||0)});
   if(ma){
-    const cnt = ma.counts || {};
-    parts.push(`<div class="sec-h" style="margin-top:24px">均线形态 <span class="meta">${esc(ma.updated||'')} · 扫描${ma.total_stocks||0}只 · ${ma.elapsed_sec||''}s</span></div>`);
-    parts.push('<div class="stats">' + Object.entries(cnt).map(([k,v]) => `<div class="stat"><div class="n">${v}</div><div class="l">${esc(k)}</div></div>`).join('') + '</div>');
-    parts.push('<div class="tbl-wrap" style="max-height:420px;overflow-y:auto"><table><thead><tr><th class="l">形态</th><th class="l">股票</th><th class="l col-opt">行业</th><th>今日涨跌</th><th>现价</th></tr></thead><tbody id="histMaBody"></tbody></table></div>');
+    let _t = 0; for(const k in (ma.counts||{})) _t += (ma.counts[k]||0);
+    mods.push({id:'ma', label:'均线形态', cnt:_t});
   }
-  // ---- 上试盘 ----
   if(ssp){
-    const c = ssp.counts || {};
-    parts.push(`<div class="sec-h" style="margin-top:24px">上试盘 <span class="meta">${esc(ssp.updated||'')} · 大盘${ssp.mkt_filter?'允许买入':'禁止买入'}</span></div>`);
-    parts.push('<div class="stats">' + [['上试盘·新信号',c['上试盘·新信号']],['上试盘·观察池',c['上试盘·观察池']],['上试盘·已确认',c['上试盘·已确认']]]
-      .map(x => `<div class="stat"><div class="n">${x[1]||0}</div><div class="l">${x[0]}</div></div>`).join('') + '</div>');
-    sspRows = [
-      ...(ssp.new_signals||[]).slice(0,10).map(s => ({s, pool:'A·新信号'})),
-      ...(ssp.watch_pool||[]).slice(0,10).map(s => ({s, pool:'B·观察'})),
-      ...(ssp.confirmed_pool||[]).slice(0,10).map(s => ({s, pool:'C·已确认'})),
-    ];
-    if(sspRows.length){
-      parts.push('<div class="tbl-wrap" style="max-height:420px;overflow-y:auto"><table><thead><tr><th class="l">池</th><th class="l">股票</th><th>今日涨跌</th><th>现价</th><th class="l">要点</th></tr></thead><tbody id="histSspBody"></tbody></table></div>');
-    }
+    const _c = ssp.counts||{};
+    mods.push({id:'ssp', label:'上试盘', cnt:(_c['上试盘·新信号']||0)+(_c['上试盘·观察池']||0)+(_c['上试盘·已确认']||0)});
   }
-  if(!parts.length){ box.innerHTML = '<div class="empty">该日无归档数据</div>'; return; }
-  box.innerHTML = parts.join('');
+  if(!mods.length){ box.innerHTML = '<div class="empty">该日无归档数据</div>'; return; }
+  const sspRows = [
+    ...((ssp&&ssp.new_signals)||[]).slice(0,10).map(s => ({s, pool:'A·新信号'})),
+    ...((ssp&&ssp.watch_pool)||[]).slice(0,10).map(s => ({s, pool:'B·观察'})),
+    ...((ssp&&ssp.confirmed_pool)||[]).slice(0,10).map(s => ({s, pool:'C·已确认'})),
+  ];
+  // 各模块 pane 内容
+  const panes = mods.map(m => {
+    let inner = '';
+    if(m.id === 'screen'){
+      inner = `<div class="sec-h">选股筛选 <span class="cnt">${sc.matched||0}</span>
+        <span class="meta">${esc(sc.updated||'')} · 样本 ${sc.universe||0} · 勾选${(sc.conds||[]).length}条件</span></div>
+        <div class="tbl-wrap" style="max-height:420px;overflow-y:auto"><table><thead><tr><th class="l">#</th><th class="l">股票</th><th class="l col-opt">行业</th><th>今日涨跌</th><th>现价</th><th>ATR%</th></tr></thead><tbody id="histScreenBody"></tbody></table></div>`;
+    } else if(m.id === 'ma'){
+      const cnt = ma.counts || {};
+      inner = `<div class="sec-h">均线形态 <span class="meta">${esc(ma.updated||'')} · 扫描${ma.total_stocks||0}只 · ${ma.elapsed_sec||''}s</span></div>
+        <div class="stats">` + Object.entries(cnt).map(([k,v]) => `<div class="stat"><div class="n">${v}</div><div class="l">${esc(k)}</div></div>`).join('') + `</div>
+        <div class="tbl-wrap" style="max-height:420px;overflow-y:auto"><table><thead><tr><th class="l">形态</th><th class="l">股票</th><th class="l col-opt">行业</th><th>今日涨跌</th><th>现价</th></tr></thead><tbody id="histMaBody"></tbody></table></div>`;
+    } else {
+      const c = ssp.counts || {};
+      inner = `<div class="sec-h">上试盘 <span class="meta">${esc(ssp.updated||'')} · 大盘${ssp.mkt_filter?'允许买入':'禁止买入'}</span></div>
+        <div class="stats">` + [['上试盘·新信号',c['上试盘·新信号']],['上试盘·观察池',c['上试盘·观察池']],['上试盘·已确认',c['上试盘·已确认']]]
+        .map(x => `<div class="stat"><div class="n">${x[1]||0}</div><div class="l">${x[0]}</div></div>`).join('') + `</div>` +
+        (sspRows.length ? '<div class="tbl-wrap" style="max-height:420px;overflow-y:auto"><table><thead><tr><th class="l">池</th><th class="l">股票</th><th>今日涨跌</th><th>现价</th><th class="l">要点</th></tr></thead><tbody id="histSspBody"></tbody></table></div>' : '');
+    }
+    return {id:m.id, label:m.label, cnt:m.cnt, inner};
+  });
+  // tab 栏 + 各 pane 区
+  box.innerHTML =
+    '<div class="ma-tabs" style="margin-bottom:8px">' +
+    panes.map((p,i)=>`<div class="ma-tab ${i===0?'active':''}" data-hi="${p.id}">${p.label}<span class="cnt">${p.cnt}</span></div>`).join('') +
+    '</div>' +
+    panes.map((p,i)=>`<div data-hp="${p.id}" style="${i===0?'':'display:none'}">${p.inner}</div>`).join('');
+  // 子tab切换
+  box.querySelectorAll('.ma-tab').forEach(t=>{
+    t.onclick=()=>{
+      box.querySelectorAll('.ma-tab').forEach(x=>x.classList.remove('active'));
+      t.classList.add('active');
+      const id = t.dataset.hi;
+      box.querySelectorAll('[data-hp]').forEach(x=>{ x.style.display = (x.dataset.hp===id)?'':'none'; });
+    };
+  });
   // ---- 填充行: 选股 ----
   const sb = $('#histScreenBody');
   if(sb && sc){
