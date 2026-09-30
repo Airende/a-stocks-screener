@@ -9942,6 +9942,23 @@ def _archive_put(date: str, section: str, payload: dict) -> None:
     _archive_prune()
 
 
+# A股法定节假日休市日 (仅列落在工作日的交易日历休市日; 周六/日已由 weekday 过滤)。
+# 数据来源: 沪深北交易所休市安排 + 国务院节假日安排; 20261001 依据交易所公告并参考用户核实
+#   (中秋节 2026-09-29 官方口径未定, 按用户确认 2026-09-25; 国庆 10-01 ~ 10-07)。
+# 说明: 该集合全年可用, 不影响当年其余日期。
+_CN_MARKET_CLOSED_2026 = {
+    "2026-01-01",                      # 元旦
+    "2026-02-16", "2026-02-17", "2026-02-18",
+    "2026-02-19", "2026-02-20", "2026-02-23",  # 春节(2-15~2-23, 其余为周末)
+    "2026-04-06",                      # 清明(4-04~4-06, 前两日为周末)
+    "2026-05-01", "2026-05-04", "2026-05-05",  # 劳动节(5-01~5-05, 周日除外)
+    "2026-06-01", "2026-06-02", "2026-06-03",  # 端午节
+    "2026-09-25",                      # 中秋节
+    "2026-10-01", "2026-10-02", "2026-10-05",
+    "2026-10-06", "2026-10-07",        # 国庆节(10-01~10-07, 周六日除外)
+}
+
+
 def _archive_dates() -> list[str]:
     """已归档日期列表(新→旧): 云端 keys + 本地 keys 合并去重, 过滤非交易日(20261001)"""
     dates = set()
@@ -9951,11 +9968,16 @@ def _archive_dates() -> list[str]:
     dates.update(_archive_local_load().keys())
 
     def _is_trading_day(s: str) -> bool:
-        """周末(六/日)视为非交易日, 过滤掉历史遗留的周末快照"""
+        """排除非交易日: 周六/日 + A股法定休市的节假日"""
         try:
-            return datetime.strptime(s, "%Y-%m-%d").date().weekday() < 5
+            d = datetime.strptime(s, "%Y-%m-%d").date()
         except ValueError:
             return False
+        if d.weekday() >= 5:
+            return False
+        if s in _CN_MARKET_CLOSED_2026:
+            return False
+        return True
 
     return sorted((d for d in dates if _is_trading_day(d)), reverse=True)[:_SIGNAL_KEEP_DAYS]
 
