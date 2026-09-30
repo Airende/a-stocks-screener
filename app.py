@@ -7184,8 +7184,14 @@ def _weekly_display_snap(bars: list[dict]) -> dict:
     ma20a = sma(closes, 20)
     ma20v = ma20a[-1] if (len(ma20a) and not math.isnan(ma20a[-1])) else 0
     c = closes[-1]
-    high52 = max(highs[-52:]) if len(highs) >= 1 else max(highs)
-    low52 = min(lows[-52:]) if len(lows) >= 1 else min(lows)
+    # 52周基准排除当前(进行中)周, 使周内创新高的股票 52周位 能突破100% (20261001)
+    base_highs = highs[:-1]
+    base_lows = lows[:-1]
+    high52 = max(base_highs[-52:]) if base_highs else (max(highs) if highs else 0)
+    low52 = min(base_lows[-52:]) if base_lows else (min(lows) if lows else 0)
+    if high52 <= low52:  # 兜底: 异常时退回含当前周口径
+        high52 = max(highs[-52:]) if highs else 0
+        low52 = min(lows[-52:]) if lows else 0
     pos52 = (c - low52) / (high52 - low52) if high52 > low52 else 1.0
     return {"w_ma5": 0, "w_ma10": 0, "w_ma20": round(ma20v, 2),
             "w_ma30": 0, "w_ma60": 0,
@@ -7226,8 +7232,14 @@ def _weekly_veto_check(bars: list[dict]) -> tuple[bool, dict]:
     if not all([m5, m10, m20, m30]):
         return False, {}
 
-    high52 = max(highs[-52:]) if len(highs) >= 52 else max(highs)
-    low52 = min(lows[-52:]) if len(lows) >= 52 else min(lows)
+    # 52周基准排除当前(进行中)周, 使周内创新高的股票 52周位 能突破100% (20261001)
+    base_highs = highs[:-1]
+    base_lows = lows[:-1]
+    high52 = max(base_highs[-52:]) if base_highs else (max(highs) if highs else 0)
+    low52 = min(base_lows[-52:]) if base_lows else (min(lows) if lows else 0)
+    if high52 <= low52:  # 兜底: 异常时退回含当前周口径
+        high52 = max(highs[-52:]) if highs else 0
+        low52 = min(lows[-52:]) if lows else 0
     pos52 = (c - low52) / (high52 - low52) if high52 > low52 else 1.0
 
     # PASS1: 收盘价 > MA20 (20260918 判定与显示统一为周MA20, 原为周MA30)
