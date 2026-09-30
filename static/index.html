@@ -1002,7 +1002,6 @@
         <div class="ckbar" style="margin-bottom:10px">
           <span class="meta" id="maUpdated">尚未筛选</span>
           <button class="ghost" id="maRunBtn">开始筛选</button>
-          <button class="ghost" id="maExportBtn">导出代码</button>
         </div>
         <!-- ATR过滤UI已移除 (20260925): 不再按ATR过滤, 列表仍显示ATR%列 -->
         <div class="ma-tabs" id="maTabs"></div>
@@ -4729,8 +4728,6 @@ function downloadText(fname, content){
   document.body.appendChild(a); a.click();
   setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },200);
 }
-$('#maExportBtn').onclick=exportMATabCodes;
-
 // 均线形态筛选: 页载先查缓存, 有结果则只渲染不重扫
 renderMATabs();
 bindMASortHeaders();
