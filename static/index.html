@@ -4586,7 +4586,9 @@ function maRowHtml(s,i){
   if(showWeekly && s.w_ma20){
     const posColor = (s.w_pos52||0) >= 0.6 ? 'var(--up)' : ((s.w_pos52||0) < 0.3 ? 'var(--down)' : 'var(--gold)');
     const boostTag = s.w_vol_boost ? ' <span style="color:var(--gold)">🔥放量</span>' : '';
-    weeklyLine = `<div class="code" style="color:var(--sub);font-size:11px">52周位:<span style="color:${posColor}">${((s.w_pos52||0)*100).toFixed(2)}%</span>${boostTag}</div>`;
+    const posPct = (s.w_pos52||0)*100;
+    const newHigh = posPct > 100 ? ' <span style="color:var(--up);font-weight:700">· 新高</span>' : '';
+    weeklyLine = `<div class="code" style="color:var(--sub);font-size:11px">52周位:<span style="color:${posColor}">${posPct.toFixed(2)}%</span>${newHigh}${boostTag}</div>`;
   }
   // 日J/周J (20260930): 全 tab 展示, 过百标红 (var(--up) 红色系), 低于30弱, 高值警示
   const jv = (v)=> (v!=null&&!isNaN(v)) ? '<span style="color:'+(v>=100?'var(--up)':(v>=80?'var(--sub)':(v<30?'var(--down)':'var(--gold)')))+';font-weight:600">'+ Number(v).toFixed(1) +'</span>' : '—';
