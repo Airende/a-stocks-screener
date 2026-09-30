@@ -6617,7 +6617,7 @@ function renderHistory(rec){
     } else {
       inner = `<div class="sec-h">上试盘 <span class="meta">${esc(ssp.updated||'')} · 大盘${ssp.mkt_filter?'允许买入':'禁止买入'}</span></div>`;
       // 三个池子各自一个二级tab (20261001)
-      const pools = [['上试盘·新信号','A·新信号'],['上试盘·观察池','B·观察'],['上试盘·已确认','C·已确认']];
+      const pools = [['new_signals','A·新信号'],['watch_pool','B·观察'],['confirmed_pool','C·已确认']];
       const avail = pools.filter(([k]) => (ssp[k]||[]).length);
       if(avail.length){
         inner += '<div class="ma-tabs" style="margin-bottom:8px">' + avail.map(([k,label],i)=>
@@ -6682,9 +6682,9 @@ function renderHistory(rec){
   }
   // ---- 填充行: 上试盘(每个池单独一个pane, 20261001) ----
   if(ssp){
-    const _pools = [['上试盘·新信号', k => `待突破 ${k.break_price||'—'} / 作废 ${k.invalidate_price||'—'}`],
-                    ['上试盘·观察池', k => `剩余${k.remain_days!=null ? k.remain_days+'天' : '—'} · 突破 ${k.break_price||'—'}`],
-                    ['上试盘·已确认', k => `入场 ${k.entry_price||'—'} / 止损 ${k.stop_price||'—'} / 目标 ${k.target_price||'—'}`]];
+    const _pools = [['new_signals', k => `待突破 ${k.break_price||'—'} / 作废 ${k.invalidate_price||'—'}`],
+                    ['watch_pool', k => `剩余${k.remain_days!=null ? k.remain_days+'天' : '—'} · 突破 ${k.break_price||'—'}`],
+                    ['confirmed_pool', k => `入场 ${k.entry_price||'—'} / 止损 ${k.stop_price||'—'} / 目标 ${k.target_price||'—'}`]];
     _pools.forEach(([key, noteFn]) => {
       const pane = box.querySelector(`.hs-pane[data-hs2="${key}"] .hs-rows`);
       if(!pane) return;
