@@ -6588,11 +6588,6 @@ function renderHistory(rec){
     mods.push({id:'ssp', label:'上试盘', cnt:(_c['上试盘·新信号']||0)+(_c['上试盘·观察池']||0)+(_c['上试盘·已确认']||0)});
   }
   if(!mods.length){ box.innerHTML = '<div class="empty">该日无归档数据</div>'; return; }
-  const sspRows = [
-    ...((ssp&&ssp.new_signals)||[]).slice(0,10).map(s => ({s, pool:'A·新信号'})),
-    ...((ssp&&ssp.watch_pool)||[]).slice(0,10).map(s => ({s, pool:'B·观察'})),
-    ...((ssp&&ssp.confirmed_pool)||[]).slice(0,10).map(s => ({s, pool:'C·已确认'})),
-  ];
   // 各模块 pane 内容
   const panes = mods.map(m => {
     let inner = '';
@@ -6620,11 +6615,18 @@ function renderHistory(rec){
           </div>`).join('');
       }
     } else {
-      const c = ssp.counts || {};
-      inner = `<div class="sec-h">上试盘 <span class="meta">${esc(ssp.updated||'')} · 大盘${ssp.mkt_filter?'允许买入':'禁止买入'}</span></div>
-        <div class="stats">` + [['上试盘·新信号',c['上试盘·新信号']],['上试盘·观察池',c['上试盘·观察池']],['上试盘·已确认',c['上试盘·已确认']]]
-        .map(x => `<div class="stat"><div class="n">${x[1]||0}</div><div class="l">${x[0]}</div></div>`).join('') + `</div>` +
-        (sspRows.length ? '<div class="tbl-wrap" style="max-height:420px;overflow-y:auto"><table><thead><tr><th class="l">池</th><th class="l">股票</th><th>今日涨跌</th><th>现价</th><th class="l">要点</th></tr></thead><tbody id="histSspBody"></tbody></table></div>' : '');
+      inner = `<div class="sec-h">上试盘 <span class="meta">${esc(ssp.updated||'')} · 大盘${ssp.mkt_filter?'允许买入':'禁止买入'}</span></div>`;
+      // 三个池子各自一个二级tab (20261001)
+      const pools = [['上试盘·新信号','A·新信号'],['上试盘·观察池','B·观察'],['上试盘·已确认','C·已确认']];
+      const avail = pools.filter(([k]) => (ssp[k]||[]).length);
+      if(avail.length){
+        inner += '<div class="ma-tabs" style="margin-bottom:8px">' + avail.map(([k,label],i)=>
+          `<div class="ma-tab ssp-tab ${i===0?' active':''}" data-hs="${k}">${label}<span class="cnt">${(ssp[k]||[]).length}</span></div>`).join('') + '</div>';
+        inner += avail.map(([k],i)=>`
+          <div class="hs-pane" data-hs2="${k}" style="${i===0?'':'display:none'}">
+            <div class="tbl-wrap" style="max-height:420px;overflow-y:auto"><table><thead><tr><th class="l">#</th><th class="l">股票</th><th class="l col-opt">行业</th><th>今日涨跌</th><th>现价</th><th class="l">要点</th></tr></thead><tbody class="hs-rows"></tbody></table></div>
+          </div>`).join('');
+      }
     }
     return {id:m.id, label:m.label, cnt:m.cnt, inner};
   });
@@ -6652,6 +6654,15 @@ function renderHistory(rec){
       box.querySelectorAll('.hm-pane').forEach(x=>{ x.style.display = (x.dataset.hp2===id)?'':'none'; });
     };
   });
+  // 二级子tab切换 (上试盘内各池)
+  box.querySelectorAll('.ma-tab[data-hs]').forEach(t=>{
+    t.onclick=()=>{
+      box.querySelectorAll('.ma-tab[data-hs]').forEach(x=>x.classList.remove('active'));
+      t.classList.add('active');
+      const id = t.dataset.hs;
+      box.querySelectorAll('.hs-pane').forEach(x=>{ x.style.display = (x.dataset.hs2===id)?'':'none'; });
+    };
+  });
   // ---- 填充行: 选股 ----
   const sb = $('#histScreenBody');
   if(sb && sc){
@@ -6669,17 +6680,19 @@ function renderHistory(rec){
         : '<tr><td colspan="5" class="empty">无</td></tr>';
     });
   }
-  // ---- 填充行: 上试盘 ----
-  const pb = $('#histSspBody');
-  if(pb){
-    pb.innerHTML = sspRows.length
-      ? sspRows.map(({s, pool}) => {
-          const note = pool === 'A·新信号' ? `待突破 ${s.break_price||'—'} / 作废 ${s.invalidate_price||'—'}`
-            : (pool === 'B·观察' ? `剩余${s.remain_days!=null ? s.remain_days+'天' : '—'} · 突破 ${s.break_price||'—'}`
-            : `入场 ${s.entry_price||'—'} / 止损 ${s.stop_price||'—'} / 目标 ${s.target_price||'—'}`);
-          return `<tr><td class="l">${pool}</td><td class="l">${markNameHtml(s.code,s.name,s.price)}</td><td>${fmtPct(s.change_pct)}</td><td>${p2(s.price)}</td><td class="l" style="font-size:11px;color:var(--sub)">${note}</td></tr>`;
-        }).join('')
-      : '<tr><td colspan="5" class="empty">无</td></tr>';
+  // ---- 填充行: 上试盘(每个池单独一个pane, 20261001) ----
+  if(ssp){
+    const _pools = [['上试盘·新信号', k => `待突破 ${k.break_price||'—'} / 作废 ${k.invalidate_price||'—'}`],
+                    ['上试盘·观察池', k => `剩余${k.remain_days!=null ? k.remain_days+'天' : '—'} · 突破 ${k.break_price||'—'}`],
+                    ['上试盘·已确认', k => `入场 ${k.entry_price||'—'} / 止损 ${k.stop_price||'—'} / 目标 ${k.target_price||'—'}`]];
+    _pools.forEach(([key, noteFn]) => {
+      const pane = box.querySelector(`.hs-pane[data-hs2="${key}"] .hs-rows`);
+      if(!pane) return;
+      const list = ssp[key]||[];
+      pane.innerHTML = list.length
+        ? list.map((s,i) => `<tr><td class="l">${i+1}</td><td class="l">${markNameHtml(s.code,s.name,s.price)}</td><td class="l col-opt">${esc(s.industry||'')}</td><td>${fmtPct(s.change_pct)}</td><td>${p2(s.price)}</td><td class="l" style="font-size:11px;color:var(--sub)">${noteFn(s)}</td></tr>`).join('')
+        : '<tr><td colspan="6" class="empty">无</td></tr>';
+    });
   }
 }
 $('#histRefreshBtn').onclick = () => { histCurrentDate = null; loadHistoryDates(); };
