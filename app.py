@@ -250,9 +250,11 @@ def _is_after_close() -> bool:
 
 
 def _is_trading_time() -> bool:
-    """判断当前是否为 A 股交易时段 (工作日 9:30-11:30 / 13:00-15:00)"""
+    """判断当前是否为 A 股交易时段 (交易日 9:30-11:30 / 13:00-15:00)。
+    20260925: 接入交易日历(_is_cn_trade_day), 节假日休市不再被当作交易中——
+    否则顶栏指数行情按 1s 轮询不停重绘, 数值不变也看起来在闪。"""
     now_bj = datetime.now(_BJ_TZ)
-    if now_bj.weekday() >= 5:  # 周末
+    if not _is_cn_trade_day(now_bj):
         return False
     t = now_bj.hour * 60 + now_bj.minute
     return (9 * 60 + 30 <= t <= 11 * 60 + 30) or (13 * 60 <= t <= 15 * 60)

@@ -4780,6 +4780,10 @@ function renderMarketSnap(d){
       box.appendChild(el);
     }
     el.setAttribute('data-name', String(idx.name||sym));
+    // 值未变化则跳过DOM写入: className重置会重触发CSS过渡, 高频刷新时表现为文字闪烁 (20260925)
+    const sig=[idx.price, idx.chg, idx.chg_pct].join('|');
+    if(el.dataset.vsig===sig){ keep.add(sym); return; }
+    el.dataset.vsig=sig;
     const nmEl=el.querySelector('.idx-card-name');
     nmEl.textContent=String(idx.name||sym); nmEl.title=String(idx.name||sym);
     const pEl=el.querySelector('.idx-card-price');
@@ -6571,7 +6575,7 @@ function renderHistory(rec){
     if(m.id === 'screen'){
       inner = `<div class="sec-h">选股筛选 <span class="cnt">${sc.matched||0}</span>
         <span class="meta">${esc(sc.updated||'')} · 样本 ${sc.universe||0} · 勾选${(sc.conds||[]).length}条件</span></div>
-        <div class="tbl-wrap" style="max-height:420px;overflow-y:auto"><table><thead><tr><th class="l">#</th><th class="l">股票</th><th class="l col-opt">行业</th><th>今日涨跌</th><th>现价</th><th>ATR%</th></tr></thead><tbody id="histScreenBody"></tbody></table></div>`;
+        <div class="tbl-wrap"><table><thead><tr><th class="l">#</th><th class="l">股票</th><th class="l col-opt">行业</th><th>今日涨跌</th><th>现价</th><th>ATR%</th></tr></thead><tbody id="histScreenBody"></tbody></table></div>`;
     } else if(m.id === 'ma'){
       inner = `<div class="sec-h">均线形态 <span class="meta">${esc(ma.updated||'')} · 扫描${ma.total_stocks||0}只 · ${ma.elapsed_sec||''}s</span></div>`;
       const pats = Object.keys(ma.patterns||{});
@@ -6588,7 +6592,7 @@ function renderHistory(rec){
         }).join('') + '</div>';
         inner += pats.map((pat,i)=>`
           <div class="hm-pane" data-hp2="${pat}" style="${i===0?'':'display:none'}">
-            <div class="tbl-wrap" style="max-height:420px;overflow-y:auto"><table><thead><tr><th class="l">#</th><th class="l">股票</th><th class="l col-opt">行业</th><th>今日涨跌</th><th>现价</th></tr></thead><tbody class="hm-rows"></tbody></table></div>
+            <div class="tbl-wrap"><table><thead><tr><th class="l">#</th><th class="l">股票</th><th class="l col-opt">行业</th><th>今日涨跌</th><th>现价</th></tr></thead><tbody class="hm-rows"></tbody></table></div>
           </div>`).join('');
       }
     } else {
@@ -6601,7 +6605,7 @@ function renderHistory(rec){
           `<div class="ma-tab ssp-tab ${i===0?' active':''}" data-hs="${k}">${label}<span class="cnt">${(ssp[k]||[]).length}</span></div>`).join('') + '</div>';
         inner += avail.map(([k],i)=>`
           <div class="hs-pane" data-hs2="${k}" style="${i===0?'':'display:none'}">
-            <div class="tbl-wrap" style="max-height:420px;overflow-y:auto"><table><thead><tr><th class="l">#</th><th class="l">股票</th><th class="l col-opt">行业</th><th>今日涨跌</th><th>现价</th><th class="l">要点</th></tr></thead><tbody class="hs-rows"></tbody></table></div>
+            <div class="tbl-wrap"><table><thead><tr><th class="l">#</th><th class="l">股票</th><th class="l col-opt">行业</th><th>今日涨跌</th><th>现价</th><th class="l">要点</th></tr></thead><tbody class="hs-rows"></tbody></table></div>
           </div>`).join('');
       }
     }
