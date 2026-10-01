@@ -6273,10 +6273,14 @@ function kdMultiChart(bars, opt){
              `<text x="${x.toFixed(1)}" y="${ty.toFixed(1)}" font-size="8" font-weight="700" text-anchor="middle" fill="${col}" stroke="rgba(15,22,35,.9)" stroke-width="1.2" paint-order="stroke">${esc(s.label||'')}</text>`;
     }).join('');
     // 20260925: 黄色线段线按需求移除, 仅保留趋势标签提示方向
+    // 20261002: 趋势标签改为缠论"走势类型" (依中枢个数+重心方向判定), 保留(未确认)标注
     const lastSeg=segs.length?segs[segs.length-1]:null;
+    const chanTrend = chan.trend_type || (lastSeg ? (lastSeg.dir==='up'?'单边上涨':'单边下跌') : '');
+    const chanTCol = chanTrend.indexOf('上涨')>=0 ? '#ff4d4f' : (chanTrend.indexOf('下跌')>=0 ? '#26a69a' :
+      (lastSeg ? (lastSeg.dir==='up'?'#ff4d4f':'#26a69a') : 'var(--sub)'));
     chanOverlay=`<path d="${strokePath}" fill="none" stroke="rgba(232,238,246,.75)" stroke-width="1"/>`+
       sigMarks+
-      (lastSeg? `<text x="${w-padR-4}" y="10" font-size="9" font-weight="700" text-anchor="end" fill="${lastSeg.dir==='up'?'#ff4d4f':'#26a69a'}">${lastSeg.dir==='up'?'趋势: 上涨':'趋势: 下跌'}${lastSeg.confirmed===false?'(未确认)':''}</text>`:'');
+      (chanTrend? `<text x="${w-padR-4}" y="10" font-size="9" font-weight="700" text-anchor="end" fill="${chanTCol}">走势: ${chanTrend}${lastSeg&&lastSeg.confirmed===false?'(未确认)':''}</text>`:'');
   }
   const cid1='kd'+(++_chartSeq);
   // 浮窗三面板跨图同步十字线 (20260928): K线/量/KDJ 共享同一 x 映射, 悬停任意一个竖向虚线贯穿全部
@@ -6399,6 +6403,7 @@ async function showKlinePreview(code, anchor, period){
       if(!c || !c.ok) return c;
       const shift = i => (i>=_kf ? i-_kf : -1);
       const o = {ok:c.ok, strokes:[], segments:[], pivots:[], signals:[]};
+      if(c.trend_type) o.trend_type = c.trend_type;
       (c.strokes||[]).forEach(s=>{ const a=shift(s.i0), b=shift(s.i1); if(a>=0&&b>=0) o.strokes.push({i0:a,i1:b,p0:s.p0,p1:s.p1}); });
       (c.segments||[]).forEach(s=>{ const a=shift(s.i0), b=shift(s.i1); if(a>=0&&b>=0) o.segments.push({i0:a,i1:b,p0:s.p0,p1:s.p1}); });
       (c.pivots||[]).forEach(p=>{ const a=shift(p.i0), b=shift(p.i1); if(a>=0&&b>=0) o.pivots.push({i0:a,i1:b,zg:p.zg,zd:p.zd}); });

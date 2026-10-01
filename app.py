@@ -6437,6 +6437,29 @@ def _chan_signals(strokes: list[dict], pivots: list[dict], hist: list[float]) ->
     return out
 
 
+def _chan_trend_type(pivots: list[dict], segs_out: list[dict]) -> str:
+    """缠论走势类型: 依中枢个数+重心方向判定, 中枢不足时按最近线段方向归为单边。
+    返回: 上涨走势/下跌走势/盘整/单边上涨/单边下跌 之一。"""
+    def _cg(p):
+        return (p["zg"] + p["zd"]) / 2.0
+    if len(pivots) >= 2:
+        # 中枢重心总位移决定大级别方向 (末中枢重心相对首中枢)
+        g0, g1 = _cg(pivots[0]), _cg(pivots[-1])
+        if g1 > g0 * 1.001:
+            return "上涨走势"
+        if g1 < g0 * 0.999:
+            return "下跌走势"
+        return "盘整"
+    # 中枢不足2个 → 按最近线段方向归为单边
+    if segs_out:
+        d = segs_out[-1].get("dir")
+        if d == "up":
+            return "单边上涨"
+        if d == "down":
+            return "单边下跌"
+    return "盘整"
+
+
 def chan_analysis(bars: list[dict], start_dir: str = "auto") -> dict:
     """对一段日K做缠论结构分析。bars 需含 day/open/high/low/close。
     start_dir: 起笔方向 auto/down/up, 见 _chan_strokes。"""
@@ -6489,6 +6512,7 @@ def chan_analysis(bars: list[dict], start_dir: str = "auto") -> dict:
         "segments": segs_out,
         "pivots": pivots,
         "signals": signals,
+        "trend_type": _chan_trend_type(pivots, segs_out),
         "summary": {
             "structure": struct,
             "position": pos,
