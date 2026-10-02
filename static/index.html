@@ -6212,7 +6212,7 @@ function kdSubPanels(bars, cfg){
       if(!t) continue;
       const cxv=(barW&&barW[i]&&barW[i].cx!=null)?barW[i].cx:xi(i);
       const wv=(barW&&barW[i]&&barW[i].cw)?barW[i].cw:(bw||3);
-      const yv=yFn2(Math.max(bars[i].volume, vmax*0.01));
+      const yv=yFn2(Math.max(bars[i].volume, vmax*0.01))-2.5;   // 横杠上移留空隙
       const cl=t==='up'?'#ff4d4f':'#26a69a';
       s+=`<line x1="${(cxv-wv/2).toFixed(1)}" y1="${yv.toFixed(1)}" x2="${(cxv+wv/2).toFixed(1)}" y2="${yv.toFixed(1)}" stroke="${cl}" stroke-width="2" stroke-linecap="round"/>`;
     }
