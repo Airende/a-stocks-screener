@@ -6286,7 +6286,7 @@ function macdPanelHtml(cfg){
   const mLines=arr=>{ let p='', st=false;
     for(let i=0;i<n;i++){ if(isNaN(arr[i])) continue;
       p+=(st?'L':'M')+xi(i).toFixed(1)+','+yFn(arr[i]).toFixed(1)+' '; st=true; }
-    return p?`<path d="${p}" fill="none"/>`:''; };
+    return p; };
   const cid='macd'+(++_chartSeq);
   _chartReg[cid]={bars, w, padL, padR, padT, padB, n, h,
     tipFn:(b,i)=>`<b>${esc(b.day||'')}</b><br>DIF ${difA[i].toFixed(3)} · DEA ${deaA[i].toFixed(3)} · <b>MACD ${histA[i].toFixed(3)}</b>`};
