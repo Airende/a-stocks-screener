@@ -3976,7 +3976,9 @@ function buildChanChart(bars, chan){
     <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:100%" preserveAspectRatio="none">
       ${gridLines}${bands}${candles}${strokeEl}${segEl}${priceLine}${sigMarks}${dateTxt}${legend}
     </svg>
-  </div>`;
+  </div>`+
+  // MACD 副图 (20261002): 复用可复用版, 与主图X轴对齐
+  macdPanelHtml({bars, w, padL, padR, n, xStep, bw, kX, h:120});
 }
 
 // ===== ATR 副图: 4条线 ATR60(紫·平滑) / ATR30(蓝·中) / ATR14(橙·常用) / ATR5(红·短) =====
@@ -4161,7 +4163,9 @@ function buildMiniChartWithMarkers(bars, buyMarkers, sellMarkers, prewarmDays){
         ${legend}
       </svg>
     </div>
-  `;
+  `+
+  // MACD 副图 (20261002): 回测标记图无副图盘, 追加MACD
+  macdPanelHtml({bars, w, padL, padR, n, xStep, bw, kX:1, h:110});
 }
 
 // ===== 资金/基准对比收益曲线 =====
@@ -6249,6 +6253,54 @@ function kdSubPanels(bars, cfg){
     ${_sqT(padL+120, 9, `fill="#f5c842" font-size="9"`, 'DEA')}${datesM}
   </svg></div>`;
   return {volHtml:p2, macdHtml:p4, kdjHtml:p3final};
+}
+// ===== 可复用 MACD 副图 (20261002): 供缠论图/回测标记图等无副图的K线图追加. cfg:{bars,w,padL,padR,n,xStep,bw,kX,h} =====
+function macdPanelHtml(cfg){
+  const bars=cfg.bars, n=bars.length;
+  if(n<2) return '';
+  const w=cfg.w, padL=cfg.padL, padR=cfg.padR, xStep=cfg.xStep;
+  const bw=cfg.bw||Math.max(1.2, xStep*0.6);
+  const kX=cfg.kX||1, h=cfg.h||110, padT=12, padB=8;
+  const _sqT=(x,y,attrs,inner)=> (kX>1.02)
+    ? `<text transform="translate(${Number(x).toFixed(1)},${Number(y).toFixed(1)}) scale(${(1/kX).toFixed(3)},1)" x="0" y="0" ${attrs}>${inner}</text>`
+    : `<text x="${Number(x).toFixed(1)}" y="${Number(y).toFixed(1)}" ${attrs}>${inner}</text>`;
+  const xi=i=>padL+i*xStep+xStep/2;
+  const k12=2/(12+1), k26=2/(26+1), k9=2/(9+1);
+  const difA=[], deaA=[], histA=[];
+  { let e12=0, e26=0, dea=0;
+    for(let i=0;i<n;i++){ const c=+bars[i].close;
+      if(i===0){ e12=c; e26=c; } else { e12=(c-e12)*k12+e12; e26=(c-e26)*k26+e26; }
+      difA.push(e12-e26); }
+    for(let i=0;i<n;i++){ dea = i===0? difA[i] : difA[i]*k9+dea*(1-k9);
+      deaA.push(dea); histA.push((difA[i]-dea)*2); } }
+  let mA=1e-9;
+  for(let i=0;i<n;i++) mA=Math.max(mA, Math.abs(histA[i]), Math.abs(difA[i]), Math.abs(deaA[i]));
+  const yFn=v=>padT+(1-(v+mA)/(2*mA))*(h-padT-padB);
+  const z=yFn(0);
+  const mBars=histA.map((hv,i)=>{
+    const yv=yFn(hv), top=Math.min(yv,z), bh=Math.max(1,Math.abs(yv-z));
+    const col=hv>=0?'rgba(255,77,79,.85)':'rgba(38,166,154,.85)';
+    const x=xi(i);
+    return `<rect x="${(x-bw/2).toFixed(1)}" y="${top.toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" fill="${col}"/>`;
+  }).join('');
+  const mLines=arr=>{ let p='', st=false;
+    for(let i=0;i<n;i++){ if(isNaN(arr[i])) continue;
+      p+=(st?'L':'M')+xi(i).toFixed(1)+','+yFn(arr[i]).toFixed(1)+' '; st=true; }
+    return p?`<path d="${p}" fill="none"/>`:''; };
+  const cid='macd'+(++_chartSeq);
+  _chartReg[cid]={bars, w, padL, padR, padT, padB, n, h,
+    tipFn:(b,i)=>`<b>${esc(b.day||'')}</b><br>DIF ${difA[i].toFixed(3)} · DEA ${deaA[i].toFixed(3)} · <b>MACD ${histA[i].toFixed(3)}</b>`};
+  return `<div class="sa-chart" id="${cid}" style="height:${h}px;margin-top:2px">
+    <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:100%" preserveAspectRatio="none">
+      <line x1="${padL}" y1="${z.toFixed(1)}" x2="${w-padR}" y2="${z.toFixed(1)}" stroke="rgba(255,255,255,.2)" stroke-dasharray="2,2"/>
+      ${mBars}
+      <path d="${mLines(difA)}" fill="none" stroke="#e8eef6" stroke-width="1"/>
+      <path d="${mLines(deaA)}" fill="none" stroke="#f5c842" stroke-width="1"/>
+      ${_sqT(padL, 10, 'fill="#e8eef6" font-size="9"', 'MACD(12,26,9)')}
+      ${_sqT(padL+94, 10, 'fill="#e8eef6" font-size="9"', 'DIF')}
+      ${_sqT(padL+120, 10, 'fill="#f5c842" font-size="9"', 'DEA')}
+    </svg>
+  </div>`;
 }
 function kdMultiChart(bars, opt){
   // 悬停预览三面板 (20260906): K线+三均线 / 成交量副图(判断放量缩量) / KDJ副图
