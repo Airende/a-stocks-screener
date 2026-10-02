@@ -6160,8 +6160,7 @@ function kdSubPanels(bars, cfg){
     return s; })();
   // 极致天量 (与地量对称, 60日窗口, 20261002): 只按量能判定, 只对日线
   // 严档: vol≥前60日最高量×1.00(创阶段新高) 或 量比≥3.00 → 红色「天」字
-  // 宽档: 严档未中但 vol≥前60日最高量×0.95 或 量比≥2.50 → 橙点(边缘天量)
-  const limitHigh=(()=>{ const m={}, edge={}; const W=60;
+  const limitHigh=(()=>{ const m={}; const W=60;
     if(n<=W || (opt&&opt.noLimits)) return m;   // 周/月K不做日线口径的天量判定
     for(let i=W;i<n;i++){
       const vol=+bars[i].volume; if(!(vol>0)) continue;
@@ -6169,17 +6168,13 @@ function kdSubPanels(bars, cfg){
       for(let j=i-W;j<i;j++){ const v=+bars[j].volume; if(v>vmaxN) vmaxN=v; vsum+=v; }
       const vavg=vsum/W;
       const vr2=vavg>0? vol/vavg : 1;
-      const strict=(vol>=vmaxN*1.00)||(vr2>=3.00);   // 严档 → 「天」字
-      if(strict){ m[(bars[i].day||'').slice(0,10)]=true; }
-      else if((vol>=vmaxN*0.95)||(vr2>=2.50)){ edge[(bars[i].day||'').slice(0,10)]=true; }  // 宽档 → 橙点
+      if((vol>=vmaxN*1.00)||(vr2>=3.00)){ m[(bars[i].day||'').slice(0,10)]=true; }   // 严档 → 「天」字
     }
-    m._edge=edge; return m; })();
-  const highEdge=(limitHigh._edge||{});
+    return m; })();
   const volHighMarks=(()=>{ let s='';
     for(let i=0;i<n;i++){
       const day=(bars[i].day||'').slice(0,10);
       if(limitHigh[day]) s+=_sqT(xi(i), yFn2(bars[i].volume)-4, `font-size="5.5" font-weight="700" text-anchor="middle" fill="#ff4d4f" stroke="rgba(15,22,35,.9)" stroke-width="1.4" paint-order="stroke"`, '天');
-      else if(highEdge[day]){ const cy=Math.max(padT2+4, yFn2(bars[i].volume)-4); s+=`<circle cx="${xi(i).toFixed(1)}" cy="${cy.toFixed(1)}" r="1.6" fill="#ff8c3a" stroke="#ffffff" stroke-width="1"/>`; }
     }
     return s; })();
   const vbars=bars.map((b,i)=>{
