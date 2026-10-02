@@ -6215,7 +6215,7 @@ function kdSubPanels(bars, cfg){
     }
     return s; })();
   // 堆量标记 (20261002): 连续≥3根量柱每日量≥前20日均量×1.5 且 价涨/横盘 → 该段最高量柱顶部紫色「堆」字
-  // 与「天/滞/地/涨跌停杠」互斥: 段内任何一日命中天量/滞涨/涨跌停, 或整体累计涨幅过大, 则不标
+  // 与「滞/涨跌停」互斥(段内任一命中则该段跳过); 但「天」可共存, 同日「天」「堆」上下错开 (20261002)
   const pileUp=((()=>{ const m={}; const WIN=20, K=3, MULT=1.5;
     if(n<=WIN || (opt&&opt.noLimits)) return m;
     const vol20=[];         // 前20日均量
@@ -6230,11 +6230,11 @@ function kdSubPanels(bars, cfg){
         let j=i; const seg=[];
         while(j<n && +bars[j].volume>=vol20[j]*MULT && (bars[j].chg||0)>-0.2){ seg.push(j); j++; }
         if(seg.length>=K){
-          // 找段内最高量柱; 排除与天/滞/涨跌停重叠的集合
+          // 找段内最高量柱; 天量日可保留(堆), 仅避开滞/涨跌停
           let picked=-1, maxV=-1;
           for(const idx of seg){
             const d=(bars[idx].day||'').slice(0,10);
-            if(limitHigh[d]||topStag[d]||limitDays[d]) continue;   // 重叠则跳过整段
+            if(topStag[d]||limitDays[d]) continue;   // 命中滞/涨跌停则跳过该柱
             if(+bars[idx].volume>maxV){ maxV=+bars[idx].volume; picked=idx; }
           }
           if(picked>=0) m[(bars[picked].day||'').slice(0,10)]=true;
@@ -6247,7 +6247,9 @@ function kdSubPanels(bars, cfg){
   const pileMarks=(()=>{ let s='';
     for(let i=0;i<n;i++){ const day=(bars[i].day||'').slice(0,10);
       if(!pileUp[day]) continue;
-      s+=_sqT(xi(i), yFn2(bars[i].volume)-2, `font-size="5.5" font-weight="700" text-anchor="middle" fill="#a06bff" stroke="rgba(15,22,35,.9)" stroke-width="1.4" paint-order="stroke"`, '堆'); }
+      const topY=yFn2(bars[i].volume);
+      const dy=limitHigh[day]?(topY+3):(topY-2);   // 同日已有「天」→ 堆下移错开, 否则柱顶上方
+      s+=_sqT(xi(i), dy, `font-size="5.5" font-weight="700" text-anchor="middle" fill="#a06bff" stroke="rgba(15,22,35,.9)" stroke-width="1.4" paint-order="stroke"`, '堆'); }
     return s; })();
   const vbars=bars.map((b,i)=>{
     const col=(b.chg||0)>=0?'rgba(255,77,79,.85)':'rgba(38,166,154,.85)';
