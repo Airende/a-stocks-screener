@@ -6938,6 +6938,19 @@ _ma_state = {"data": None, "running": False, "error": None, "progress": "",
              "ts": 0.0, "lock": threading.Lock(),
              "atr_conds": []}  # ATR过滤UI已移除(20260925): 默认不过滤, 列表仍显示ATR%列
 _MA_CACHE_TTL = 300  # 5分钟
+_ma_thread: "threading.Thread | None" = None  # 均线扫描线程存活闸门 (20261002): 杜绝并发重复启动
+
+
+def _ma_launch_thread() -> bool:
+    """启动新的均线扫描线程(单一实例)。已在运行则返回 False(不重复启动)。"""
+    global _ma_thread
+    with _ma_state["lock"]:
+        t = _ma_thread
+        if t is not None and t.is_alive():
+            return False
+        _ma_thread = threading.Thread(target=_run_ma_screen_thread, daemon=True)
+        _ma_thread.start()
+    return True
 # 收盘后K线全量刷新 (20260930): 交易当日盘中落盘的K线缓存停在盘中结构, 缠论笔/线段会误判
 # (如"低位启动前"把最新向下线段误当向上)。收盘后首个MA扫描对全部候选K线 force 重拉一次,
 # 使判定基于收盘最终K线; 当日已刷新过则跳过,避免每日多次全量拉取。
@@ -7724,9 +7737,7 @@ def _ensure_ma_screen():
         age = now - _ma_state["ts"]
         if _ma_state["data"] and age < _MA_CACHE_TTL:
             return
-        if _ma_state["running"]:
-            return
-    threading.Thread(target=_run_ma_screen_thread, daemon=True).start()
+    _ma_launch_thread()
 
 
 @app.post("/api/ma-screen/run")
@@ -7738,12 +7749,12 @@ def api_ma_screen_run(payload: dict = None):
             atr = [a for a in atr if a in ("e1", "e2", "e3")]
             with _ma_state["lock"]:
                 _ma_state["atr_conds"] = atr
-    if not _ma_state["running"]:
-        with _ma_state["lock"]:
-            _ma_state["data"] = None
-            _ma_state["ts"] = 0.0
-            _ma_state["error"] = None
-        threading.Thread(target=_run_ma_screen_thread, daemon=True).start()
+    if not _ma_launch_thread():
+        return {"started": False, "running": _ma_state["running"]}
+    with _ma_state["lock"]:
+        _ma_state["data"] = None
+        _ma_state["ts"] = 0.0
+        _ma_state["error"] = None
     return {"started": True, "running": _ma_state["running"]}
 
 
