@@ -1348,8 +1348,7 @@ function maScanUI(busy){
   _maElapsedBusy=busy;
 }
 function syncStatusStrip(){
-  const sm = _lastScreenMeta || {};
-  setStripItem('Screen', sm.updated ? (sm.updated + (sm.cached?' (缓存)':'')) : '尚未筛选', sm.running);
+  // 20261002: 多维选股已移除, 原 Screen 状态项一并删除
   // 均线 + 上试盘 合并显示在均线分组头部 (原顶部状态条已移除 20260918)
   const ma = maData || {}, sp = sspData || {};
   const maTxt = ma.updated ? (ma.updated + (ma.elapsed_sec?` · ${ma.elapsed_sec}s`:'')) : '尚未筛选';
@@ -1358,8 +1357,7 @@ function syncStatusStrip(){
 }
 // ---- 表格分页 (均线表/主筛选表, 首屏50行, 加载更多) ----
 const PAGE_SIZE = 50;
-let maPage = 1, screenExactPage = 1, screenNearPage = 1;
-let _lastScreenMeta = null, _lastScreenData = null;  // 最近一次筛选结果(供状态条/加载更多重渲染)
+let maPage = 1;   // 20261002: 原 screenExactPage/screenNearPage 随多维选股移除
 function loadMoreRow(shown, total, colSpan, handler){
   return `<tr class="load-more-row"><td colspan="${colSpan}"><button class="load-more" onclick="${handler}">加载更多 (已显示 ${shown}/${total})</button></td></tr>`;
 }
@@ -1581,7 +1579,7 @@ function bindChartInteractivity(rootEl){
 }
 // ---- SSE 实时事件 (20260906): 订阅 /api/events, ts 变化才拉全量数据; 原有轮询保留作断连兜底 ----
 let _es = null;
-const _lastEvtTs = {screen:0, ma:0, ssp:0};
+const _lastEvtTs = {ma:0, ssp:0};   // 20261002: screen 项随多维选股移除
 function connectEvents(){
   if(!window.EventSource) return;
   try{
@@ -1591,18 +1589,12 @@ function connectEvents(){
       try{ d = JSON.parse(ev.data); }catch(e){ return; }
       if(!d) return;
       // 进度条实时更新 (选股/均线+上试盘共用表格区域的 maProg)
-      updateProgLine('#screenProg', d.screen && d.screen.progress, d.screen && d.screen.running);
       updateProgLine('#maProg', (d.ma && d.ma.progress) || (d.ssp && d.ssp.progress), (d.ma && d.ma.running) || (d.ssp && d.ssp.running));
       // 状态条实时刷新 (仅运行中覆盖文本; 空闲时由下方 ts 变化触发的数据渲染回填,
       // 避免把 syncStatusStrip 已写入的更新时间清成"—" —— 20260906 修复)
-      if(d.screen && d.screen.running) setStripItem('Screen', '筛选中…', true);
       maScanUI(!!(d.ma && d.ma.running));                       // 均线耗时平滑更新 (20261002)
       if(d.ssp && d.ssp.running && !(d.ma && d.ma.running)) setStripItem('Ssp', '上试盘·扫描中…', true);
       // ts 变化 → 拉取全量数据刷新表格 (比固定轮询更精准)
-      if(d.screen && d.screen.ts>0 && d.screen.ts!==_lastEvtTs.screen){
-        _lastEvtTs.screen = d.screen.ts;
-        fetch('/api/screen').then(r=>r.json()).then(dd=>{ if(dd.universe>0 && !dd.running){ render(dd, true); syncStatusStrip(); } }).catch(()=>{});
-      }
       if(d.ma && d.ma.ts>0 && d.ma.ts!==_lastEvtTs.ma){
         _lastEvtTs.ma = d.ma.ts;
         fetch('/api/ma-screen').then(r=>r.json()).then(dd=>{ if(dd.patterns && Object.keys(dd.patterns).length){ renderMA(dd); } }).catch(()=>{});
@@ -1640,12 +1632,6 @@ function rowHTML(s,i,near){
     <td class="l col-opt">${tags}</td>
   </tr>`;
 }
-function render(d, syncConds=true){
-  _lastScreenMeta = {updated: d.updated, cached: d.cached, running: d.running};
-  _lastScreenData = d;
-  syncStatusStrip();
-}
-
 // ===== 本地缓存管理 =====
 async function loadCacheInfo(){
   try{
@@ -1685,7 +1671,7 @@ $('#cacheRefreshBtn').onclick=async()=>{
   btn.disabled=true; btn.textContent='刷新中…';
   $('#cacheInfo').textContent='K线数据: 正在清空并重新拉取… (下方保留旧数据, 完成后自动更新)';
   // 20260910: 不清空表格, 保留旧数据直到新数据就绪, 避免"下面数据刷不出"
-  const info={start:Date.now(), lastProg:'', lastChange:Date.now(), attempts:0};
+  const info={start:Date.now(), lastProg:'', lastChange:Date.now(), attempts:0, seenRun:false};
   const MAX_ATTEMPTS=3, STALL_MS=45000, TOTAL_MS=8*60*1000;
   // 触发/重新触发后端清缓存拉取, 失败自动小退避重试
   const kick=async()=>{
@@ -1714,7 +1700,7 @@ $('#cacheRefreshBtn').onclick=async()=>{
       window.__manualCacheRefresh=false; return;
     }
     let d=null;
-    try{ d=await (await fetch('/api/screen')).json(); }catch(e){ d=null; }
+    try{ d=await (await fetch('/api/ma-screen')).json(); }catch(e){ d=null; }   // 20261002: 多维选股移除后改看均线扫描
     const prog=(d&&d.progress)||'';
     if(prog!==info.lastProg){ info.lastProg=prog; info.lastChange=now; }
     // 后端 running 但进度停滞过久 → 自动重启一次 (自愈)
@@ -1733,15 +1719,19 @@ $('#cacheRefreshBtn').onclick=async()=>{
       window.__manualCacheRefresh=false; return;
     }
     if(d&&d.running){
+      info.seenRun=true;
       $('#cacheInfo').textContent=`K线数据: 重新拉取中… ${prog}`;
       btn.textContent='拉取中…';
       setTimeout(poll, 3000); return;
     }
-    if(d&&d.universe>0){
-      // 筛选完成且有新数据
+    if(info.seenRun){
+      // 20261002: 多维选股移除后, 缓存由均线扫描重建; 跑完则回填缓存统计并刷新均线表
       btn.disabled=false; btn.textContent='刷新';
       loadCacheInfo();
-      render(d, false);
+      try{
+        const md=await (await fetch('/api/ma-screen')).json();
+        if(md.patterns && Object.keys(md.patterns).length) renderMA(md);
+      }catch(e){}
       window.__manualCacheRefresh=false;
       return;
     }
@@ -4226,7 +4216,7 @@ function buildEquityCurve(curve){
 }
 
 
-// ===== 均线形态筛选模块（均线形态 6 tab + 周线形态 2 tab + 上试盘策略 3 tab，共11 tab；20260920 周线B/C合并、日KDJ/MACD背离合并） =====
+// ===== 均线形态筛选模块（均线形态 6 tab + 周线形态 2 tab + 上试盘策略 3 tab，共11 tab；20260920 周线B/C合并、日KDJ/MACD背离合并；20261002 日·背离最终定为仅日KDJ(保留周线否决)） =====
 const MA_PATS=[
   ['多头排列','MA5>MA10>MA20>MA60，四线今日均>5日前，收盘≥MA10，多头排列持续≥5日（稳健型）'],
   ['多头排列向上发散','MA5>MA10>MA20，三线同步上行，间距扩大（不含MA60，宽松版）'],
@@ -4235,7 +4225,7 @@ const MA_PATS=[
   // 周线均线形态 (A + 埋伏二合一, 20260920 原B/C合并为'周线·埋伏')
   ['周线A·强势主升','周线多头排列(MA5>MA10>MA20) + MA20连续4周上行 + 收盘>MA10 + 距52周高回撤<15%；否决：收盘<MA20/MA20向下/空头排列/52周位<0.5'],
   ['周线·埋伏','周线低位埋伏(原B趋势回踩+C底部反转合并)：B=上升趋势中回踩20周线低吸(MA20/MA60向上+收盘≥MA20距MA20在0~+5%+距52周高回撤<25%)；C=底部反转初期(MA20由平转升+近4周金叉+放量>20周均量×1.5+距52周低涨>20%)'],
-  ['日线背离','底部背离(KDJ/MACD底背离二合一)：近20日价格创新低但J值或DIF未创新低（动能未跟随下行），潜在反转信号'],
+  ['日线背离','日KDJ底背离（与K线副图「底背」标注同一套判定）：副图上45日窗口内最低价那根，其J值比前45日内J的最低值抬高>5点，且落在最近5根内、不在钝化区间里。需通过周线一票否决（收盘 > 周MA20×0.90、周MA20上行、非空头排列）；不受ATR过滤限制'],
   ['粘合向下突破','近3日MA5/MA10/MA20间距<1.5%(粘合)，现转为空头排列，破位下行'],
   ['空头排列向下发散','MA5<MA10<MA20，三线同步下行，间距扩大，弱势下降趋势'],
   // 缠论日线买卖点分组 (20260926): 1买/2买/3买 各自独立 tab
@@ -6177,6 +6167,194 @@ function _limitDaysOf(bars, code, name){
   }
   return out;
 }
+// ===== 副图标注工具: 顶/底背离 + KDJ钝化 (20261002) =====
+// 价格分型(左右各L根): 返回 {H:[峰], Lo:[谷]}. 平台只认首根, 避免横盘刷出一堆假分型
+function _pxPivots(bars, L){
+  const n=bars.length, H=[], Lo=[];
+  for(let i=L;i<n-L;i++){
+    const ch=+bars[i].high, cl=+bars[i].low;
+    if(!isFinite(ch)||!isFinite(cl)) continue;
+    let isH=true, isL=true;
+    for(let j=i-L;j<=i+L;j++){
+      if(j===i) continue;
+      const bh=+bars[j].high, bl=+bars[j].low;
+      if(j<i ? bh>=ch : bh>ch) isH=false;   // 左侧须严格更低 / 右侧不高即可
+      if(j<i ? bl<=cl : bl<cl) isL=false;
+      if(!isH && !isL) break;
+    }
+    if(isH) H.push(i);
+    if(isL) Lo.push(i);
+  }
+  return {H, Lo};
+}
+// 背离扫描(分型谷配对口径): 价格创新高/新低, 而指标 seq(J 或 DIF)未跟随 → 顶/底背离
+// ⚠️ (20261002 晚) 副图标注已改用 _scanDivergeLegacy (原版 KDJ 系统 45日窗口口径),
+//    本函数连同 _pxPivots 当前**已无调用点**, 保留备用。
+// opt: {L 分型半径, win 只标注最近win根(不传=全区间), thrAbs 绝对阈值, relFrac 阈值占seq振幅的比例,
+//       tol 价格容差(默认0.005): 允许"接近前高/前低的双头双底"也计入}
+// 返回 [{i 背离所在K线, ref 参照的前极值K线, type:'top'|'bottom', gap 指标落差,
+//        strong 是否强背离 = 落差≥2倍门槛(KDJ即≥10点, MACD即≥2×8%振幅)}]
+// 强弱只影响绘制样式(字重/透明度/圆点填充), 不作过滤 —— 实测落差大小与价格趋势幅度
+// 相关性≈0(-0.04), 不足以当质量排序, 故弱背离照标不误 (20261002)
+function _scanDiverge(bars, seq, opt){
+  const o=opt||{}, n=bars.length;
+  if(n<7) return [];
+  const L=o.L||3, win=o.win ? Math.min(o.win, n-2) : (n-2);
+  const tol=(o.tol==null?0.005:o.tol);
+  // 阈值基准取「近端窗口」内的指标振幅(而非全序列): 否则 DIF 这类无固定量纲的指标,
+  // 会被历史极端行情抬高基准, 导致近期真实背离全被判为"落差不够" (20261002)
+  const nrm=Math.min(Math.max(win,60), 120);
+  let sMin=Infinity, sMax=-Infinity;
+  for(let i=Math.max(0, n-nrm);i<n;i++){ const v=+seq[i]; if(isFinite(v)){ if(v<sMin)sMin=v; if(v>sMax)sMax=v; } }
+  const thr=Math.max(o.thrAbs||0, (sMax>sMin ? (sMax-sMin)*(o.relFrac||0) : 0));
+  const pv=_pxPivots(bars, L), from=Math.max(0, n-win);
+  const tops=[], bots=[];
+  // 相邻峰(谷)逐对比较: 价更高(更低)而指标反向 → 背离. 只标注窗口内的那一根
+  let prev=-1;
+  for(const p of pv.H){
+    if(prev>=0 && p>=from){
+      const ph=+bars[p].high, rh=+bars[prev].high;
+      if(ph >= rh*(1-tol)){                      // 价创新高 / 接近前高(双头)
+        const g=+seq[prev]-+seq[p];              // 指标反而走低
+        if(isFinite(g) && g>thr) tops.push({i:p, ref:prev, type:'top', gap:g, strong:g>=thr*2});
+      }
+    }
+    prev=p;
+  }
+  prev=-1;
+  for(const p of pv.Lo){
+    if(prev>=0 && p>=from){
+      const pl=+bars[p].low, rl=+bars[prev].low;
+      if(pl <= rl*(1+tol)){                      // 价创新低 / 接近前低(双底)
+        const g=+seq[p]-+seq[prev];              // 指标反而抬高
+        if(isFinite(g) && g>thr) bots.push({i:p, ref:prev, type:'bottom', gap:g, strong:g>=thr*2});
+      }
+    }
+    prev=p;
+  }
+  // 同向标注过密时只保留落差更大的那一个(字标会互相遮盖); 顶/底分处面板上下缘, 互不干扰
+  const span=(o.span==null?4:o.span);
+  const _thin=arr=>{ arr.sort((a,b)=>a.i-b.i); const k=[];
+    for(const d of arr){ const p=k[k.length-1];
+      if(p && d.i-p.i<span){ if(d.gap>p.gap) k[k.length-1]=d; } else k.push(d); }
+    return k; };
+  return _thin(tops).concat(_thin(bots)).sort((a,b)=>a.i-b.i);
+}
+// ===== 原版 KDJ 系统口径的背离扫描 (20261002 晚新增, 供副图标注使用) =====
+// 口径**逐行对齐** app.py:calc_kdj_system 的背离判定 (WIN=45), 只把它从"只判当前时刻"
+// 展开成"逐根回算": 对每个时刻 e 取窗口 [e-WIN+1, e], 窗口内最高/最低价那根即"当前峰/谷",
+// 与其前 WIN 根内 J 的极值比较 (不要求两个点位价位接近), 落差 > thr(5) 即背离。
+// 与 _scanDiverge(分型谷配对) 的本质区别: 那边比"相邻两个分型", 这边比"窗口极值 vs 前窗极值",
+// 且不要求价位接近 —— 因此同样 260 根里标注数约为前者的 3~4 倍。
+// 去重: 同一根只保留**首次被确认**的那次 (e 递增, 先到先得)。
+// 返回 [{i 背离所在K线, ref 参照的前极值K线, type:'top'|'bottom', gap 指标落差, strong}]
+function _scanDivergeLegacy(bars, seq, opt){
+  const o=opt||{}, n=bars.length, WIN=o.win||45, thr=(o.thr==null?5:o.thr);
+  if(n < WIN+1) return [];
+  const hi=new Array(n), lo=new Array(n), cl=new Array(n);
+  for(let i=0;i<n;i++){ hi[i]=+bars[i].high; lo[i]=+bars[i].low; cl[i]=+bars[i].close; }
+  const tSeen={}, bSeen={}, out=[];
+  for(let e=WIN-1;e<n;e++){
+    const s=e-WIN+1;
+    // ---- 顶背离 ----
+    let mh=-Infinity; for(let i=s;i<=e;i++) if(hi[i]>mh) mh=hi[i];
+    let idxH=-1;      for(let i=s;i<=e;i++) if(hi[i]===mh){ idxH=i; break; }
+    if(idxH>0 && !tSeen[idxH]){
+      let ppj=null, ppi=-1;
+      for(let i=Math.max(0,idxH-WIN);i<idxH;i++){ const v=+seq[i];
+        if(!isFinite(v)) continue;
+        if(ppj===null || v>ppj){ ppj=v; ppi=i; } }
+      let mcl=-Infinity; for(let i=s;i<=e;i++) if(cl[i]>mcl) mcl=cl[i];
+      if(ppj!==null && cl[e]>=mcl*0.99 && (+seq[idxH]) < ppj-thr){
+        tSeen[idxH]=1;
+        out.push({i:idxH, ref:ppi, type:'top', gap:ppj-(+seq[idxH]), strong:(ppj-(+seq[idxH]))>=thr*2});
+      }
+    }
+    // ---- 底背离 ----
+    let ml=Infinity;  for(let i=s;i<=e;i++) if(lo[i]<ml) ml=lo[i];
+    let idxL=-1;      for(let i=s;i<=e;i++) if(lo[i]===ml){ idxL=i; break; }
+    if(idxL>0 && !bSeen[idxL]){
+      let ptj=null, pti=-1;
+      for(let i=Math.max(0,idxL-WIN);i<idxL;i++){ const v=+seq[i];
+        if(!isFinite(v)) continue;
+        if(ptj===null || v<ptj){ ptj=v; pti=i; } }
+      let mll=Infinity; for(let i=s;i<=e;i++) if(cl[i]<mll) mll=cl[i];
+      if(ptj!==null && cl[e]<=mll*1.01 && (+seq[idxL]) > ptj+thr){
+        bSeen[idxL]=1;
+        out.push({i:idxL, ref:pti, type:'bottom', gap:(+seq[idxL])-ptj, strong:((+seq[idxL])-ptj)>=thr*2});
+      }
+    }
+  }
+  return out.sort((a,b)=>a.i-b.i);
+}
+// KDJ钝化: K 连续≥minLen根处于 ≥80(高位钝化) / ≤20(低位钝化)
+// 返回 [{a 起始索引, b 结束索引, high 是否高位钝化}]
+function _kdBluntSegs(K, minLen){
+  const n=K.length, segs=[], need=minLen||3; let i=0;
+  while(i<n){
+    const v=+K[i];
+    if(!isFinite(v) || (v<80 && v>20)){ i++; continue; }
+    const isHigh=v>=80; let j=i;
+    while(j+1<n && isFinite(+K[j+1]) && (isHigh ? +K[j+1]>=80 : +K[j+1]<=20)) j++;
+    if(j-i+1>=need) segs.push({a:i, b:j, high:isHigh});
+    i=j+1;
+  }
+  return segs;
+}
+// 背离/钝化 标注的配色: 顶背离=卖侧(青绿) / 底背离=买侧(红), 与 买卖点▲红▼绿 一致
+const _DIV_TOP='#26a69a', _DIV_BOT='#ff4d4f';
+// 在副图上画背离: 连接前后两个极值点(虚线) + 端点圆点 + 「顶背/底背」字标
+// 强弱两档 (20261002): 强=实心圆点+粗字标; 弱=空心圆点+细淡字标 —— 除颜色外还有
+// 字重/填充/透明度三重区分, 色觉障碍下同样可辨
+// divs: _scanDiverge / _scanDivergeLegacy 结果; seq: 指标序列; xf(i)->x, yf(v)->y
+// opts: {sqT 文字反缩放函数, hPanel 面板高, padT/padB 内边距, fs 字号, xMin/xMax 字标夹取范围}
+function _divAnnoHtml(divs, seq, xf, yf, opts){
+  const o=opts||{}, fs=o.fs||7, padT=o.padT==null?12:o.padT, padB=o.padB==null?6:o.padB;
+  const hPanel=o.hPanel||100, xMin=o.xMin==null?-1e9:o.xMin, xMax=o.xMax==null?1e9:o.xMax;
+  let s='';
+  const lxTop=[], lxBot=[];   // 已写字标的 x (顶/底分处面板上下缘), 用于防重叠
+  for(const d of divs){
+    const top=d.type==='top', col=top?_DIV_TOP:_DIV_BOT;
+    const wk=!d.strong;                          // 弱背离
+    const xa=xf(d.ref), ya=yf(+seq[d.ref]), xb=xf(d.i), yb=yf(+seq[d.i]);
+    s+=`<line x1="${xa.toFixed(1)}" y1="${ya.toFixed(1)}" x2="${xb.toFixed(1)}" y2="${yb.toFixed(1)}" stroke="${col}" stroke-width="${wk?.7:1}" stroke-dasharray="3,2" opacity="${wk?.45:.9}"/>`;
+    s+=`<circle cx="${xa.toFixed(1)}" cy="${ya.toFixed(1)}" r="${wk?1.3:1.6}" fill="none" stroke="${col}" stroke-width="${wk?.7:.9}" opacity="${wk?.5:.9}"/>`;
+    s+= wk ? `<circle cx="${xb.toFixed(1)}" cy="${yb.toFixed(1)}" r="1.5" fill="none" stroke="${col}" stroke-width="1"/>`
+           : `<circle cx="${xb.toFixed(1)}" cy="${yb.toFixed(1)}" r="1.9" fill="${col}" stroke="#0f1623" stroke-width=".6"/>`;
+    const ty = top ? Math.max(padT+6, yb-5) : Math.min(hPanel-padB-1, yb+11);
+    const tx = Math.min(Math.max(xb, xMin), xMax);
+    // 字标防重叠 (20261002 晚): 同一排水平距离 < 16px 时不再写字, 只保留虚线+圆点。
+    // 原版 45日窗口口径标注密度是分型谷口径的 3~4 倍, 不做这层会糊成一团。
+    const row=top?lxTop:lxBot;
+    if(row.some(ux=>Math.abs(ux-tx)<16)) continue;
+    row.push(tx);
+    const attrs=`font-size="${fs}" font-weight="${wk?'400':'700'}" text-anchor="middle" fill="${col}" stroke="rgba(15,22,35,.92)" stroke-width="1.8" paint-order="stroke" opacity="${wk?.62:'1'}"`;
+    s += o.sqT ? o.sqT(tx, ty, attrs, top?'顶背':'底背')
+               : `<text x="${tx.toFixed(1)}" y="${ty.toFixed(1)}" ${attrs}>${top?'顶背':'底背'}</text>`;
+  }
+  return s;
+}
+// 钝化条: 面板顶缘(高位钝化·青绿) / 底缘(低位钝化·红) 画细条 + 「钝」字
+// 配色与 顶/底背离 统一(20261002): 高位(顶背离/高位钝化)一律青绿=卖侧, 低位一律红=买侧
+// xf(i)->x, halfW(i)->该bar半宽, opts:{sqT, hPanel, fs, avoidHigh/avoidLow 背离字标的x坐标(过近则不写字避免叠字)}
+function _bluntAnnoHtml(segs, xf, halfW, opts){
+  const o=opts||{}, fs=o.fs||7, hPanel=o.hPanel||100;
+  let s='';
+  for(const g of segs){
+    const col=g.high?'rgba(38,166,154,.85)':'rgba(255,77,79,.85)';   // 高位=青绿(卖侧) / 低位=红(买侧)
+    const x0=xf(g.a)-halfW(g.a), x1=xf(g.b)+halfW(g.b);
+    const y=g.high?2:(hPanel-6);
+    s+=`<rect x="${x0.toFixed(1)}" y="${y}" width="${Math.max(2,x1-x0).toFixed(1)}" height="4" rx="2" fill="${col}"/>`;
+    const avoid=g.high?(o.avoidHigh||[]):(o.avoidLow||[]);
+    if(avoid.some(ax=>Math.abs(ax-(x0+6))<15)) continue;   // 该处已有「顶背/底背」字标 → 只画条不写字
+    const attrs=`font-size="${fs}" font-weight="700" fill="${col}" stroke="rgba(15,22,35,.92)" stroke-width="1.8" paint-order="stroke"`;
+    const ty=g.high?(y+4+fs+1):(y-2);
+    s += o.sqT ? o.sqT(x0+2, ty, attrs, '钝')
+               : `<text x="${(x0+2).toFixed(1)}" y="${ty.toFixed(1)}" ${attrs}>钝</text>`;
+  }
+  return s;
+}
+
 // ===== 成交量+KDJ 副图 (20260925): 浮窗与个股分析主图共用 =====
 // 与主图共用 x 映射(xi)保证量柱/KDJ与K线列对齐。cfg: {w,padL,padR,xi,bw,opt,stretch}
 //   stretch=true  → svg viewBox拉伸(个股分析主图); KDJ数值标注内嵌右缘
@@ -6330,6 +6508,23 @@ function kdSubPanels(bars, cfg){
     for(let j=Math.max(0,i-8);j<=i;j++){ hh=Math.max(hh,bars[j].high); ll=Math.min(ll,bars[j].low); }
     const rsv=hh===ll?50:(bars[i].close-ll)/(hh-ll)*100;
     pk=(pk*2+rsv)/3; pd=(pd*2+pk)/3; K.push(pk); D.push(pd); J.push(3*pk-2*pd); }
+  // ---- 顶/底背离 + 钝化 标注数据 (20261002 晚改版) ----
+  // 口径: 改用**原版 KDJ 系统** (app.py:calc_kdj_system) —— 45日窗口最高/最低价那根,
+  //       对比其前45日内 J 的极值(不要求两点价位接近), 落差>5 即标;
+  //       钝化不变 = K 连续3根≥80或≤20
+  const kdjDivAll=_scanDivergeLegacy(bars, J, {win:45, thr:5});
+  const bluntSegs=_kdBluntSegs(K, 3);
+  const kBluntAt={};
+  for(const g of bluntSegs) for(let k=g.a;k<=g.b;k++) kBluntAt[k]=g;
+  // 钝化区间内不显示背离标识 (20261003, 用户要求):
+  // 钝化 = K 连续≥3根 ≥80(高位) / ≤20(低位), 指标已进入极端区并"麻木"; 同一区域再标
+  // 顶背/底背是自相矛盾的 —— 配色统一后「高位钝化·青绿」与「顶背离·青绿」本就叠在同一处
+  // 互相打架(同理低位), 且背离实证无增量信息, 故一律让位给钝化。
+  // 判定: 背离**信号点** d.i 落在任一钝化段 [a,b] 内即剔除 (不分顶/底类型)。
+  const kdjDiv=kdjDivAll.filter(d=>!kBluntAt[d.i]);
+  const kDivAt={};
+  for(const d of kdjDiv) kDivAt[d.i]=d;
+  const _halfW=i=> (((barW&&barW[i]&&barW[i].cw)?barW[i].cw:(bw||3))/2);
   const vr=[]; for(let i=0;i<n;i++){ let s=0,c=0;
     for(let j=Math.max(0,i-5);j<i;j++){ s+=bars[j].volume; c++; }
     vr.push(c?bars[i].volume/(s/c):1); }
@@ -6355,7 +6550,8 @@ function kdSubPanels(bars, cfg){
 
   // ---- 面板3: KDJ副图 ----
   const h3=stretch?118:100, padT3=12, padB3=6;  // 主图与浮窗均加高
-  const jmin=Math.min(0,...J)-5, jmax=Math.max(100,...J)+5;
+  // 上下各留 14 点余量: 给「顶背/底背」字标腾出空间 (20261002)
+  const jmin=Math.min(0,...J)-14, jmax=Math.max(100,...J)+14;
   const yFn3=v=>padT3+(jmax-v)/(jmax-jmin)*(h3-padT3-padB3);
   const line=(arr,col,wd,yFn)=>{
     yFn=yFn||yFn3;   // 缺省按KDJ刻度; MACD传自己的 yFn4 (20261002)
@@ -6372,7 +6568,12 @@ function kdSubPanels(bars, cfg){
   }).join('');
   const cid3='kd'+(++_chartSeq);
   _chartReg[cid3]={bars, w, h:h3, padL, padR, n, sync:syncName,
-    tipFn:(b,i)=>`<b>${esc(b.day||'')}</b><br>K ${K[i].toFixed(1)} · D ${D[i].toFixed(1)} · <b>J ${J[i].toFixed(1)}</b>`};
+    tipFn:(b,i)=>{ const dv=kDivAt[i], bl=kBluntAt[i];
+      const dvTag=dv? (dv.type==='top'
+          ? ` <span style="color:${_DIV_TOP};font-weight:${dv.strong?'700':'400'}">顶背离</span><span style="color:#8b97a8">(${dv.strong?'强':'弱'} · J ${(+J[dv.ref]).toFixed(1)}→${(+J[i]).toFixed(1)})</span>`
+          : ` <span style="color:${_DIV_BOT};font-weight:${dv.strong?'700':'400'}">底背离</span><span style="color:#8b97a8">(${dv.strong?'强':'弱'} · J ${(+J[dv.ref]).toFixed(1)}→${(+J[i]).toFixed(1)})</span>`) : '';
+      const blTag=bl? (bl.high? ' <span style="color:#ff4d4f;font-weight:700">高位钝化</span>' : ' <span style="color:#26a69a;font-weight:700">低位钝化</span>') : '';
+      return `<b>${esc(b.day||'')}</b>${dvTag}${blTag}<br>K ${K[i].toFixed(1)} · D ${D[i].toFixed(1)} · <b>J ${J[i].toFixed(1)}</b>`; }};
   // 周/月KDJ副图 (20260928): 叠加 80~100 超买带(微红) 与 0~20 超卖带(微绿), 更直观
   const kdjBands=(tf==='week'||tf==='month')?
     `<rect x="${padL}" y="${yFn3(100)}" width="${w-padL-padR}" height="${yFn3(80)-yFn3(100)}" fill="rgba(255,77,79,.07)"/>`+
@@ -6380,7 +6581,13 @@ function kdSubPanels(bars, cfg){
     : '';
   // 底部日期轴已移至最底层 MACD 面板 (20261002, 面板顺序改 KDJ→MACD 后)
   const kLeg=tf==='week'?'周K':(tf==='month'?'月K':'K');  // 图例标签随周期 (20260928)
-  const p3final=`<div class="sa-chart" id="${cid3}" style="height:${h3}px;margin-top:2px"><svg viewBox="0 0 ${w} ${h3}" style="width:100%;height:100%" preserveAspectRatio="none">${kdjBands}${refLines}${line(K,'#e8eef6',1)}${line(D,'#f5c842',1)}${line(J,'#a06bff',1)}${_sqT(padL, 9, `fill="#e8eef6" font-size="9"`, kLeg)}${_sqT(padL+(kLeg.length>1?18:12), 9, `fill="#f5c842" font-size="9"`, 'D')}${_sqT(padL+(kLeg.length>1?30:24), 9, `fill="#a06bff" font-size="9"`, 'J')}<text x="${w-padR}" y="8" font-size="8" text-anchor="end" fill="#5a6a82">${tf==='week'?'(周KDJ · 9,3,3)':(tf==='month'?'(月KDJ · 9,3,3)':'')}</text></svg></div>`;
+  // 顶/底背离 + 钝化 标注 (20261002)
+  const kdjAnno=_divAnnoHtml(kdjDiv, J, xi, yFn3, {sqT:_sqT, hPanel:h3, padT:padT3, padB:padB3, xMin:padL+9, xMax:w-padR-9})
+               +_bluntAnnoHtml(bluntSegs, xi, _halfW, {sqT:_sqT, hPanel:h3,
+                    avoidHigh:kdjDiv.filter(d=>d.type==='top').map(d=>xi(d.i)),
+                    avoidLow: kdjDiv.filter(d=>d.type==='bottom').map(d=>xi(d.i))});
+  const kLjx=padL+(kLeg.length>1?30:24)+13;   // 图例起始x (紧跟 J 之后)
+  const p3final=`<div class="sa-chart" id="${cid3}" style="height:${h3}px;margin-top:2px"><svg viewBox="0 0 ${w} ${h3}" style="width:100%;height:100%" preserveAspectRatio="none">${kdjBands}${refLines}${line(K,'#e8eef6',1)}${line(D,'#f5c842',1)}${line(J,'#a06bff',1)}${kdjAnno}${_sqT(padL, 9, `fill="#e8eef6" font-size="9"`, kLeg)}${_sqT(padL+(kLeg.length>1?18:12), 9, `fill="#f5c842" font-size="9"`, 'D')}${_sqT(padL+(kLeg.length>1?30:24), 9, `fill="#a06bff" font-size="9"`, 'J')}${kdjDiv.length?_sqT(kLjx, 9, `fill="${_DIV_TOP}" font-size="8"`, '┈顶背'):''}${kdjDiv.length?_sqT(kLjx+34, 9, `fill="${_DIV_BOT}" font-size="8"`, '┈底背'):''}${bluntSegs.length?_sqT(kLjx+68, 9, `fill="#9fb0c6" font-size="8"`, '▬钝化'):''}${kdjDiv.length?_sqT(kLjx+107, 9, `fill="#5a6a82" font-size="8"`, '粗=强·细=弱'):''}<text x="${w-padR}" y="8" font-size="8" text-anchor="end" fill="#5a6a82">${tf==='week'?'(周KDJ · 9,3,3)':(tf==='month'?'(月KDJ · 9,3,3)':'')}</text></svg></div>`;
   // ---- 面板4: MACD 副图 (12,26,9) (20261002) 红柱=多头/绿柱=空头, DIF白 DEA黄 ----
   const h4=stretch?96:82, padT4=12, padB4=8;
   const _k12=2/(12+1), _k26=2/(26+1), _k9=2/(9+1);
@@ -6395,6 +6602,10 @@ function kdSubPanels(bars, cfg){
   for(let i=0;i<n;i++){ _mA=Math.max(_mA, Math.abs(histA[i]), Math.abs(difA[i]), Math.abs(deaA[i])); }
   const yFn4=v=>padT4+(1-(v+_mA)/(2*_mA))*(h4-padT4-padB4);
   const z4=yFn4(0);
+  // (20261002 晚, 用户要求) MACD 副图的顶/底背离标注已移除 —— 背离只在 KDJ 副图上显示
+  const macdDiv=[];
+  const mDivAt={};
+  for(const d of macdDiv) mDivAt[d.i]=d;
   const mBars=histA.map((hv,i)=>{
     const yv=yFn4(hv), top=Math.min(yv,z4), bh=Math.max(1,Math.abs(yv-z4));
     const col=hv>=0?'rgba(255,77,79,.85)':'rgba(38,166,154,.85)';
@@ -6404,16 +6615,22 @@ function kdSubPanels(bars, cfg){
   }).join('');
   const cid4='macd'+(++_chartSeq);
   _chartReg[cid4]={bars, w, h:h4, padL, padR, n, sync:syncName,
-    tipFn:(b,i)=>`<b>${esc(b.day||'')}</b><br>DIF ${difA[i].toFixed(3)} · DEA ${deaA[i].toFixed(3)} · <b>MACD ${histA[i].toFixed(3)}</b>`};
+    tipFn:(b,i)=>{ const dv=mDivAt[i];
+      const dvTag=dv? (dv.type==='top'
+          ? ` <span style="color:${_DIV_TOP};font-weight:${dv.strong?'700':'400'}">顶背离</span><span style="color:#8b97a8">(${dv.strong?'强':'弱'} · DIF ${(+difA[dv.ref]).toFixed(3)}→${(+difA[i]).toFixed(3)})</span>`
+          : ` <span style="color:${_DIV_BOT};font-weight:${dv.strong?'700':'400'}">底背离</span><span style="color:#8b97a8">(${dv.strong?'强':'弱'} · DIF ${(+difA[dv.ref]).toFixed(3)}→${(+difA[i]).toFixed(3)})</span>`) : '';
+      return `<b>${esc(b.day||'')}</b>${dvTag}<br>DIF ${difA[i].toFixed(3)} · DEA ${deaA[i].toFixed(3)} · <b>MACD ${histA[i].toFixed(3)}</b>`; }};
   const macdTf=tf==='week'?'周':(tf==='month'?'月':'');
   // 最底层 MACD 面板承载底部日期轴 (20261002)
   const datesM=[0,Math.floor(n/2),n-1].map(i=>_sqT(xi(i), h4-1, `fill="#5a6a82" font-size="8" text-anchor="middle"`, (bars[i].day||'').slice(2))).join('');
+  // 顶/底背离 标注 (20261002)
+  const macdAnno=_divAnnoHtml(macdDiv, difA, xi, yFn4, {sqT:_sqT, hPanel:h4, padT:padT4, padB:padB4, xMin:padL+9, xMax:w-padR-9});
   const p4=`<div class="sa-chart" id="${cid4}" style="height:${h4}px;margin-top:2px"><svg viewBox="0 0 ${w} ${h4}" style="width:100%;height:100%" preserveAspectRatio="none">
     <line x1="${padL}" y1="${z4.toFixed(1)}" x2="${w-padR}" y2="${z4.toFixed(1)}" stroke="rgba(255,255,255,.2)" stroke-dasharray="2,2"/>
-    ${mBars}${line(difA,'#e8eef6',1,yFn4)}${line(deaA,'#f5c842',1,yFn4)}
+    ${mBars}${line(difA,'#e8eef6',1,yFn4)}${line(deaA,'#f5c842',1,yFn4)}${macdAnno}
     ${_sqT(padL, 9, `fill="#e8eef6" font-size="9"`, macdTf+'MACD(12,26,9)')}
     ${_sqT(padL+94, 9, `fill="#e8eef6" font-size="9"`, 'DIF')}
-    ${_sqT(padL+120, 9, `fill="#f5c842" font-size="9"`, 'DEA')}${datesM}
+    ${_sqT(padL+120, 9, `fill="#f5c842" font-size="9"`, 'DEA')}${macdDiv.length?_sqT(padL+148, 9, `fill="${_DIV_TOP}" font-size="8"`, '┈顶背'):''}${macdDiv.length?_sqT(padL+182, 9, `fill="${_DIV_BOT}" font-size="8"`, '┈底背'):''}${macdDiv.length?_sqT(padL+216, 9, `fill="#5a6a82" font-size="8"`, '粗=强·细=弱'):''}${datesM}
   </svg></div>`;
   return {volHtml:p2, macdHtml:p4, kdjHtml:p3final};
 }
@@ -6440,6 +6657,11 @@ function macdPanelHtml(cfg){
   for(let i=0;i<n;i++) mA=Math.max(mA, Math.abs(histA[i]), Math.abs(difA[i]), Math.abs(deaA[i]));
   const yFn=v=>padT+(1-(v+mA)/(2*mA))*(h-padT-padB);
   const z=yFn(0);
+  // (20261002 晚, 用户要求) MACD 副图的顶/底背离标注已移除
+  const mDiv=[];
+  const mDivAt={};
+  for(const d of mDiv) mDivAt[d.i]=d;
+  const mAnno=_divAnnoHtml(mDiv, difA, xi, yFn, {sqT:_sqT, hPanel:h, padT:padT, padB:padB, xMin:padL+9, xMax:w-padR-9});
   const mBars=histA.map((hv,i)=>{
     const yv=yFn(hv), top=Math.min(yv,z), bh=Math.max(1,Math.abs(yv-z));
     const col=hv>=0?'rgba(255,77,79,.85)':'rgba(38,166,154,.85)';
@@ -6452,16 +6674,21 @@ function macdPanelHtml(cfg){
     return p; };
   const cid='macd'+(++_chartSeq);
   _chartReg[cid]={bars, w, padL, padR, padT, padB, n, h,
-    tipFn:(b,i)=>`<b>${esc(b.day||'')}</b><br>DIF ${difA[i].toFixed(3)} · DEA ${deaA[i].toFixed(3)} · <b>MACD ${histA[i].toFixed(3)}</b>`};
+    tipFn:(b,i)=>{ const dv=mDivAt[i];
+      const dvTag=dv? (dv.type==='top'
+          ? ` <span style="color:${_DIV_TOP};font-weight:${dv.strong?'700':'400'}">顶背离</span><span style="color:#8b97a8">(${dv.strong?'强':'弱'} · DIF ${(+difA[dv.ref]).toFixed(3)}→${(+difA[i]).toFixed(3)})</span>`
+          : ` <span style="color:${_DIV_BOT};font-weight:${dv.strong?'700':'400'}">底背离</span><span style="color:#8b97a8">(${dv.strong?'强':'弱'} · DIF ${(+difA[dv.ref]).toFixed(3)}→${(+difA[i]).toFixed(3)})</span>`) : '';
+      return `<b>${esc(b.day||'')}</b>${dvTag}<br>DIF ${difA[i].toFixed(3)} · DEA ${deaA[i].toFixed(3)} · <b>MACD ${histA[i].toFixed(3)}</b>`; }};
   return `<div class="sa-chart" id="${cid}" style="height:${h}px;margin-top:2px">
     <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:100%" preserveAspectRatio="none">
       <line x1="${padL}" y1="${z.toFixed(1)}" x2="${w-padR}" y2="${z.toFixed(1)}" stroke="rgba(255,255,255,.2)" stroke-dasharray="2,2"/>
       ${mBars}
       <path d="${mLines(difA)}" fill="none" stroke="#e8eef6" stroke-width="1"/>
       <path d="${mLines(deaA)}" fill="none" stroke="#f5c842" stroke-width="1"/>
+      ${mAnno}
       ${_sqT(padL, 10, 'fill="#e8eef6" font-size="9"', 'MACD(12,26,9)')}
       ${_sqT(padL+94, 10, 'fill="#e8eef6" font-size="9"', 'DIF')}
-      ${_sqT(padL+120, 10, 'fill="#f5c842" font-size="9"', 'DEA')}
+      ${_sqT(padL+120, 10, 'fill="#f5c842" font-size="9"', 'DEA')}${mDiv.length?_sqT(padL+148, 10, `fill="${_DIV_TOP}" font-size="8"`, '┈顶背'):''}${mDiv.length?_sqT(padL+182, 10, `fill="${_DIV_BOT}" font-size="8"`, '┈底背'):''}${mDiv.length?_sqT(padL+216, 10, 'fill="#5a6a82" font-size="8"', '粗=强·细=弱'):''}
     </svg>
   </div>`;
 }
@@ -6846,10 +7073,10 @@ async function selectHistDate(d){
 }
 function renderHistory(rec){
   const box = $('#histContent'); if(!box) return;
-  const sc = rec.screen, ma = rec.ma, ssp = rec.ssp;
+  // 20261002: 多维选股已移除, 归档里的 screen 段不再展示 (历史旧归档仍保留该字段但不呈现)
+  const ma = rec.ma, ssp = rec.ssp;
   // 收集含数据的模块, 生成子tab (20261001 对齐均线形态筛选的tab交互)
   const mods = [];
-  if(sc) mods.push({id:'screen', label:'选股筛选', cnt:(sc.matched||0)});
   if(ma){
     let _t = 0; for(const k in (ma.counts||{})) _t += (ma.counts[k]||0);
     mods.push({id:'ma', label:'均线形态', cnt:_t});
@@ -6862,11 +7089,7 @@ function renderHistory(rec){
   // 各模块 pane 内容
   const panes = mods.map(m => {
     let inner = '';
-    if(m.id === 'screen'){
-      inner = `<div class="sec-h">选股筛选 <span class="cnt">${sc.matched||0}</span>
-        <span class="meta">${esc(sc.updated||'')} · 样本 ${sc.universe||0} · 勾选${(sc.conds||[]).length}条件</span></div>
-        <div class="tbl-wrap"><table><thead><tr><th class="l">#</th><th class="l">股票</th><th class="l col-opt">行业</th><th>今日涨跌</th><th>现价</th><th>ATR%</th></tr></thead><tbody id="histScreenBody"></tbody></table></div>`;
-    } else if(m.id === 'ma'){
+    if(m.id === 'ma'){
       inner = `<div class="sec-h">均线形态 <span class="meta">${esc(ma.updated||'')} · 扫描${ma.total_stocks||0}只 · ${ma.elapsed_sec||''}s</span></div>`;
       const pats = Object.keys(ma.patterns||{});
       if(pats.length){
@@ -6934,14 +7157,7 @@ function renderHistory(rec){
       box.querySelectorAll('.hs-pane').forEach(x=>{ x.style.display = (x.dataset.hs2===id)?'':'none'; });
     };
   });
-  // ---- 填充行: 选股 ----
-  const sb = $('#histScreenBody');
-  if(sb && sc){
-    const rows = [...(sc.exact||[]), ...(sc.stocks||[])];
-    sb.innerHTML = rows.length
-      ? rows.slice(0,120).map((s,i) => `<tr><td class="l">${i+1}</td><td class="l">${markNameHtml(s.code,s.name,s.price)}</td><td class="l col-opt">${esc(s.industry||'')}</td><td>${fmtPct(s.change_pct)}</td><td>${p2(s.price)}</td><td>${s.atr_pct!=null? s.atr_pct+'%':'—'}</td></tr>`).join('')
-      : '<tr><td colspan="6" class="empty">无</td></tr>';
-  }
+  // ---- 填充行: 选股 (20261002 已随多维选股移除) ----
   // ---- 填充行: 均线(每个形态单独一个pane, 20261001) ----
   if(ma){
     Object.entries(ma.patterns||{}).forEach(([pat, list]) => {

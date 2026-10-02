@@ -1633,7 +1633,7 @@ def det_early_signal(bars, today=None) -> dict:
       1. ATR% ≥ 3            —— 由前端 ATR 过滤承担
       2. 缠论最近 3 个完成的笔, 连接的线段方向向上
       3. 最新未完成的笔期间出现「底」标识(极致底量)
-    只用于发现池(early)/均线低位启动前tab, 不参与 check_stock 逻辑。hit=True 表示全部满足即可入池。
+    用于均线形态筛选的「低位启动前」tab (由 _ma_scan_job 调用)。hit=True 表示全部满足即可入池。
     全程 try/except 包裹, 绝不因单票数据问题抛异常影响扫描。"""
     try:
         if not bars or len(bars) < 60:
@@ -2055,9 +2055,196 @@ def calc_macd(closes: list[float], fast: int = 12, slow: int = 26, signal: int =
     return dif, dea, hist
 
 
+def _kdj_front(bars: list) -> tuple:
+    """按「前端 K线副图」口径计算 KDJ(9,3,3) 的 (K, D, J) 三条序列, 与
+    static/index.html 内联实现逐点一致 (kdSubPanels 内 const K=[],D=[],J=[] 那段)。
+
+    与 calc_kdj 的两点差异 (20261002 为对齐副图标注而引入):
+      1. 前 8 根: calc_kdj 留 nan; 前端用「截断窗口」(1~8 根) 照常算 RSV。
+      2. 种子: calc_kdj 在第 9 根用 K=D=50 起步; 前端从第 1 根起由 50 连续迭代。
+    两者相差按 (2/3)^k 衰减, 约 30 根后收敛到 0.0X 以内 —— 对看图形无影响,
+    但背离比较的是"J 落差 > 5"、钝化看的是"K 是否 ≥80/≤20", 边界样本会因此翻转,
+    故此处照前端实现。K 序列供 _kd_blunt_segs 使用。"""
+    n = len(bars)
+    K = [0.0] * n
+    D = [0.0] * n
+    J = [0.0] * n
+    pk = pd = 50.0
+    for i in range(n):
+        hh, ll = -1e9, 1e9
+        for j in range(max(0, i - 8), i + 1):
+            h = float(bars[j]["high"])
+            l = float(bars[j]["low"])
+            if h > hh:
+                hh = h
+            if l < ll:
+                ll = l
+        c = float(bars[i]["close"])
+        rsv = 50.0 if hh == ll else (c - ll) / (hh - ll) * 100.0
+        pk = (pk * 2.0 + rsv) / 3.0
+        pd = (pd * 2.0 + pk) / 3.0
+        K[i] = pk
+        D[i] = pd
+        J[i] = 3.0 * pk - 2.0 * pd
+    return K, D, J
+
+
+def _kdj_series_front(bars: list) -> list:
+    """前端口径的 J 序列 (薄封装, 见 _kdj_front)。"""
+    return _kdj_front(bars)[2]
+
+
+def _kd_blunt_segs(K: list, min_len: int = 3) -> list:
+    """KDJ 钝化段 —— 与前端 _kdBluntSegs 同口径。
+
+    K 连续 >= min_len 根处于 >=80(高位钝化) / <=20(低位钝化) 即算一段。
+    返回 [{"a": 起始下标, "b": 结束下标, "high": 是否高位钝化}]。
+    副图对落在钝化段内的背离点 **不显示标注**, tab 沿用同一过滤 (20261002 用户指定)。"""
+    n = len(K)
+    need = min_len or 3
+    segs = []
+    i = 0
+    while i < n:
+        v = K[i]
+        if (not math.isfinite(v)) or (v < 80 and v > 20):
+            i += 1
+            continue
+        is_high = v >= 80
+        j = i
+        while (j + 1 < n and math.isfinite(K[j + 1])
+               and (K[j + 1] >= 80 if is_high else K[j + 1] <= 20)):
+            j += 1
+        if j - i + 1 >= need:
+            segs.append({"a": i, "b": j, "high": is_high})
+        i = j + 1
+    return segs
+
+
+def _px_pivot_lows(bars: list, L: int = 3) -> list:
+    """价格分型谷下标 (与前端 _pxPivots 的 Lo 完全相同)。
+
+    判定: 左侧 L 根低点须「严格更高」, 右侧 L 根低点「不低于」即可 —— 因此平底只会
+    认最左那根, 避免横盘刷出一堆假分型。需右侧 L 根收盘确认 ⇒ 最后 L 根永远不是谷。"""
+    n = len(bars)
+    lows = [float(b["low"]) for b in bars]
+    piv = []
+    for i in range(L, n - L):
+        cl = lows[i]
+        ok = True
+        for j in range(i - L, i + L + 1):
+            if j == i:
+                continue
+            if j < i:
+                if lows[j] <= cl:      # 左侧须严格更高
+                    ok = False
+                    break
+            elif lows[j] < cl:         # 右侧不低于即可 (平底认最左)
+                ok = False
+                break
+        if ok:
+            piv.append(i)
+    return piv
+
+
+def _scan_kdj_bottom_diverge(bars: list, L: int = 3, thr: float = 5.0,
+                             tol: float = 0.005, span: int = 4) -> list:
+    """日KDJ底背离扫描 —— 按"相邻价格**分型谷**配对"定义 (❌ 非当前 tab 口径)。
+
+    ⚠️ (20261002 晚 v3) "日·背离" tab 现用 _scan_kdj_bottom_diverge_legacy (45日窗口口径,
+    与 K线副图标注完全一致)。本函数连同 _px_pivot_lows 当前**无调用点**, 保留备查 ——
+    它是"分型谷配对"定义(要求前后两谷价位接近), 与"窗口极值"定义不是一回事:
+    实测标注密度 分型谷版 ~25.8 个/只(钝化前) vs 45日窗口版 7.3 个/只(钝化后)。
+
+    对应前端: _pxPivots(bars,3) 取谷 → _scanDiverge(bars, J, {L:3, thrAbs:5}) 的 bots 分支。
+    逐对比较「相邻两个价格分型谷」:
+      1. 价格: 当前谷低点 <= 前谷低点 × (1+tol) —— 创新低或双底(容差 0.5%)
+      2. 指标: J 抬升 gap = J[当前谷] - J[前谷] > thr (5 点) —— 价格更低而 J 反而更高
+    返回 [{i, ref, gap, strong}] (i 升序): i=背离所在K线, ref=参照的前谷,
+    strong = gap >= 2×thr (仅用于绘制粗细/填充, 不作过滤)。
+    同向标注间距 < span 根时只保留落差更大的那个 (前端 _thin, 防止字标互相遮盖)。"""
+    n = len(bars)
+    if n < 7:
+        return []
+    lows = [float(b["low"]) for b in bars]
+    J = _kdj_series_front(bars)
+    out = []
+    prev = -1
+    for p in _px_pivot_lows(bars, L):
+        if prev >= 0 and lows[p] <= lows[prev] * (1.0 + tol):
+            g = J[p] - J[prev]
+            if g > thr:
+                out.append({"i": p, "ref": prev, "gap": g, "strong": g >= thr * 2.0})
+        prev = p
+    kept = []
+    for d in out:
+        if kept and d["i"] - kept[-1]["i"] < span:
+            if d["gap"] > kept[-1]["gap"]:
+                kept[-1] = d
+        else:
+            kept.append(d)
+    return kept
+
+
+def _scan_kdj_bottom_diverge_legacy(bars: list, win: int = 45, thr: float = 5.0) -> list:
+    """日KDJ底背离扫描 —— **与 K线副图的「底背」标注完全同口径** (20261002 晚起 "日·背离" tab 采用)。
+
+    对应前端 static/index.html 的 `_scanDivergeLegacy(bars, J, {win:45, thr:5})` 的**底背分支**
+    (顶背分支 tab 不需要, 故未移植)。它与原版 calc_kdj_system 的背离判定逐行对齐, 区别只是把
+    "只判当前时刻" 展开成 "逐根回算": 对每个时刻 e 取窗口 [e-win+1, e], 窗口内**最低价那根**
+    即 "当前低点" idxL, 与其前 win 根内 J 的**最小值**比较 —— 一律不要求两个点位价位接近。
+
+    去重: 同一根只保留**首次被确认**的那次 (e 递增, 先到先得)。
+    返回 [{i 背离所在K线, ref 参照的前极值K线, gap J 落差, strong gap>=2*thr}] (i 升序)。
+    注: 副图另有一层「钝化区间内不显示背离」过滤 (见 _kd_blunt_segs), tab 沿用,
+    由调用方施加 —— 本函数只负责扫描, 不做钝化过滤。"""
+    n = len(bars)
+    if n < win + 1:
+        return []
+    lo = [float(b["low"]) for b in bars]
+    cl = [float(b["close"]) for b in bars]
+    J = _kdj_front(bars)[2]
+    seen = set()
+    out = []
+    for e in range(win - 1, n):
+        s = e - win + 1
+        ml = min(lo[s:e + 1])
+        idx_l = -1
+        for i in range(s, e + 1):
+            if lo[i] == ml:
+                idx_l = i
+                break
+        if idx_l <= 0 or idx_l in seen:
+            continue
+        ptj = None
+        pti = -1
+        for i in range(max(0, idx_l - win), idx_l):
+            v = J[i]
+            if not math.isfinite(v):
+                continue
+            if ptj is None or v < ptj:
+                ptj = v
+                pti = i
+        if ptj is None:
+            continue
+        mll = min(cl[s:e + 1])
+        if cl[e] <= mll * 1.01 and J[idx_l] > ptj + thr:
+            seen.add(idx_l)
+            gap = J[idx_l] - ptj
+            out.append({"i": idx_l, "ref": pti, "gap": gap, "strong": gap >= thr * 2.0})
+    out.sort(key=lambda d: d["i"])
+    return out
+
+
 def _calc_kdj_bottom_diverge(closes: list, highs: list, lows: list, j: list) -> bool:
     """KDJ底背离: 价格创近20日新低但J值未创新低 (动能未跟随下行)。
-    判定逻辑与 calc_kdj_system 中的 bottom_diverge 完全一致, 仅抽取背离部分以便扫描复用。"""
+
+    ⚠️ (20261002 晚 v3) "日·背离" tab 已改用 _scan_kdj_bottom_diverge_legacy (副图同口径),
+    本函数当前**无调用点**, 仅保留备查。
+    它的口径 = "20日窗口 + 前后低点 J 落差 > 5", 两个特点使其与副图标注对不上:
+      1. **窗口只有 20 根** (副图 45 根) —— 45 日窗内更早、更低的点会夺走"窗口最低"资格,
+         使本口径选中的低点在副图上根本轮不到被标注;
+      2. 不比较前后两个低点的价格 (副图靠"窗口最低"隐含价格条件), 故"底部抬升"也算背离。
+    这正是用户 20261002 报"tab 选出的票，KDJ 副图上没有底背离标识"的根因。"""
     N = len(closes)
     if N < 25:
         return False
@@ -2086,7 +2273,11 @@ def _calc_kdj_bottom_diverge(closes: list, highs: list, lows: list, j: list) -> 
 
 def _calc_macd_bottom_diverge(closes: list, lows: list, dif: list) -> bool:
     """MACD底背离: 价格创近20日新低但DIF未创新低 (空头动能减弱, 反转信号)。
-    结构与 _calc_kdj_bottom_diverge 一致, 仅把J序列换成DIF序列。"""
+    结构与 _calc_kdj_bottom_diverge 一致, 仅把J序列换成DIF序列。
+
+    ⚠️ (20261002) "日·背离" tab 已改为**仅日KDJ底背离**, 本函数当前**无调用点**, 保留备用。
+    它的门槛比 KDJ 版宽松得多 —— 只要求 "DIF 不创新低"(> prev + 1e-6), 没有那 5 点落差要求,
+    当初二合一时大量 MACD-only 命中即由此而来 (11 只里占 4 只)。"""
     N = len(closes)
     if N < 25:
         return False
@@ -2111,55 +2302,6 @@ def _calc_macd_bottom_diverge(closes: list, lows: list, dif: list) -> bool:
             and trough_dif > prev_trough_dif + 1e-6)
 
 
-# 条件元数据: 供前端渲染勾选框 (单一数据源)
-# 体系: A趋势结构 / B启动信号 / C买点状态 / D风控排除
-COND_DEFS = [
-    {"group": "一、趋势结构", "gid": "gA", "type": "and", "items": [
-        {"id": "t1", "label": "均线多头排列 MA5>MA10>MA20>MA60", "hint": "严格从上到下多头结构"},
-        {"id": "t2", "label": "MA20/MA60方向向上（今日>5日前）", "hint": "方向一致向上"},
-        {"id": "t3", "label": "收盘价>MA20（站上生命线）", "hint": "不破中期趋势线"},
-        {"id": "t4", "label": "长期趋势保护：收盘>MA250 或 MA60>MA250", "hint": "年线之上更可靠"},
-    ]},
-    {"group": "二、启动信号（满足其一）", "gid": "gB", "type": "or", "items": [
-        {"id": "b1", "label": "近10日MA5上穿MA20 或 MA10上穿MA20", "hint": "金叉确认"},
-        {"id": "b2", "label": "低位金叉：距250日最低涨幅<50%", "hint": "底部区域更可靠"},
-        {"id": "b3", "label": "MA20连续5日走平后连续2日拐头向上", "hint": "拐头可替代金叉"},
-    ]},
-    {"group": "三、买点状态（满足其一）", "gid": "gC", "type": "or", "items": [
-        {"id": "c1", "label": "低吸回踩：最低价触MA10/MA20±3%，收盘收回MA10上方，缩量", "hint": "回踩支撑不破"},
-        {"id": "c2", "label": "放量突破：创20日新高，量>20日均量×1.5，涨幅≥3%阳线", "hint": "进攻型突破"},
-        {"id": "c3", "label": "KDJ底背离：近20日价格创新低但J值未创新低", "hint": "动能未随价格下行, 潜在反转"},
-        {"id": "c4", "label": "MACD底背离：近20日价格创新低但DIF未创新低", "hint": "空头动能减弱, 潜在反转"},
-    ]},
-    {"group": "四、风控排除", "gid": "gD", "type": "and", "items": [
-        {"id": "d1", "label": "乖离率<15%（(收盘-MA20)/MA20）", "hint": "避开末期追高"},
-        {"id": "d2", "label": "排除空头结构（MA60非持续向下）", "hint": "一票否决"},
-        {"id": "d3", "label": "排除ST/*ST", "hint": "退市风险"},
-        {"id": "d4", "label": "排除停牌", "hint": "无法买入"},
-        {"id": "d5", "label": "排除上市不足60日", "hint": "新股数据不稳"},
-        {"id": "d6", "label": "排除当日一字板", "hint": "无法买入"},
-    ]},
-    {"group": "五、波动过滤 ATR%", "gid": "gE", "type": "or", "items": [
-        {"id": "e1", "label": "ATR% < 4%（趋势票偏好）", "hint": "低波动, 适合趋势长持"},
-        {"id": "e2", "label": "ATR% 3~8%（波段弹性）", "hint": "弹性足够又不失控, 默认勾选"},
-        {"id": "e3", "label": "ATR 收缩中（ATR14 < ATR60×0.8）", "hint": "波动收敛蓄势, 变盘临近弹性大"},
-    ]},
-]
-# 全部条件ID (默认全勾选)
-COND_ALL = [it["id"] for g in COND_DEFS for it in g["items"]]
-# 默认勾选集 (20260906): 全部条件中, ATR组默认只勾"ATR% 3~8%(波段弹性)"(e2);
-# e1/e3/d8(排除ATR%>8%) 默认不勾。首次启动筛选与前端初始渲染均以此为准。
-COND_DEFAULT = [c for c in COND_ALL if c not in ("e1", "e3", "c3", "c4")]
-# 各组包含的"评分叶子" (d3-d8 是剔除门, 不计入gD评分)
-GROUP_LEAVES = {
-    "gA": ["t1", "t2", "t3", "t4"],
-    "gB": ["b1", "b2", "b3"],
-    "gC": ["c1", "c2", "c3", "c4"],
-    "gD": ["d1", "d2"],
-    "gE": ["e1", "e2", "e3"],
-}
-# 剔除门条件 (勾选则剔除, 不参与评分)
-GATE_CONDS = {"d3", "d4", "d5", "d6"}
 
 
 # ============================================================
@@ -4811,372 +4953,12 @@ def analyze_buy_sell(bars: list[dict]) -> dict:
     return result
 
 
-def check_stock(row: dict, bars: list[dict], conds=None) -> dict | None:
-    """
-    对单只股票评估4大条件组(A趋势/B启动/C买点/D风控), 返回分组通过情况与指标快照。
-    bars: 含当日的日K线(最后一条为当日), 建议至少260根(MA250)。
-    剔除门(ST/科创板/停牌/上市不足60日/一字板)直接返回 None。
-    其余始终返回结果, 含 score(0-4) 与各组布尔, 以便展示"接近满足"的标的。
-    """
-    if conds is None:
-        conds = set(COND_DEFAULT)
-    else:
-        conds = set(conds)
-    code = row.get("code", "")
-    name = row.get("name", "")
-    if len(bars) < 21:
-        return None
-    # 剔除门 (可勾选): ST/*ST
-    if "d3" in conds and ("ST" in name or "退" in name or "*ST" in name):
-        return None
-    closes = [b["close"] for b in bars]
-    highs = [b["high"] for b in bars]
-    lows = [b["low"] for b in bars]
-    vols = [b["volume"] for b in bars]
-    opens = [b["open"] for b in bars]
-    chgs = daily_changes(bars)
-    today = bars[-1]
-    limit = board_limit(code)
-    c = closes[-1]
-
-    # 剔除门: 停牌(当日无成交)
-    if "d4" in conds and today["volume"] == 0:
-        return None
-    # 剔除门: 上市不足60日
-    if "d5" in conds and len(bars) < 60:
-        return None
-    # 剔除门: 当日一字板(开=收=高=低 或 振幅0且涨幅近涨停)
-    if "d6" in conds:
-        _ob, _cb, _hb, _lb = today["open"], today["close"], today["high"], today["low"]
-        _chg = chgs[-1] if not math.isnan(chgs[-1]) else 0
-        if (_hb == _lb) or (_ob == _cb == _hb == _lb) or (_chg >= limit * 0.99 and _hb == _lb):
-            return None
-
-    # ---- ATR 波动过滤数据 (20260906 新增e组/d8) ----
-    # TR = max(高-低, |高-昨收|, |低-昨收|); ATR14/ATR60 为对应周期简单平均
-    trs = []
-    for i in range(1, len(bars)):
-        pc = closes[i - 1]
-        trs.append(max(highs[i] - lows[i], abs(highs[i] - pc), abs(lows[i] - pc)))
-    def _atr(p):
-        seg = trs[-p:] if len(trs) >= p else trs
-        return (sum(seg) / len(seg)) if seg else 0.0
-    atr14 = _atr(14)
-    atr60 = _atr(60)
-    atr_pct = (atr14 / c * 100) if c > 0 else 0.0
-
-    ma5 = sma(closes, 5)
-    ma10 = sma(closes, 10)
-    ma20 = sma(closes, 20)
-    ma60 = sma(closes, 60)
-    ma250 = sma(closes, 250) if len(closes) >= 250 else [float("nan")] * len(closes)
-    # KDJ (保留作参考展示)
-    _k, _d, _j = calc_kdj(highs, lows, closes)
-    J_t = _j[-1] if not math.isnan(_j[-1]) else 0.0
-    # MACD (DIF用于底背离判定)
-    _dif, _dea_m, _hist_m = calc_macd(closes)
-    try:
-        nmc = float(row.get("nmc", 0))
-    except (TypeError, ValueError):
-        nmc = 0.0
-    try:
-        today_amount = float(row.get("amount", 0))
-    except (TypeError, ValueError):
-        today_amount = today["volume"] * c
-
-    # ---- A组: 趋势结构 叶子 ----
-    # t1: 均线多头排列 MA5>MA10>MA20>MA60
-    t1 = (not math.isnan(ma60[-1])) and ma5[-1] > ma10[-1] > ma20[-1] > ma60[-1]
-    # t2: MA20/MA60方向向上 (今日>5日前)
-    t2 = False
-    if (not math.isnan(ma20[-1])) and len(ma20) >= 6 and (not math.isnan(ma20[-6])) \
-       and (not math.isnan(ma60[-1])) and len(ma60) >= 6 and (not math.isnan(ma60[-6])):
-        t2 = (ma20[-1] > ma20[-6]) and (ma60[-1] > ma60[-6])
-    # t3: 收盘价>MA20 (站上生命线)
-    t3 = (not math.isnan(ma20[-1])) and c > ma20[-1]
-    # t4: 长期趋势保护 收盘>MA250 或 MA60>MA250
-    m250 = ma250[-1] if not math.isnan(ma250[-1]) else float("nan")
-    m60 = ma60[-1] if not math.isnan(ma60[-1]) else float("nan")
-    t4 = False
-    if not math.isnan(m250):
-        t4 = (c > m250) or ((not math.isnan(m60)) and m60 > m250)
-    else:
-        # MA250不可用时, MA60方向向上视为长期趋势保护
-        t4 = (not math.isnan(m60)) and len(ma60) >= 6 and (not math.isnan(ma60[-6])) and m60 > ma60[-6]
-
-    # ---- B组: 启动信号 叶子 ----
-    # b1: 近10日 MA5上穿MA20 或 MA10上穿MA20
-    b1 = False
-    for _i in range(max(1, len(closes) - 10), len(closes)):
-        _p = _i - 1
-        if _p < 0:
-            continue
-        if any(math.isnan(x) for x in (ma5[_i], ma20[_i], ma5[_p], ma20[_p])):
-            continue
-        # MA5上穿MA20
-        if ma5[_p] <= ma20[_p] and ma5[_i] > ma20[_i]:
-            b1 = True
-            break
-        # MA10上穿MA20
-        if not math.isnan(ma10[_i]) and not math.isnan(ma10[_p]) and \
-           not math.isnan(ma20[_p]) and ma10[_p] <= ma20[_p] and ma10[_i] > ma20[_i]:
-            b1 = True
-            break
-    # b2: 低位金叉 距250日最低涨幅<50%
-    b2 = False
-    if b1:
-        low250 = min(lows[-250:]) if len(lows) >= 250 else min(lows)
-        gain_from_low = (c - low250) / low250 * 100 if low250 > 0 else 999
-        b2 = gain_from_low < 50
-    # b3: MA20连续5日走平后连续2日拐头向上
-    b3 = False
-    if len(ma20) >= 8 and not any(math.isnan(ma20[i]) for i in range(-8, 0)):
-        flat = all(abs(ma20[i] - ma20[i - 1]) / ma20[i - 1] < 0.005 for i in range(-6, -1))
-        turn = ma20[-1] > ma20[-2] > ma20[-3]
-        b3 = flat and turn
-
-    # ---- C组: 买点状态 叶子 ----
-    # c1: 低吸回踩 (最低价触MA10/MA20±3%, 收盘收回MA10上方, 回踩日缩量)
-    c1 = False
-    if not math.isnan(ma10[-1]) and not math.isnan(ma20[-1]) and ma10[-1] > 0 and ma20[-1] > 0:
-        near_ma = (abs(lows[-1] / ma10[-1] - 1) < 0.03) or (abs(lows[-1] / ma20[-1] - 1) < 0.03)
-        close_above_ma10 = c > ma10[-1]
-        vol_avg5 = sum(vols[-6:-1]) / 5 if len(vols) >= 6 else 0
-        shrink = (vols[-1] < vol_avg5) if vol_avg5 > 0 else False
-        c1 = near_ma and close_above_ma10 and shrink
-    # c2: 放量突破 (创20日新高, 量>20日均量×1.5, 涨幅≥3%阳线)
-    c2 = False
-    if len(closes) >= 21:
-        high20_close = max(closes[-21:-1])
-        vol_avg20 = sum(vols[-21:-1]) / 20
-        c2 = (c > high20_close) and (vol_avg20 > 0) and (vols[-1] > vol_avg20 * 1.5) and \
-             (not math.isnan(chgs[-1]) and chgs[-1] >= 3) and (c > opens[-1])
-    # c3: KDJ底背离 (价格创新低但J值未创新低)
-    c3 = _calc_kdj_bottom_diverge(closes, highs, lows, _j)
-    # c4: MACD底背离 (价格创新低但DIF未创新低)
-    c4 = _calc_macd_bottom_diverge(closes, lows, _dif)
-
-    # ---- D组: 风控 叶子 ----
-    # d1: 乖离率<15%
-    bias = (c - ma20[-1]) / ma20[-1] * 100 if (not math.isnan(ma20[-1]) and ma20[-1] > 0) else 0
-    d1 = bias < 15
-    # d2: 排除空头结构 MA60非持续向下 (今日>=10日前)
-    d2 = True
-    if not math.isnan(ma60[-1]) and len(ma60) >= 11 and not math.isnan(ma60[-11]):
-        d2 = ma60[-1] >= ma60[-11]
-
-    # ---- E组: 波动过滤 ATR% 叶子 (20260906 新增) ----
-    e1 = atr_pct < 4                      # 趋势票偏好: 低波动
-    e2 = (3 <= atr_pct <= 8)              # 波段弹性: 有肉又不失控
-    e3 = (atr14 > 0 and atr60 > 0 and atr14 < atr60 * 0.8)  # ATR收缩=蓄势
-
-    leaf = {
-        "t1": t1, "t2": t2, "t3": t3, "t4": t4,
-        "b1": b1, "b2": b2, "b3": b3,
-        "c1": c1, "c2": c2, "c3": c3, "c4": c4,
-        "d1": d1, "d2": d2,
-        "e1": e1, "e2": e2, "e3": e3,
-    }
-
-    # ---- 各组通过情况 (尊重 conds) ----
-    def and_group(gid):
-        chk = [k for k in GROUP_LEAVES[gid] if k in conds]
-        return all(leaf[k] for k in chk) if chk else True
-
-    def or_group(gid):
-        chk = [k for k in GROUP_LEAVES[gid] if k in conds]
-        return any(leaf[k] for k in chk) if chk else True
-
-    groups = {"gA": and_group("gA"), "gB": or_group("gB"),
-              "gC": or_group("gC"), "gD": and_group("gD"),
-              "gE": or_group("gE")}
-    active = {gid: any(k in conds for k in GROUP_LEAVES[gid]) for gid in GROUP_LEAVES}
-    n_active = sum(active.values())
-    score = sum(groups[g] for g in groups if active[g])
-
-    # 命中标签 (展示用, 仅展示已勾选且通过的叶子)
-    hits = []
-    if active["gA"]:
-        if "t1" in conds and leaf["t1"]:
-            hits.append("多头排列")
-        if "t2" in conds and leaf["t2"]:
-            hits.append("方向向上")
-        if "t3" in conds and leaf["t3"]:
-            hits.append("站上MA20")
-        if "t4" in conds and leaf["t4"]:
-            hits.append("年线保护")
-    if active["gB"]:
-        if "b1" in conds and leaf["b1"]:
-            hits.append("金叉确认")
-        if "b2" in conds and leaf["b2"]:
-            hits.append("低位金叉")
-        if "b3" in conds and leaf["b3"]:
-            hits.append("MA20拐头")
-    if active["gC"]:
-        if "c1" in conds and leaf["c1"]:
-            hits.append("低吸回踩")
-        if "c2" in conds and leaf["c2"]:
-            hits.append("放量突破")
-        if "c3" in conds and leaf["c3"]:
-            hits.append("KDJ底背离")
-        if "c4" in conds and leaf["c4"]:
-            hits.append("MACD底背离")
-    if active["gD"]:
-        if "d1" in conds and leaf["d1"]:
-            hits.append("乖离安全")
-    if active["gE"]:
-        if "e1" in conds and leaf["e1"]:
-            hits.append("低波动")
-        if "e2" in conds and leaf["e2"]:
-            hits.append("波段弹性")
-        if "e3" in conds and leaf["e3"]:
-            hits.append("ATR蓄势")
-
-    est = estimate_gains(bars, ma5, ma10, ma20, _j)
-    est["tags"] = hits + [t for t in est["tags"] if t not in hits]
-
-    bs = analyze_buy_sell(bars)
-
-    return {
-        "code": code,
-        "name": name,
-        "symbol": row.get("symbol", ""),
-        "industry": get_industry(code),
-        "concept": get_concepts(code),
-        "price": round(c, 2),
-        "change_pct": round(float(row.get("changepercent", 0) or 0), 2),
-        "amount_yi": round(today_amount / 1e8, 2),
-        "float_mv_yi": round(nmc / 10000, 2),
-        "ma5": round(ma5[-1], 2),
-        "ma10": round(ma10[-1], 2),
-        "ma20": round(ma20[-1], 2),
-        "ma60": round(ma60[-1], 2) if not math.isnan(ma60[-1]) else 0,
-        "ma250": round(ma250[-1], 2) if not math.isnan(ma250[-1]) else 0,
-        "bias": round(bias, 2),
-        "kdj_j": round(J_t, 2),
-        "atr_pct": round(atr_pct, 2),
-        "score": score,
-        "n_active": n_active,
-        "groups": groups,
-        "active": active,
-        "est_5d": est["d5"],
-        "est_10d": est["d10"],
-        "est_20d": est["d20"],
-        "tags": est["tags"],
-        "bs_signal": bs["signal"],
-        "bs_side": bs["side"],
-        "bs_type": bs["signal_type"],
-        "bs_entry": bs["entry_price"],
-        "bs_stop": bs["stop_loss"],
-        "bs_target": bs["target_price"],
-        "bs_reason": bs["reason"],
-        "bs_trend": bs["trend"],
-        "bs_alignment": bs["alignment"],
-        "bs_vol": bs["vol_status"],
-        "bs_actions": bs["actions"],
-        "bs_resonance": bs.get("resonance", []),
-        "bs_resonance_count": bs.get("resonance_count", 0),
-        "bs_warnings": bs.get("warnings", []),
-        "bs_motto": bs.get("motto", ""),
-    }
-
-
-def estimate_gains(bars, ma5, ma10, ma20, j) -> dict:
-    """
-    近5/10/20日涨幅预估 (透明启发式, 非投资建议)。
-    综合近期动量 + 均线趋势 + KDJ信号 + 位置, 向前线性外推并加阻尼。
-    """
-    closes = [b["close"] for b in bars]
-    # 近5日动量(日化)
-    if len(closes) >= 6 and closes[-6] > 0:
-        r5 = closes[-1] / closes[-6] - 1
-        daily_mom = (1 + r5) ** (1 / 5) - 1
-    else:
-        daily_mom = 0.0
-    daily_mom = max(min(daily_mom, 0.04), -0.04)  # 限制极端
-
-    # 信号分: [-1, 1]
-    sig = 0.0
-    reasons, tags = [], []
-    # 均线多头
-    if ma5[-1] > ma10[-1] > ma20[-1]:
-        sig += 0.3
-        tags.append("均线多头")
-    elif ma5[-1] > ma10[-1]:
-        sig += 0.15
-        tags.append("短多")
-    # KDJ
-    J_t = j[-1]
-    if not math.isnan(J_t):
-        if J_t < 20 and j[-1] > j[-2]:
-            sig += 0.35
-            tags.append("KDJ低位拐头")
-        elif j[-1] > j[-2] and J_t < 60:
-            sig += 0.2
-            tags.append("KDJ上行")
-    # 位置: 距20日高点的空间(超跌反弹预期)
-    if len(closes) >= 20:
-        hi = max(closes[-20:])
-        room = (hi - closes[-1]) / closes[-1]
-        if room > 0.05:
-            sig += min(0.25, room * 0.5)
-            tags.append("超跌反弹")
-
-    sig = max(min(sig, 1.0), -1.0)
-    # 预估上限基于"距20日高点的空间"(均值回归天花板), 更贴近现实:
-    # 已在高位的强势股上行空间有限, 回调充分的标的空间更大。
-    if len(closes) >= 20:
-        hi20 = max(closes[-20:])
-        room = (hi20 - closes[-1]) / closes[-1]  # 距高点的上行空间(>=0)
-    else:
-        room = 0.10
-    cap5 = min(0.15, room * 0.50 + 0.03)
-    cap10 = min(0.25, room * 0.80 + 0.05)
-    cap20 = min(0.40, room * 1.20 + 0.08)
-    # 超买(J>80)追高风险: 预估打折扣
-    if not math.isnan(J_t) and J_t > 80:
-        cap5 *= 0.5
-        cap10 *= 0.5
-        cap20 *= 0.5
-        tags.append("超买谨慎")
-    # 线性外推 + 信号加权 + 阻尼
-    d5 = daily_mom * 5 * (1 + 0.5 * sig) * 0.8
-    d10 = daily_mom * 10 * (1 + 0.4 * sig) * 0.7
-    d20 = daily_mom * 20 * (1 + 0.3 * sig) * 0.6
-    # 按个股空间设定上限/下限
-    d5 = max(min(d5, cap5), -cap5 * 0.6)
-    d10 = max(min(d10, cap10), -cap10 * 0.6)
-    d20 = max(min(d20, cap20), -cap20 * 0.6)
-
-    if daily_mom > 0:
-        reasons.append("近期动量向上")
-    elif daily_mom < 0:
-        reasons.append("近期动量偏弱")
-    return {
-        "d5": round(d5 * 100, 2),
-        "d10": round(d10 * 100, 2),
-        "d20": round(d20 * 100, 2),
-        "reasons": reasons,
-        "tags": tags,
-    }
-
-
-# ============================================================
-# 选股编排
-# ============================================================
-def _set_screen_progress(msg: str) -> None:
-    """更新后台筛选进度(线程安全, 容错)。"""
-    try:
-        with _screen_lock:
-            _state["progress"] = msg
-    except Exception:  # noqa: BLE001
-        pass
 
 
 def _is_bse(sym_or_code: str) -> bool:
     """判定是否为北交所(京市)股票: symbol 带 bj 前缀, 或6位代码以 43/83/87/88/92 开头。
 
-    主筛选(run_screen)与均线形态筛选(_ma_scan_job)共用此判定, 保证口径一致 (20260928)。
+    均线形态筛选(_ma_scan_job)等模块共用此判定, 保证口径一致 (20260928)。
     """
     s = str(sym_or_code or "").lower()
     if s.startswith("bj"):
@@ -5186,313 +4968,21 @@ def _is_bse(sym_or_code: str) -> bool:
     return code6.startswith(("43", "83", "87", "88", "92"))
 
 
-def run_screen(conds=None) -> dict:
-    if conds is None:
-        conds = set(COND_DEFAULT)
-    else:
-        conds = set(conds)
-    t0 = time.time()
-    # 1. 全市场快照 (20260923: 整体失败自动重试3次, 避免瞬时异常导致"一直加载失败")
-    _set_screen_progress("拉取全市场实时行情…")
-    spot = None
-    for _try in range(3):
-        try:
-            spot = fetch_spot_all()
-            if spot:
-                break
-        except Exception:  # noqa: BLE001
-            spot = None
-        _set_screen_progress(f"行情快照失败, 自动重试 {_try + 1}/3…")
-        time.sleep(1.5 * (_try + 1))
-    if not spot:
-        raise RuntimeError("全市场行情快照连续3次拉取失败")
-    # 2. 预过滤: 按 conds 剔除门, 减少K线拉取量
-    # 20260928: 剔除北交所(京市) —— 调用模块级 _is_bse 判定 (与均线形态筛选口径一致)
-    candidates = []
-    for r in spot:
-        code = r.get("code", "")
-        name = r.get("name", "")
-        if "d3" in conds and ("ST" in name or "退" in name or "*ST" in name):
-            continue
-        if _is_bse(code) or _is_bse(r.get("symbol") or ""):
-            continue
-        candidates.append(r)
-
-    # 3. 构建行业/概念映射
-    _set_screen_progress(f"构建板块映射 (候选 {len(candidates)} 只)…")
-    _build_board_maps()
-
-    # 3.5 预加载K线缓存到内存 (避免5353次文件IO)
-    _set_screen_progress("加载K线缓存到内存…")
-    preloaded = _preload_kline_cache()
-
-    # 4. 并发拉取K线并筛选 (MA250需300根)
-    total_cand = len(candidates)
-    done_cnt = [0]
-    hit_cnt = [0]
-    _set_screen_progress(f"并发拉取K线 0/{total_cand}…")
-
-    # 用 run_screen 开头已拉取的 spot 数据补全当日bar, 避免每只股票重复拉全市场快照 (20260907)
-    def work(r):
-        sym = r.get("symbol")
-        try:
-            # 20260910: K线拉取失败时重试2次(间隔递增), 避免瞬态限流导致缓存缺失
-            bars = None
-            for attempt in range(3):
-                bars = fetch_kline(sym, datalen=300, spot_data=spot)
-                if bars:
-                    break
-                time.sleep(0.5 * (attempt + 1))
-            if not bars:
-                return None, None
-            # 独立通道: 提前·低位启动前信号 (与 check_stock 互不影响)
-            chgs = daily_changes(bars)
-            early = None
-            try:
-                d = det_early_signal(bars)
-                if d.get("hit"):
-                    early = {
-                        "code": r.get("code"), "symbol": r.get("symbol"), "name": r.get("name"),
-                        "close": bars[-1]["close"],
-                        "chg": round(chgs[-1], 2) if not math.isnan(chgs[-1]) else 0,
-                        "found": d.get("date"), "j": d.get("j"), "wj": d.get("wj"),
-                        "detail": d.get("detail"), "score": d.get("score"),
-                    }
-            except Exception:  # noqa: BLE001
-                early = None
-            return check_stock(r, bars, conds), early
-        except Exception:  # noqa: BLE001
-            return None, None
-
-    # 激活组与必选/可选分组
-    # gA(趋势结构) gD(风控) 为必选组: 激活时必须通过, 否则不纳入
-    # gB(启动信号) gC(买点状态) 为可选组: 允许差1组作为"接近满足"
-    MANDATORY = {"gA", "gD"}
-    active_g = {gid: any(k in conds for k in GROUP_LEAVES[gid]) for gid in GROUP_LEAVES}
-    n_active = sum(active_g.values())
-    flex_active = {gid: active_g[gid] and gid not in MANDATORY for gid in GROUP_LEAVES}
-    n_flex = sum(flex_active.values())
-    flex_threshold = max(0, n_flex - 1) if n_flex > 0 else 0
-
-    results: list[dict] = []
-    early: list[dict] = []
-    futs = [POOL.submit(work, r) for r in candidates]
-    # 20260909: as_completed + result 均加超时, 避免个别 fetch_kline 卡死拖死全扫描
-    # 20260910: 全局并发降至6后总耗时上升, 超时放宽到30分钟
-    for f in as_completed(futs, timeout=1800):
-        try:
-            res, early_rec = f.result(timeout=120)
-        except Exception:  # noqa: BLE001
-            res, early_rec = None, None
-        done_cnt[0] += 1
-        if early_rec:
-            early.append(early_rec)
-        if not res:
-            if done_cnt[0] % 100 == 0 or done_cnt[0] == total_cand:
-                _set_screen_progress(f"拉取K线 {done_cnt[0]}/{total_cand}…")
-            continue
-        g = res["groups"]
-        # 必选组: 激活就必须通过
-        if any(active_g[m] and not g[m] for m in MANDATORY):
-            if done_cnt[0] % 100 == 0 or done_cnt[0] == total_cand:
-                _set_screen_progress(f"拉取K线 {done_cnt[0]}/{total_cand}…")
-            continue
-        # 可选组: 通过数 >= flex_threshold (允许差1组)
-        flex_pass = sum(1 for gid in GROUP_LEAVES if flex_active[gid] and g[gid])
-        if flex_pass < flex_threshold:
-            if done_cnt[0] % 100 == 0 or done_cnt[0] == total_cand:
-                _set_screen_progress(f"拉取K线 {done_cnt[0]}/{total_cand}…")
-            continue
-        results.append(res)
-        hit_cnt[0] += 1
-        if done_cnt[0] % 100 == 0 or done_cnt[0] == total_cand:
-            _set_screen_progress(f"拉取K线 {done_cnt[0]}/{total_cand} (命中 {hit_cnt[0]})…")
-
-    # 完全命中(全部激活组通过) 与 接近满足(可选组差1) 分开
-    exact = [r for r in results if n_active > 0 and r["score"] == n_active]
-    near = [r for r in results if not (n_active > 0 and r["score"] == n_active)]
-    exact.sort(key=lambda x: x["est_20d"], reverse=True)
-    near.sort(key=lambda x: (x["score"], x["est_20d"]), reverse=True)
-    near = near[:60]  # 控制前端载荷
-    _set_screen_progress(f"筛选完成: 命中 {len(exact)} 只, 接近满足 {len(near)} 只")
-
-    # 20260910: 补拉缺失K线缓存。首轮因限流失败的股票, 此处并发重试拉取并落盘,
-    # 确保下次筛选时缓存完整, 不再出现"更新不全就中断"的问题。
-    missing = [r for r in candidates if _load_kline_cache(r.get("symbol")) is None]
-    if missing:
-        _set_screen_progress(f"补拉缺失K线缓存 0/{len(missing)}…")
-        missing_cnt = [0]
-        filled_cnt = [0]
-
-        def fill_one(r):
-            sym = r.get("symbol")
-            try:
-                fetch_kline(sym, datalen=300, spot_data=spot)
-                if _load_kline_cache(sym) is not None:
-                    filled_cnt[0] += 1
-            except Exception:  # noqa: BLE001
-                pass
-            finally:
-                missing_cnt[0] += 1
-                if missing_cnt[0] % 100 == 0 or missing_cnt[0] == len(missing):
-                    _set_screen_progress(
-                        f"补拉缺失K线缓存 {missing_cnt[0]}/{len(missing)} (成功 {filled_cnt[0]})…")
-
-        futs = [POOL.submit(fill_one, r) for r in missing]
-        for f in as_completed(futs, timeout=1800):
-            try:
-                f.result(timeout=60)
-            except Exception:  # noqa: BLE001
-                pass
-
-    return {
-        "updated": bj_now(),
-        "elapsed_sec": round(time.time() - t0, 1),
-        "universe": len(spot),
-        "candidates": len(candidates),
-        "matched": len(exact),
-        "near_count": len(near),
-        "exact": exact,
-        "stocks": near,  # 接近满足列表
-        "early": early[:200],  # 低位启动前·发现池 (轻量截断控制载荷)
-        "early_count": len(early),
-        "conds": sorted(conds),
-        "n_active": n_active,
-        "active": active_g,
-    }
-
-
 # ============================================================
 # FastAPI
 # ============================================================
 app = FastAPI(title="ARD选股系统")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-SCREEN_TTL = 300  # 选股结果缓存 5 分钟
-# 后台筛选状态: data/缓存时间/是否运行中/上次错误/进度/上次使用的conds
-_state = {"data": None, "ts": 0.0, "running": False, "error": None,
-          "progress": "", "last_conds": set(COND_DEFAULT)}
-_screen_lock = threading.Lock()
-
-
-def _run_screen_thread(conds=None):
-    """在后台线程执行筛选, 写入 _state。同一时刻仅一个在跑。"""
-    with _screen_lock:
-        if _state["running"]:
-            return
-        _state["running"] = True
-    c = set(conds) if conds is not None else set(_state.get("last_conds", COND_ALL))
-    try:
-        data = run_screen(c)
-        with _screen_lock:
-            _state["data"] = data
-            _state["ts"] = time.time()
-            _state["error"] = None
-            _state["progress"] = ""
-            _state["last_conds"] = c
-        # 每日信号归档 (20260906): 当日重扫覆盖当日记录, 失败不影响主流程
-        try:
-            _archive_put(bj_now("%Y-%m-%d"), "screen", {
-                "updated": data.get("updated"),
-                "conds": sorted(c),
-                "universe": data.get("universe"), "candidates": data.get("candidates"),
-                "matched": data.get("matched"), "near_count": data.get("near_count"),
-                "exact": (data.get("exact") or [])[:100],
-                "stocks": (data.get("stocks") or [])[:60],
-                "early": [[r.get("code"), r.get("name"), r.get("found")]
-                          for r in (data.get("early") or [])],
-            })
-        except Exception as ae:  # noqa: BLE001
-            print(f"[archive] 筛选结果归档失败: {ae}", flush=True)
-    except Exception as e:  # noqa: BLE001
-        with _screen_lock:
-            _state["error"] = str(e)
-            _state["progress"] = ""
-    finally:
-        with _screen_lock:
-            _state["running"] = False
-
-
-def _ensure_screen():
-    """缓存缺失或过期则用上次conds启动后台筛选(非阻塞)。"""
-    if _state["running"]:
-        return
-    if _state["data"] and (time.time() - _state["ts"] < SCREEN_TTL):
-        return
-    threading.Thread(target=_run_screen_thread, daemon=True).start()
-
-
-@app.get("/api/conds")
-def api_conds():
-    """返回条件定义(单一数据源) + 全部ID + 默认勾选集 (20260906 新增ATR组默认只勾e2)。"""
-    return {"defs": COND_DEFS, "all": COND_ALL, "default": COND_DEFAULT}
-
-
-@app.get("/api/screen")
-def api_screen():
-    """始终即时返回: 有缓存就返回缓存, 否则返回 running 状态供前端轮询。"""
-    _ensure_screen()
-    data = _state["data"]
-    with _screen_lock:
-        running = _state["running"]
-        err = _state["error"]
-        progress = _state["progress"]
-        last_conds = list(_state.get("last_conds", COND_ALL))
-    if data:
-        out = dict(data)
-        out["running"] = running
-        out["cached"] = True
-        out["error"] = err
-        out["conds"] = last_conds
-        return out
-    # 尚无缓存: 筛选进行中或出错
-    return JSONResponse({
-        "running": running,
-        "cached": False,
-        "error": err,
-        "progress": progress or "正在启动筛选…",
-        "conds": last_conds,
-        "stocks": [], "exact": [], "matched": 0, "near_count": 0,
-        "updated": "", "elapsed_sec": 0, "universe": 0, "candidates": 0,
-        "n_active": 0,
-    })
-
-
-@app.post("/api/screen/run")
-def api_run(payload: dict):
-    """用前端勾选的 conds 启动后台筛选, 立即返回。前端轮询 /api/screen。"""
-    conds = payload.get("conds") if isinstance(payload, dict) else None
-    if not isinstance(conds, list):
-        return JSONResponse({"ok": False, "msg": "conds 必须为数组"}, status_code=400)
-    valid = set(COND_ALL)
-    conds = [c for c in conds if c in valid]
-    if not conds:
-        return JSONResponse({"ok": False, "msg": "至少勾选一个条件"}, status_code=400)
-    with _screen_lock:
-        already = _state["running"]
-        _state["last_conds"] = set(conds)  # 记录待用conds
-        _state["ts"] = 0.0  # 标记缓存过期
-    if not already:
-        threading.Thread(target=_run_screen_thread, args=(set(conds),), daemon=True).start()
-    return {"ok": True, "started": True, "running": _state["running"], "conds": conds}
-
-
-@app.post("/api/screen/refresh")
-def api_refresh():
-    """用上次conds触发后台重新筛选(忽略缓存), 立即返回。"""
-    if not _state["running"]:
-        with _screen_lock:
-            _state["ts"] = 0.0
-        threading.Thread(target=_run_screen_thread, daemon=True).start()
-    with _screen_lock:
-        running = _state["running"]
-    return {"started": True, "running": running}
-
 
 @app.get("/api/health")
 def health():
+    # 20261002: 多维选股引擎已移除, running/cached 改为反映均线形态扫描 (现存唯一全市场扫描)
+    with _ma_state["lock"]:
+        running = _ma_state["running"]
+        cached = _ma_state["data"] is not None
     return {"ok": True, "time": bj_now(),
-            "running": _state["running"], "cached": _state["data"] is not None,
+            "running": running, "cached": cached,
             "storage": _kv_storage_init()}
 
 
@@ -5503,7 +4993,7 @@ def _healthz():
 
 # ============================================================
 # SSE 事件流 (20260906 UI优化配套)
-# 每2秒推送一次三个后台模块(选股/均线形态/上试盘)的轻量状态快照,
+# 每2秒推送一次两个后台模块(均线形态/上试盘)的轻量状态快照,
 # 状态无变化时发送 keep-alive 注释行。前端 EventSource 订阅:
 #   - 进度文本实时驱动进度条 (原方案只在轮询时更新)
 #   - ts 变化时前端才拉取全量数据, 替代"固定间隔盲目轮询"
@@ -5515,12 +5005,7 @@ import asyncio as _asyncio
 
 @app.get("/api/events")
 async def api_events():
-    """SSE: 推送 screen/ma/ssp 三模块轻量状态。data 字段为单行 JSON。"""
-
-    def _screen_snapshot() -> dict:
-        with _screen_lock:
-            return {"running": _state["running"], "progress": _state["progress"],
-                    "ts": round(_state["ts"], 1), "error": _state["error"]}
+    """SSE: 推送 ma/ssp 两模块轻量状态。data 字段为单行 JSON。"""
 
     def _ma_snapshot() -> dict:
         with _ma_state["lock"]:
@@ -5543,7 +5028,7 @@ async def api_events():
         try:
             last_line = None
             while True:
-                payload = {"screen": _screen_snapshot(), "ma": _ma_snapshot(),
+                payload = {"ma": _ma_snapshot(),
                            "ssp": _ssp_snapshot(), "now": bj_now()}
                 line = json.dumps(payload, ensure_ascii=False)
                 if line != last_line:
@@ -5601,11 +5086,9 @@ def cache_info():
 
 @app.get("/api/status")
 def api_status():
-    """汇总各后台任务的运行状态(running/progress), 供顶栏 cacheInfo 在长任务进行中
-    持续显示"加载中 + 进度", 空闲时前端恢复为缓存统计。只读, 不触发任何任务。"""
-    with _screen_lock:
-        s_run = _state["running"]
-        s_prog = _state["progress"]
+    """汇总后台任务的运行状态(running/progress), 供顶栏 cacheInfo 在长任务进行中
+    持续显示"加载中 + 进度", 空闲时前端恢复为缓存统计。只读, 不触发任何任务。
+    20261002: 多维选股已移除, 现只剩 均线形态 / 上试盘 两个后台任务。"""
     with _ma_state["lock"]:
         m_run = _ma_state["running"]
         m_prog = _ma_state["progress"]
@@ -5613,8 +5096,6 @@ def api_status():
         sp_run = _SSP_STATE["running"]
         sp_prog = _SSP_STATE["progress"]
     tasks = []
-    if s_run:
-        tasks.append(("多维选股", s_prog))
     if m_run:
         tasks.append(("均线形态", m_prog))
     if sp_run:
@@ -5646,11 +5127,7 @@ def cache_refresh():
             shutil.rmtree(klines_root)
         except OSError:
             pass
-    # 清空内存筛选结果(关键: 避免新筛选完成前返回旧数据)
-    with _screen_lock:
-        _state["data"] = None
-        _state["ts"] = 0.0
-        _state["error"] = None
+    # 20261002: 多维选股引擎已移除, 原先"清空内存筛选结果"一段随之删除
     # 强制刷新: 同步清空各类内存缓存, 下次访问时全部重建/重拉 (20260906)
     _board_cache["built_at"] = 0.0
     _board_cache["industry"] = {}
@@ -5665,9 +5142,10 @@ def cache_refresh():
     _stock_search_cache["built_at"] = 0.0
     _MARKET_SNAP_CACHE["ts"] = 0.0
     _MARKET_SNAP_CACHE["data"] = None
-    if not _state["running"]:
-        threading.Thread(target=_run_screen_thread, daemon=True).start()
-    return {"ok": True, "cleared": cache_date, "running": _state["running"]}
+    # 缓存已清空, 由均线形态扫描重建K线与行情快照 (20261002: 原为触发多维选股)
+    launched = _ma_launch_thread()
+    return {"ok": True, "cleared": cache_date, "running": _ma_state["running"],
+            "launched": launched}
 
 
 # ============================================================
@@ -7258,9 +6736,35 @@ WEEKLY_PATTERNS = ["周线A·强势主升", "周线·埋伏"]
 PATTERNS_NEED_WEEKLY_VETO = {
     "多头排列", "多头排列向上发散", "粘合向上突破",      # 日线向上形态
     "空头排列向下发散", "粘合向下突破",                  # 日线向下形态
-    "日线背离",                                           # 背离形态 (KDJ/MACD底背离合并, 20260920)
+    "日线背离",                                           # 背离形态 (20261002 还原初版)
     "带量突破",                                           # 放量突破 (日线向上形态, 需周线一票否决)
 }
+
+# 周线一票否决「价格门槛」的容忍度 (20261003 用户要求放宽)
+# 原为严格 `收盘 > 周MA20`, 现允许收盘落在周MA20 **下方 10% 以内**。
+# 沿革: 严格(通过 390 / 背离 4) → 0.95(460 / 15) → **0.90(517 / 19, 当前)**。
+#   0.90 相对 0.95 新增背离票 4 只: 000668(偏离8.5%) 000938(6.2%)
+#   000977(8.4%) 601678(6.7%);
+#   继续放到 0.85 只再多 1 只、0.80 再多 1 只, 0.50 以下与"删掉价格条件"等价(561/21),
+#   即 0.90 之后边际已经很薄 (离线候选池 2125 只口径)。
+# ⚠️ 另外两条 (±实测) 放宽几乎无效, 故**未动**: 删「非空头排列」只 +1 只、
+#   「MA20 上行」放宽为「不再下行」±0 只 —— 真正的闸门就是本条价格条件
+#   (242 只背离候选里 231 只 = 95.5% 是"价格在周MA20 下方"被拦的)。
+WEEKLY_VETO_MA20_TOL = 0.90
+
+# 「日·背离」tab 的口径常量 (20261002 晚 v3: tab 改为 **与 K线副图完全同口径**)
+#   副图 = _scanDivergeLegacy(bars, J, {win:45, thr:5}) + 钝化互斥 (K 连续>=3 根 >=80/<=20 的段内不标)
+#   tab  = 该扫描的**底背分支** (_scan_kdj_bottom_diverge_legacy) + 同一钝化过滤 + 下面的时效窗口
+# 时效窗口必须存在: 副图标注是"历史上出现过底背离", 实测 5325 只里 98.0% 在 260 根内都有标注,
+# 不设窗口等于全市场命中。实测各窗口命中量(2/3/5/10/15/20/30/45/60 根)
+#   → 299/317/419/485/546/592/636/1801/3317 只, 全部样本"最近标注距末根"中位数 54 根。
+DIV_LEGACY_WIN = 45      # 与副图 calc_kdj_system 的 WIN 一致
+DIV_LEGACY_THR = 5.0     # J 落差阈值(点), 同一
+DIV_RECENT_BARS = 5      # 最近一次底背标注须落在最后 N 根内 (20261003 由 10 收到 5, 用户要求)
+
+# (20261002) 下面这组连同 _scan_kdj_bottom_diverge / _px_pivot_lows 是"副图**分型谷**口径"
+# 方案的配套实现, 现**无调用点**, 保留供对照与随时切回 (与本版采用的"45日窗口"口径不同:
+# 那边比"相邻两个价格分型谷", 这边比"窗口极值 vs 前窗极值")。
 
 
 def _weekly_display_snap(bars: list[dict]) -> dict:
@@ -7295,7 +6799,7 @@ def _weekly_veto_check(bars: list[dict]) -> tuple[bool, dict]:
     """周线一票否决检查 (作为底仓逻辑, 同时应用于日线向上形态)。
     返回 (是否通过否决, 周线指标快照)。
     否决条件(满足任一直接剔除):
-      1. 收盘价 < MA20(20周线)
+      1. 收盘价 < MA20(20周线) × WEEKLY_VETO_MA20_TOL (0.90, 20261003 起放宽)
       2. MA20 向下 (MA20 <= 8周前的MA20)
       3. 空头排列 (MA5 < MA10 < MA20)
       4. 52周区间位置 < 0.5 ((收盘-52周最低)/(52周最高-52周最低))
@@ -7334,8 +6838,9 @@ def _weekly_veto_check(bars: list[dict]) -> tuple[bool, dict]:
         low52 = min(lows[-52:]) if lows else 0
     pos52 = (c - low52) / (high52 - low52) if high52 > low52 else 1.0
 
-    # PASS1: 收盘价 > MA20 (20260918 判定与显示统一为周MA20, 原为周MA30)
-    if c <= m20:
+    # PASS1: 收盘价 > 周MA20 × WEEKLY_VETO_MA20_TOL
+    # (20260918 判定与显示统一为周MA20, 原为周MA30; 20261003 价格门槛放宽 10%, 见常量注释)
+    if c <= m20 * WEEKLY_VETO_MA20_TOL:
         return False, {}
     # PASS2: MA20 向上 (MA20 > 8周前的MA20)
     m20_8w = _v(ma20, -9)
@@ -7631,7 +7136,6 @@ def _ma_scan_job():
                       or ("e2" in atr_conds and 3 <= atr_pct <= 8)
                       or ("e3" in atr_conds and atr_shrink))
                 ma_pass = ok
-            # 背离判定: KDJ/MACD底背离 → 合并为"日线背离" tab (20260920 二合一)
             k_arr, d_arr, j_arr = calc_kdj(highs_a, lows_a, closes)
             # 日J / 周J (20260930): 均线形态列表全 tab 展示, 供前端在"现价"后显示
             day_j = round(j_arr[-1], 2) if (len(j_arr) > 0 and not math.isnan(j_arr[-1])) else None
@@ -7644,9 +7148,23 @@ def _ma_scan_job():
                 _wk, _wd, _wj = calc_kdj(_wk_h, _wk_l, _wk_c)
                 if len(_wj) > 0 and not math.isnan(_wj[-1]):
                     week_j = round(_wj[-1], 2)
-            dif_arr, _dea_arr, _hist_arr = calc_macd(closes)
-            kdj_bottom = _calc_kdj_bottom_diverge(closes, highs_a, lows_a, j_arr)
-            macd_bottom = _calc_macd_bottom_diverge(closes, lows_a, dif_arr)
+            # 背离判定 (20261002 晚 v3): **与 K线副图「底背」标注完全同口径** → "日线背离" tab
+            # 沿革: 初版(KDJ/MACD二合一+周线否决) → 仅KDJ → 副图分型谷口径 → 还原初版
+            #       → 仅KDJ → 本版(45日窗口 + 钝化互斥 + 时效窗口)
+            # 动因: 用户要求"日·背离 tab 选出的票, KDJ 副图上必须能看到底背标识" —— 口径以副图为准。
+            # 注意: 副图是"逐根回算"(每个时刻都判一次), tab 取其中**最近一次**落在 DIV_RECENT_BARS 内的。
+            # MACD 那一路此前已摘除 (dif_arr/dea/hist 仅服务 _calc_macd_bottom_diverge, 函数定义保留备用)。
+            kdj_div_ago = None
+            _Kf, _Df, _Jf = _kdj_front(bars)
+            _divs = _scan_kdj_bottom_diverge_legacy(bars, DIV_LEGACY_WIN, DIV_LEGACY_THR)
+            # 钝化互斥 (与副图一致): 落在 K 连续>=3 根 >=80/<=20 区间内的标注一律剔除
+            _blunt_at = set()
+            for _g in _kd_blunt_segs(_Kf, 3):
+                _blunt_at.update(range(_g["a"], _g["b"] + 1))
+            _divs = [d for d in _divs if d["i"] not in _blunt_at]
+            if _divs:
+                kdj_div_ago = len(bars) - 1 - _divs[-1]["i"]
+            kdj_bottom = kdj_div_ago is not None and kdj_div_ago <= DIV_RECENT_BARS
             # 收集该股票命中的所有 tab (均线形态 + 背离 + 周线形态可同时命中)
             pats = []
             # 周线一票否决: 用补充快照前的原始状态判断 (20260930)
@@ -7656,7 +7174,9 @@ def _ma_scan_job():
                     pass  # 周线否决未通过, 剔除
                 else:
                     pats.append(pat)
-            if (kdj_bottom or macd_bottom) and ("日线背离" not in PATTERNS_NEED_WEEKLY_VETO or veto_pass):
+            # (20261002) "日线背离" 仅判日KDJ底背离, 且仍受周线一票否决约束
+            # (写法保持防御性: 日后若把"日线背离"移出 PATTERNS_NEED_WEEKLY_VETO, 此处自动放行)
+            if kdj_bottom and ("日线背离" not in PATTERNS_NEED_WEEKLY_VETO or veto_pass):
                 pats.append("日线背离")
             # 周线形态 (已通过否决条件, 直接加入)
             for wp in weekly_pats:
@@ -7690,8 +7210,10 @@ def _ma_scan_job():
                 "week_j": week_j,
                 "atr_pct": round(atr_pct, 2),
                 "atr_shrink": bool(atr_shrink),
+                # (20261002 晚 v3) "日·背离" = 副图 45日窗口口径 + 钝化互斥 + 时效窗口
                 "kdj_db": bool(kdj_bottom),
-                "macd_db": bool(macd_bottom),
+                # 最近一次底背标注距末根的根数 (None = 区间内无标注), 供前端展示信号新鲜度
+                "div_ago": kdj_div_ago,
                 "ma5": round(ma5[-1], 2) if not math.isnan(ma5[-1]) else 0,
                 "ma10": round(ma10[-1], 2) if not math.isnan(ma10[-1]) else 0,
                 "ma20": round(ma20[-1], 2) if not math.isnan(ma20[-1]) else 0,
@@ -8382,12 +7904,9 @@ def _collect_day_signals(rec: dict, code6: str):
             if _stock_code6(it.get("code", "")) == code6:
                 hits.append({"name": name, "ch": glyph[0], "color": glyph[1]})
                 break
-    # 低位启动前·发现池: rec["screen"]["early"] 每项为 [code, name, found]
-    for it in (rec.get("screen") or {}).get("early") or []:
-        if _stock_code6(it[0]) == code6:
-            hits.append({"name": "低位启动前", "ch": "启", "color": "#e8890c"})
-            break
-    # 去重: 同一形态可能同时命中均线patterns与screen.early (如"低位启动前"),
+    # 20261002: 多维选股引擎已移除, 原先从 rec["screen"]["early"] 取"低位启动前"的分支一并删除。
+    #   该形态在均线 patterns 中同样会命中(见上方 _MA_SIG_GLYPH), 故K线标注不受影响。
+    # 去重: 同一形态可能同时命中多个来源 (如"低位启动前"),
     # 按符号ch合并, 避免K线上同一位置叠出重复标识 (20261001)
     seen, uniq = set(), []
     for h in hits:
@@ -9535,13 +9054,12 @@ def api_stock_backtest_single(payload: dict):
 
 @app.on_event("startup")
 def _startup():
-    # 服务启动即预热缓存(默认全条件), 避免首次请求等待
-    threading.Thread(target=_run_screen_thread, daemon=True).start()
+    # 20261002: 原"服务启动即预热多维选股缓存"已随该引擎整体删除
     # 上试盘: 启动即开跑 + 常驻工作日 16:30 自动重扫
     threading.Thread(target=_ssp_daily_runner, daemon=True).start()
     # 磁盘缓存清理: 启动清一次 + 常驻每天09:00清一次 (20260906)
     threading.Thread(target=_cache_cleaner_loop, daemon=True).start()
-    # 历史信号归档兜底: 交易日收盘后自动跑 选股+均线 扫描归档, 保证历史信号逐日连续 (20260921)
+# 历史信号归档兜底: 交易日收盘后自动跑 均线 扫描归档, 保证历史信号逐日连续 (20260921)
     threading.Thread(target=_signal_archive_daily_runner, daemon=True).start()
 
 
@@ -9565,20 +9083,21 @@ def _is_workday(d):
 
 
 # ---------- 历史信号归档兜底 · 每日定时 (20260921) ----------
-# A股收盘后自动跑 选股+均线 扫描并归档, 确保每个交易日都有一条历史信号记录,
+# A股收盘后自动跑 均线 扫描并归档, 确保每个交易日都有一条历史信号记录,
 # 避免"当天没人打开页面/扫描未触发 → 该日从历史信号列表中缺失断档"的问题。
 _SIG_DAILY_HOUR = 15
 _SIG_DAILY_MINUTE = 30  # 收盘后半小时, 当日K线/均线已成形
 
 
 def _signal_archive_daily_runner():
-    """常驻线程: 工作日 15:30 触发一次 选股+均线 扫描归档 (上试盘由 _ssp_daily_runner 已在 16:30 处理)。
+    """常驻线程: 工作日 15:30 触发一次 均线 扫描归档 (上试盘由 _ssp_daily_runner 已在 16:30 处理)。
 
-    选股/均线扫描各自内部完成时都会调用 _archive_put 写入当日归档,
+    20261002: 多维选股引擎已整体移除, 本线程不再触发选股扫描。
+    均线扫描内部完成时会调用 _archive_put("ma", ...) 写入当日归档,
     本线程只是"保证每天收盘后必然会触发一次扫描", 与手动/访问触发的扫描是幂等的。
     """
     import datetime as _dt
-    time.sleep(10)  # 先让启动预热的扫描跑一段
+    time.sleep(10)  # 错开其它启动期线程
     last_day = None
     while True:
         try:
@@ -9588,10 +9107,8 @@ def _signal_archive_daily_runner():
                 and now.minute == _SIG_DAILY_MINUTE
                 and last_day != now.date()):
                 last_day = now.date()
-                _ssp_log(f"[archive] 交易日收盘自动触发 选股+均线 扫描归档 ({now:%Y-%m-%d %H:%M})")
-                # 触发选股扫描 (内部完成后 _archive_put("screen", ...))
-                threading.Thread(target=_run_screen_thread, daemon=True).start()
-                # 触发均线扫描 (内部完成后 _archive_put("ma", ...)); 与选股串行由各自锁保护
+                _ssp_log(f"[archive] 交易日收盘自动触发 均线 扫描归档 ({now:%Y-%m-%d %H:%M})")
+                # 20261002: 多维选股引擎已移除, 此处只触发均线扫描 (内部完成后 _archive_put("ma", ...))
                 threading.Thread(target=_run_ma_screen_thread, daemon=True).start()
         except Exception as e:  # noqa: BLE001
             _ssp_log(f"[archive] 每日归档线程异常: {e}")
