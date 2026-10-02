@@ -6904,7 +6904,9 @@ MA_PATTERNS = ["多头排列", "多头排列向上发散", "粘合向上突破",
                # 缠论日线买卖点分组 (20260926): 最近一个出现的日线买点类型
                "缠论·日线一买", "缠论·日线二买", "缠论·日线三买",
                # 低位启动前 (20260929): 提前捕获 横盘收敛→地量低价→缠论背驰 的蓄势票
-               "低位启动前"]
+               "低位启动前",
+               # 带量突破 (20261002): 放量突破前期平台/前高, 量能确认有效突破
+               "带量突破"]
 
 
 _CHAN_BUY_TAB = {"一买": "缠论·日线一买", "二买": "缠论·日线二买", "三买": "缠论·日线三买"}
@@ -7107,6 +7109,56 @@ def classify_volume_stall(bars: list[dict]) -> bool:
     return False
 
 
+def classify_volume_breakout(bars: list[dict]) -> bool:
+    """带量突破 (20261002): 判定最近5个交易日内是否有任一K线出现"放量突破前期平台/前高"。
+    仅日线口径。与地量/放量滞涨同一套"近5日回溯"结构。
+
+    核心 = 量(放大确认) + 价(突破关键位, 配阳线或收盘收在突破位上方)。
+    判据 (全部满足才算一次带量突破):
+      突破位:  前60日内最高价(不含当日) = 前高/平台/颈线位
+      突破价:  当日收盘 > 前60日最高价 × 1.005 (有效向上突破, 至少高出0.5%)
+      放量:    当日量 ≥ 前5日均量×2.0  且  当日量 ≥ 前20日均量×1.5  (明显放量确认真突破)
+      阳线/收盘站稳:  当日收盘 ≥ 当日开盘 (阳线或平盘, 排除高开回落假突破)
+    否决 (剔除劣质/假突破):
+      当日涨停(几乎一字/借利好高开) → 跳空过高, 转换成本高, 排除
+      突破后若当天冲高长上影回落 → 收盘仍须在突破位上方 (+0.5%) 已隐含排除大部分长上影
+    -- 按时序近5日回溯, 最近命中即判定成立。
+    数据不足(≤20日)或量能异常返回False。"""
+    n = len(bars)
+    NEAR, PLOOK, V5, V20 = 5, 60, 5, 20
+    if n <= V20 + 1 or len(bars) < PLOOK + 1:
+        return False
+    for i in range(max(PLOOK, n - NEAR), n):
+        last = bars[i]
+        c = float(last.get("close") or 0)
+        o = float(last.get("open") or c)
+        vol = float(last.get("volume") or 0)
+        if c <= 0 or o <= 0 or vol <= 0:
+            continue
+        # 突破位 = 前60日(不含当日)最高价
+        prev_high = max(float(b["high"]) for b in bars[i - PLOOK:i])
+        if prev_high <= 0:
+            continue
+        # 价: 收盘有效上穿前60日最高(至少+0.5%), 且不低开回落(收盘≥开盘)
+        if not (c > prev_high * 1.005):
+            continue
+        if c < o:
+            continue
+        # 量: 显著放量(确认真突破, 排除缩量无量突假破)
+        a5 = sum(float(b["volume"]) for b in bars[i - V5:i]) / V5
+        a20 = sum(float(b["volume"]) for b in bars[i - V20:i]) / V20
+        if a5 <= 0 or a20 <= 0:
+            continue
+        if not (vol >= a5 * 2.0 and vol >= a20 * 1.5):
+            continue
+        # 否决: 当日大幅高开(跳空>5%)多为利好直接兑现, 排除一字/涨停式假突破
+        prevc = float(bars[i - 1]["close"]) if i >= 1 else 0
+        if prevc > 0 and (o - prevc) / prevc * 100.0 > 5.0:
+            continue
+        return True
+    return False
+
+
 def classify_ma_pattern(bars: list[dict]) -> str | None:
     """分类均线形态, 返回形态名或None"""
     if len(bars) < 70:
@@ -7207,6 +7259,7 @@ PATTERNS_NEED_WEEKLY_VETO = {
     "多头排列", "多头排列向上发散", "粘合向上突破",      # 日线向上形态
     "空头排列向下发散", "粘合向下突破",                  # 日线向下形态
     "日线背离",                                           # 背离形态 (KDJ/MACD底背离合并, 20260920)
+    "带量突破",                                           # 放量突破 (日线向上形态, 需周线一票否决)
 }
 
 
@@ -7614,6 +7667,9 @@ def _ma_scan_job():
             # 放量滞涨 (20260928): 显著放量但价格滞涨(涨幅小+冲高回落), 精炼A高位/B上影二选一
             if classify_volume_stall(bars):
                 pats.append("放量滞涨")
+            # 带量突破 (20261002): 放量有效突破前60日高点/平台, 量能确认真突破
+            if classify_volume_breakout(bars):
+                pats.append("带量突破")
             # 缠论日线买点 (20260926): 最近一个1买/2买/3买 → 各自缠论tab
             _cb = _chan_day_buy_type(bars)
             if _cb and _cb in _CHAN_BUY_TAB:
@@ -8289,6 +8345,7 @@ _MA_SIG_GLYPH = {
     "上试盘·观察池":    ("等", "#f5c842"),
     "上试盘·已确认":    ("买", "#f5c842"),
     "低位启动前":       ("启", "#f5c842"),
+    "带量突破":         ("破", "#ff6b5e"),
 }
 # 上试盘归档的字段名 → 上试盘形态名 (ssp 用数组而非 patterns)
 _SSP_POOL_FIELD = [("new_signals", "上试盘·新信号"),
