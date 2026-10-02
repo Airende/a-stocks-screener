@@ -665,7 +665,7 @@
   .prog-line.show{display:flex}
   .prog-line .prog-txt{flex:0 1 auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .prog-bar{flex:1 1 160px;height:6px;border-radius:3px;background:var(--panel2);overflow:hidden;min-width:120px}
-  .prog-bar i{display:block;height:100%;width:0;border-radius:3px;background:linear-gradient(90deg,var(--accent),#6f6bff);transition:width .5s ease}
+  .prog-bar i{display:block;height:100%;width:0;border-radius:3px;background:linear-gradient(90deg,var(--accent),#6f6bff);transition:width 1.2s cubic-bezier(.4,0,.2,1)}
   .prog-bar i.indet{width:30%!important;animation:progIndet 1.1s ease-in-out infinite alternate}
   @keyframes progIndet{from{margin-left:0}to{margin-left:calc(100% - 30%)}}
   /* 加载更多(分页)按钮 */
@@ -1327,6 +1327,26 @@ function setStripItem(key, text, busy){
   const t = document.getElementById(map[key]);
   if(t){ t.textContent = text || '—'; t.classList.toggle('busy', !!busy); }
 }
+// ---- 平滑耗时进度 (20261002): 扫描期间以 0.5s 节奏平滑累计"已用时",
+//      避免后端每 20 只才回一次进度造成的跳动感; 完成时由 renderMA 回填最终耗时 ----
+let _maElapsedT=0, _maElapsedT0=0, _maElapsedBusy=false;
+function fmtMaClock(s){ const mm=String(Math.floor(s/60)).padStart(2,'0'), ss=String(s%60).padStart(2,'0'); return mm+':'+ss; }
+function maScanUI(busy){
+  const fire=b=>setStripItem('Ma', b, true);
+  if(busy){
+    if(!_maElapsedT){
+      _maElapsedT0=Date.now();
+      _maElapsedT=setInterval(()=>{
+        const sec=Math.floor((Date.now()-_maElapsedT0)/1000);
+        fire(`※ 正在扫描全市场均线形态 · 已用时 ${fmtMaClock(sec)}`);
+      }, 500);
+    }
+    if(!_maElapsedBusy) fire('※ 正在扫描全市场均线形态…');
+  } else {
+    if(_maElapsedT){ clearInterval(_maElapsedT); _maElapsedT=0; }
+  }
+  _maElapsedBusy=busy;
+}
 function syncStatusStrip(){
   const sm = _lastScreenMeta || {};
   setStripItem('Screen', sm.updated ? (sm.updated + (sm.cached?' (缓存)':'')) : '尚未筛选', sm.running);
@@ -1576,8 +1596,8 @@ function connectEvents(){
       // 状态条实时刷新 (仅运行中覆盖文本; 空闲时由下方 ts 变化触发的数据渲染回填,
       // 避免把 syncStatusStrip 已写入的更新时间清成"—" —— 20260906 修复)
       if(d.screen && d.screen.running) setStripItem('Screen', '筛选中…', true);
-      if((d.ma && d.ma.running) || (d.ssp && d.ssp.running)) setStripItem('Ma', '扫描中…', true);
-      if(d.ssp && d.ssp.running) setStripItem('Ssp', '上试盘·扫描中…', true);
+      maScanUI(!!(d.ma && d.ma.running));                       // 均线耗时平滑更新 (20261002)
+      if(d.ssp && d.ssp.running && !(d.ma && d.ma.running)) setStripItem('Ssp', '上试盘·扫描中…', true);
       // ts 变化 → 拉取全量数据刷新表格 (比固定轮询更精准)
       if(d.screen && d.screen.ts>0 && d.screen.ts!==_lastEvtTs.screen){
         _lastEvtTs.screen = d.screen.ts;
@@ -4651,6 +4671,7 @@ function bindMASortHeaders(){
 }
 function renderMA(d){
   maData=d;
+  maScanUI(false);                      // 扫描完成: 停止平滑计时, 由下方回填最终耗时 (20261002)
   updateProgLine('#maProg', d.progress, !!d.running);  // 扫描进度条 (20260906)
   $('#maUpdated').textContent=(d.updated||'')+(d.elapsed_sec?` · 耗时 ${d.elapsed_sec}s · 扫描 ${d.total_stocks||0} 只`:''+(d.running?' · 筛选中…':''));
   syncStatusStrip();
@@ -4674,6 +4695,7 @@ async function startMAScreen(){
     return;
   }
   btn.disabled=true; btn.innerHTML='<span class="spin"></span>筛选中…';
+  maScanUI(true);                       // 手动扫描: 启动平滑耗时计时 (20261002)
   updateProgLine('#maProg','准备中…',true);
   $('#tbodyMA').innerHTML=maEmptyRow('<span class="spin"></span>正在扫描全市场均线形态, 首次约需1-2分钟…');
   try{ await fetch('/api/ma-screen/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({atr:maAtrConds})}); }catch(e){}
@@ -4686,6 +4708,7 @@ async function startMAScreen(){
         renderMA(d);
         if(!d.running){ btn.disabled=false; btn.textContent='重新筛选'; return; }
       }else if(d.error){
+        maScanUI(false);
         updateProgLine('#maProg','',false);
         $('#tbodyMA').innerHTML=maEmptyRow('出错: '+d.error);
         btn.disabled=false; btn.textContent='开始筛选'; return;
@@ -4694,6 +4717,7 @@ async function startMAScreen(){
       }
       setTimeout(poll,4000);
     }catch(e){
+      maScanUI(false);
       updateProgLine('#maProg','',false);
       $('#tbodyMA').innerHTML=maEmptyRow('加载失败: '+e.message);
       btn.disabled=false; btn.textContent='开始筛选';
