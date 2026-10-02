@@ -6214,6 +6214,41 @@ function kdSubPanels(bars, cfg){
       s+=`<line x1="${(cxv-wv/2).toFixed(1)}" y1="${yv.toFixed(1)}" x2="${(cxv+wv/2).toFixed(1)}" y2="${yv.toFixed(1)}" stroke="${cl}" stroke-width="2" stroke-linecap="round"/>`;
     }
     return s; })();
+  // 堆量标记 (20261002): 连续≥3根量柱每日量≥前20日均量×1.5 且 价涨/横盘 → 该段最高量柱顶部紫色「堆」字
+  // 与「天/滞/地/涨跌停杠」互斥: 段内任何一日命中天量/滞涨/涨跌停, 或整体累计涨幅过大, 则不标
+  const pileUp=((()=>{ const m={}; const WIN=20, K=3, MULT=1.5;
+    if(n<=WIN || (opt&&opt.noLimits)) return m;
+    const vol20=[];         // 前20日均量
+    for(let i=0;i<n;i++){ let sum=0,c=0;
+      for(let j=Math.max(0,i-WIN);j<i;j++){ sum+=+bars[j].volume; c++; }
+      vol20.push(c?sum/c:0); }
+    // 扫描连续放量段
+    let i=WIN;
+    while(i<n){
+      if(+bars[i].volume>0 && +bars[i].volume>=vol20[i]*MULT && (bars[i].chg||0)>-0.2){
+        // 向后扩展连续段
+        let j=i; const seg=[];
+        while(j<n && +bars[j].volume>=vol20[j]*MULT && (bars[j].chg||0)>-0.2){ seg.push(j); j++; }
+        if(seg.length>=K){
+          // 找段内最高量柱; 排除与天/滞/涨跌停重叠的集合
+          let picked=-1, maxV=-1;
+          for(const idx of seg){
+            const d=(bars[idx].day||'').slice(0,10);
+            if(limitHigh[d]||topStag[d]||limitDays[d]) continue;   // 重叠则跳过整段
+            if(+bars[idx].volume>maxV){ maxV=+bars[idx].volume; picked=idx; }
+          }
+          if(picked>=0) m[(bars[picked].day||'').slice(0,10)]=true;
+        }
+        i=j; continue;
+      }
+      i++;
+    }
+    return m; })());
+  const pileMarks=(()=>{ let s='';
+    for(let i=0;i<n;i++){ const day=(bars[i].day||'').slice(0,10);
+      if(!pileUp[day]) continue;
+      s+=_sqT(xi(i), yFn2(bars[i].volume)-2, `font-size="5.5" font-weight="700" text-anchor="middle" fill="#a06bff" stroke="rgba(15,22,35,.9)" stroke-width="1.4" paint-order="stroke"`, '堆'); }
+    return s; })();
   const vbars=bars.map((b,i)=>{
     const col=(b.chg||0)>=0?'rgba(255,77,79,.85)':'rgba(38,166,154,.85)';
     const yv=yFn2(b.volume), bh=Math.max(1,h2-padT2-padB2-(yv-padT2));
@@ -6240,13 +6275,14 @@ function kdSubPanels(bars, cfg){
       const ditag=limitDays[dayKey]?'':(limitVol[dayKey]?' <span style="color:#f5c842;font-weight:700">地量低价</span>':'');
       const ditag2=limitDays[dayKey]?'':(limitHigh[dayKey]?' <span style="color:#ff4d4f;font-weight:700">天量</span>':'');
       const stagTag=limitDays[dayKey]?'':(topStag[dayKey]?' <span style="color:#26a69a;font-weight:700">滞涨背离</span>':'');
+      const pileTag=pileUp[dayKey]?' <span style="color:#a06bff;font-weight:700">堆量</span>':'';
       // 成交额 = 成交量(股)×收盘价(元) (20260928: 原"量 xx万手"改为成交额)
       const amt=b.volume*b.close;
       const amtTxt=(amt/1e8).toFixed(2)+'亿';
-      return `<b>${esc(b.day||'')}</b>${limTag}${ditag}${ditag2}${stagTag}<br>成交额 ${amtTxt} · VR ${r.toFixed(2)} ${tag}`; }};
+      return `<b>${esc(b.day||'')}</b>${limTag}${ditag}${ditag2}${stagTag}${pileTag}<br>成交额 ${amtTxt} · VR ${r.toFixed(2)} ${tag}`; }};
   const p2=`<div class="sa-chart" id="${cid2}" style="height:${h2}px;margin-top:2px"><svg viewBox="0 0 ${w} ${h2}" style="width:100%;height:100%" preserveAspectRatio="none">
     <line x1="${padL}" y1="${yFn2(vmax).toFixed(1)}" x2="${w-padR}" y2="${yFn2(vmax).toFixed(1)}" stroke="rgba(255,255,255,.05)"/>
-    ${vbars}${volMarks}${volHighMarks}${stagMarks}${limitBarMarks}
+    ${vbars}${volMarks}${volHighMarks}${stagMarks}${pileMarks}${limitBarMarks}
     ${_sqT(padL, 9, `fill="#9fb0c6" font-size="9"`, tf==='week'?'周成交量':(tf==='month'?'月成交量':'成交量'))}
   </svg></div>`;
 
