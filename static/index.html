@@ -6177,46 +6177,6 @@ function kdSubPanels(bars, cfg){
       if(limitHigh[day]) s+=_sqT(xi(i), yFn2(bars[i].volume)-4, `font-size="5.5" font-weight="700" text-anchor="middle" fill="#ff4d4f" stroke="rgba(15,22,35,.9)" stroke-width="1.4" paint-order="stroke"`, '天');
     }
     return s; })();
-  // ---- 均量线 M5/M10 与 「价升量增」信号 (20261002) ----
-  // 均量线: 5日/10日成交均量, 在量柱上叠加折线作对比基准
-  const maV5=[], maV10=[];
-  for(let i=0;i<n;i++){
-    let s5=0,c5=0,s10=0,c10=0;
-    for(let j=Math.max(0,i-4);j<=i;j++){ s5+=bars[j].volume; c5++; }
-    for(let j=Math.max(0,i-9);j<=i;j++){ s10+=bars[j].volume; c10++; }
-    maV5.push(c5?s5/c5:0); maV10.push(c10?s10/c10:0);
-  }
-  const _vline=arr=>{ let p='', st=false;
-    for(let i=0;i<n;i++){ if(!(arr[i]>0)) continue;
-      p+=(st?'L':'M')+xi(i).toFixed(1)+','+yFn2(arr[i]).toFixed(1)+' '; st=true; }
-    return p; };
-  const vMA5='<path d="'+_vline(maV5)+'" fill="none" stroke="#f5c842" stroke-width="0.8" opacity="0.75"/>';
-  const vMA10='<path d="'+_vline(maV10)+'" fill="none" stroke="#3da2ff" stroke-width="0.8" opacity="0.6"/>';
-  // 价升量增: 收盘上涨 + 成交量相对前5日均量放大 (只对日线, 周/月K不标)
-  // 强档: 涨幅≥2% 且 量比≥1.8, 或 创近20日量能新高且量比≥1.5 → 实心亮绿三角
-  // 温和档: 收涨 且 量比≥1.3 → 半透明绿三角
-  const riseVol=(()=>{ const arr=[];
-    if(opt&&opt.noLimits) return arr;
-    for(let i=1;i<n;i++){
-      const chg=+bars[i].chg||0, vol=+bars[i].volume;
-      if(!(chg>0) || !(vol>0)) continue;
-      let s5=0,c5=0, vmax20=0;
-      for(let j=Math.max(0,i-5);j<i;j++){ s5+=bars[j].volume; c5++; }
-      for(let j=Math.max(0,i-20);j<i;j++){ if(bars[j].volume>vmax20) vmax20=bars[j].volume; }
-      const vr=c5? vol/(s5/c5) : 1;
-      const strong=(chg>=2 && vr>=1.8) || (vol>=vmax20 && vr>=1.5);
-      const mild=vr>=1.3;
-      if(strong||mild) arr.push({i, strong, vr, chg});
-    }
-    return arr; })();
-  const riseLookup={}; riseVol.forEach(o=>{ riseLookup[(bars[o.i].day||'').slice(0,10)]=o; });
-  // 三角标记固定画在量柱底部基线下方, 不与量柱顶部的「地/天」字重叠 (底边贴住面板下沿)
-  const baseY2=h2-padB2-2;
-  const riseMark=riseVol.map(o=>{
-    const col=o.strong?'#26c96a':'rgba(31,191,117,.65)';
-    const x=xi(o.i);
-    return `<path d="M${x.toFixed(1)} ${(baseY2+2).toFixed(1)} L${(x-3).toFixed(1)} ${(baseY2+8).toFixed(1)} L${(x+3).toFixed(1)} ${(baseY2+8).toFixed(1)} Z" fill="${col}"/>`;
-  }).join('');
   const vbars=bars.map((b,i)=>{
     const col=(b.chg||0)>=0?'rgba(255,77,79,.85)':'rgba(38,166,154,.85)';
     const yv=yFn2(b.volume), bh=Math.max(1,h2-padT2-padB2-(yv-padT2));
@@ -6246,14 +6206,8 @@ function kdSubPanels(bars, cfg){
       return `<b>${esc(b.day||'')}</b>${ditag}${ditag2}<br>成交额 ${amtTxt} · VR ${r.toFixed(2)} ${tag}`; }};
   const p2=`<div class="sa-chart" id="${cid2}" style="height:${h2}px;margin-top:2px"><svg viewBox="0 0 ${w} ${h2}" style="width:100%;height:100%" preserveAspectRatio="none">
     <line x1="${padL}" y1="${yFn2(vmax).toFixed(1)}" x2="${w-padR}" y2="${yFn2(vmax).toFixed(1)}" stroke="rgba(255,255,255,.05)"/>
-    ${vbars}${vMA5}${vMA10}${volMarks}${volHighMarks}${riseMark}
+    ${vbars}${volMarks}${volHighMarks}
     ${_sqT(padL, 9, `fill="#9fb0c6" font-size="9"`, tf==='week'?'周成交量':(tf==='month'?'月成交量':'成交量'))}
-    <path d="M${padL+28} 9 L${padL+40} 9" stroke="#f5c842" stroke-width="1.2" fill="none"/>
-    ${_sqT(padL+43, 9, `fill="#f5c842"`, 'M5')}
-    <path d="M${padL+62} 9 L${padL+74} 9" stroke="#3da2ff" stroke-width="1.2" fill="none"/>
-    ${_sqT(padL+77, 9, `fill="#3da2ff"`, 'M10')}
-    <path d="M${padL+114} 9 L${padL+120} 3 L${padL+126} 9 Z" fill="#26c96a"/>
-    ${_sqT(padL+130, 9, `fill="#26c96a"`, '价升量增')}
   </svg></div>`;
 
   // ---- 面板3: KDJ副图 ----
