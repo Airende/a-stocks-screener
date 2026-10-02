@@ -1541,8 +1541,11 @@ function bindChartInteractivity(rootEl){
       let lx=(cxL+cxR)/2 - rngTip.offsetWidth/2;
       lx=Math.max(4, Math.min(rectB.width-rngTip.offsetWidth-4, lx));
       rngTip.style.left=lx+'px'; rngTip.style.top='4px';
-      // ✕ 挂区间带右上角 (20260925)
-      rngX.style.left=(cxR-20)+'px'; rngX.style.top='2px'; rngX.style.display='block';
+      // ✕ 挂提示框右上角: 跟随 rngTip 定位(而非区间右边界), 中心对齐提示框右上角
+      const _tw=rngTip.offsetWidth, _tl=rngTip.offsetLeft, _tt=rngTip.offsetTop;
+      rngX.style.left=(_tl+_tw-9)+'px';
+      rngX.style.top=Math.max(0, _tt-7)+'px';
+      rngX.style.display='block';
     };
     div.addEventListener('mousedown', ev=>{
       if(ev.button!==0) return;
