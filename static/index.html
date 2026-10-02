@@ -6182,6 +6182,25 @@ function kdSubPanels(bars, cfg){
       if(limitHigh[day]) s+=_sqT(xi(i), yFn2(bars[i].volume)-4, `font-size="5.5" font-weight="700" text-anchor="middle" fill="#ff4d4f" stroke="rgba(15,22,35,.9)" stroke-width="1.4" paint-order="stroke"`, '天');
     }
     return s; })();
+  // 滞涨背离标记 (20261002, 原②信号): 价创60日新高但量明显不足(≤前60日最高量×0.85 且 量比<1) → 橙色「滞」字
+  const topStag=(()=>{ const m={}; const W=60;
+    if(n<=W || (opt&&opt.noLimits)) return m;
+    for(let i=W;i<n;i++){
+      const b=bars[i], vol=+b.volume; if(!(vol>0)) continue;
+      let vmaxN=0, vsum=0, pmax=-Infinity;
+      for(let j=i-W;j<i;j++){ const v=+bars[j].volume; if(v>vmaxN) vmaxN=v; vsum+=v;
+        const hp=+bars[j].high; if(hp>pmax) pmax=hp; }
+      const vavg=vsum/W, vr2=vavg>0?vol/vavg:1;
+      const day=(b.day||'').slice(0,10);
+      const newHigh=+b.high>=pmax;
+      if(newHigh && vol<=vmaxN*0.85 && vr2<1.0) m[day]=true;   // 滞涨(顶前预警)
+    }
+    return m; })();
+  const stagMarks=(()=>{ let s='';
+    for(let i=0;i<n;i++){ const day=(bars[i].day||'').slice(0,10);
+      if(!topStag[day]||limitDays[day]) continue;
+      s+=_sqT(xi(i), yFn2(bars[i].volume)-2, `font-size="5.5" font-weight="700" text-anchor="middle" fill="#f5a623" stroke="rgba(15,22,35,.9)" stroke-width="1.4" paint-order="stroke"`, '滞'); }
+    return s; })();
   // 涨跌停横杠 (仅日线): 在量柱顶部画横杠, 涨停红杠 / 跌停绿杠 (20261002)
   const limitBarMarks=(()=>{ let s='';
     if(isWeekTf) return s;
@@ -6220,13 +6239,14 @@ function kdSubPanels(bars, cfg){
       const limTag=limitDays[dayKey]? (limitDays[dayKey]==='up'?' <span style="color:#ff4d4f;font-weight:700">涨停</span>':' <span style="color:#26a69a;font-weight:700">跌停</span>') : '';
       const ditag=limitDays[dayKey]?'':(limitVol[dayKey]?' <span style="color:#f5c842;font-weight:700">地量低价</span>':'');
       const ditag2=limitDays[dayKey]?'':(limitHigh[dayKey]?' <span style="color:#ff4d4f;font-weight:700">天量</span>':'');
+      const stagTag=limitDays[dayKey]?'':(topStag[dayKey]?' <span style="color:#f5a623;font-weight:700">滞涨背离</span>':'');
       // 成交额 = 成交量(股)×收盘价(元) (20260928: 原"量 xx万手"改为成交额)
       const amt=b.volume*b.close;
       const amtTxt=(amt/1e8).toFixed(2)+'亿';
-      return `<b>${esc(b.day||'')}</b>${limTag}${ditag}${ditag2}<br>成交额 ${amtTxt} · VR ${r.toFixed(2)} ${tag}`; }};
+      return `<b>${esc(b.day||'')}</b>${limTag}${ditag}${ditag2}${stagTag}<br>成交额 ${amtTxt} · VR ${r.toFixed(2)} ${tag}`; }};
   const p2=`<div class="sa-chart" id="${cid2}" style="height:${h2}px;margin-top:2px"><svg viewBox="0 0 ${w} ${h2}" style="width:100%;height:100%" preserveAspectRatio="none">
     <line x1="${padL}" y1="${yFn2(vmax).toFixed(1)}" x2="${w-padR}" y2="${yFn2(vmax).toFixed(1)}" stroke="rgba(255,255,255,.05)"/>
-    ${vbars}${volMarks}${volHighMarks}${limitBarMarks}
+    ${vbars}${volMarks}${volHighMarks}${stagMarks}${limitBarMarks}
     ${_sqT(padL, 9, `fill="#9fb0c6" font-size="9"`, tf==='week'?'周成交量':(tf==='month'?'月成交量':'成交量'))}
   </svg></div>`;
 
