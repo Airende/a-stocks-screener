@@ -11318,6 +11318,23 @@ def api_kline(code: str = "", datalen: int = 122, period: str = "day"):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@app.get("/api/heat5")
+def api_heat5(codes: str = ""):
+    """列表内个股5日涨跌幅 (20260925): 供筛选列表的板块/行业热度标注。
+    从本地K线缓存计算 (close[-1]/close[-6]-1), codes为逗号分隔的6位代码。
+    返回 {map:{code: 涨跌幅%}, updated}。"""
+    out = {}
+    for c in [x.strip() for x in str(codes or "").split(",") if x.strip()][:800]:
+        bars = _load_kline_cache(_to_symbol(c))
+        if not bars or len(bars) < 7:
+            continue
+        c1 = float(bars[-1].get("close") or 0)
+        c6 = float(bars[-6].get("close") or 0)
+        if c1 > 0 and c6 > 0:
+            out[c] = round((c1 / c6 - 1) * 100, 2)
+    return {"map": out, "updated": bj_now()}
+
+
 if __name__ == "__main__":
     import uvicorn
     # 云平台(Render/Railway)通过 PORT 环境变量指定端口, 默认 8000

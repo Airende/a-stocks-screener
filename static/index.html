@@ -3641,7 +3641,7 @@ function dailyToWeekly(bars){
 }
 function buildMiniChart(bars, pivots, opt){
   const compact=!!(opt&&opt.compact);   // 多周期对比紧凑模式: 主图170px、无副图 (20260925)
-  const w=800, h=compact?170:280, padL=8, padR=8, padT=compact?34:40, padB=compact?14:18; // 顶部加高, 容纳信号/SSP/历史标识, 避免被裁剪
+  const w=800, h=compact?170:280, padL=44, padR=8, padT=compact?34:40, padB=compact?14:18; // 左侧加宽放涨跌幅刻度(20260925), 顶部加高容纳信号/SSP/历史标识
   const n=bars.length;
   if(n<2) return '';
   // 周K线(opt.noLimits)不判定涨跌停/地量: 涨跌停口径仅对日线有意义
@@ -3722,12 +3722,19 @@ function buildMiniChart(bars, pivots, opt){
     s+=`<rect x="${(cx-cw/2).toFixed(1)}" y="${bodyTop.toFixed(1)}" width="${cw.toFixed(1)}" height="${bodyH.toFixed(1)}" fill="${col}"/>`;
     return s;
   }).join('');
-  // 价格刻度
+  // 价格刻度 + 左侧涨跌幅刻度 (20260925: 以首根K线开盘价为0%)
+  const base0=(parseFloat(bars[0].open)||lo);
+  const pctLbl=v=>{ const p=(v/base0-1)*100; return (p>0?'+':'')+p.toFixed(1)+'%'; };
   const gridLines=[0,0.25,0.5,0.75,1].map(f=>{
     const v=hi-f*rng, yy=y(v);
     return `<line x1="${padL}" y1="${yy.toFixed(1)}" x2="${w-padR}" y2="${yy.toFixed(1)}" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>`+
-           _sqT(w-padR-2, yy-3, `fill="#5a6a82" font-size="10" text-anchor="end"`, v.toFixed(2));
+           _sqT(w-padR-2, yy-3, `fill="#5a6a82" font-size="10" text-anchor="end"`, v.toFixed(2))+
+           _sqT(2, yy-3, `fill="#7a8aa0" font-size="10" text-anchor="start"`, pctLbl(v));
   }).join('');
+  // 0% 基准虚线 (首根K线开盘价)
+  const base0Y=y(base0);
+  const baseLine=`<line x1="${padL}" y1="${base0Y.toFixed(1)}" x2="${w-padR}" y2="${base0Y.toFixed(1)}" stroke="rgba(245,200,66,.35)" stroke-width="1" stroke-dasharray="4,3"/>`+
+                 _sqT(2, base0Y-3, `fill="#f5c842" font-size="10" text-anchor="start"`, '0%');
   // 日期刻度(首/中/尾)
   const dateTxt=[0,Math.floor(n/2),n-1].filter((v,i,a)=>a.indexOf(v)===i).map(i=>{
     const x=xi(i);
@@ -3803,6 +3810,7 @@ function buildMiniChart(bars, pivots, opt){
     <div class="sa-chart" id="${cid}" style="height:${h}px">
       <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:100%" preserveAspectRatio="none">
         ${gridLines}
+        ${baseLine}
         ${candles}
         <path d="${maPath(ma5)}" fill="none" stroke="#f5c842" stroke-width="1.2" opacity="0.9"/>
         <path d="${maPath(ma10)}" fill="none" stroke="#4f9dff" stroke-width="1.2" opacity="0.9"/>
@@ -4237,7 +4245,7 @@ const MA_PATS=[
   // 低位启动前 (20260929): 提前捕获 横盘收敛→地量低价→KDJ低位→缠论背驰 的蓄势票
   ['低位启动前','低位启动前·蓄势票：缠论最近3个完成的笔连接成的线段向上 + 末端笔后K线出现「底」标识(极致底量)。用于提前于多头排列发现底部蓄势票'],
   // 带量突破 (20261002): 放量有效突破前60日高点/平台, 量能确认真突破
-  ['带量突破','带量突破：收盘有效突破前60日最高价(高出≥1%) + 当日量≥前5日均量×2且≥前20日均量×1.5 + 阳线收盘≥开盘 + 非大幅高开(跳空≤5%)。量能确认真突破, 剔除缩量无量假突破'],
+  ['带量突破','近5日出现"放量突破前60日最高价"：收盘高出前高≥1%、量≥5日均量×2/20日均量×1.5、阳线非大幅高开；量能确认真突破'],
   // 上试盘策略 3 个池子（对应说明书 A/B/C 三栏）
   ['上试盘·新信号','A池：今日刚出现长上影试盘日，观察不买；待后续放量突破再入场'],
   ['上试盘·观察池','B池：10日确认窗口内，未破信号日最低价、未放量突破的股票，附待突破价'],
@@ -4378,6 +4386,37 @@ function renderMATabs(){
   $('#maDesc').textContent=MA_PATS[maCurrentTab][1];
 }
 // 分布统计: 板块(模糊按子概念拆分聚合)
+// ===== 板块/行业热度 (20260925): 列表内成分股5日涨幅聚合, 标在板块chips与表格行业/板块格 =====
+let _heatMap = {};        // code -> 5日涨跌幅%
+let _heatSig = '';        // 已请求/已应用的codes签名
+let _heatPending = false;
+async function loadHeat5(codes){
+  const sig = codes.slice().sort().join(',');
+  if(_heatSig===sig || _heatPending || !codes.length) return;
+  _heatPending = true; _heatSig = sig;
+  try{
+    const r = await fetch('/api/heat5?codes='+encodeURIComponent(codes.join(',')));
+    const d = await r.json();
+    _heatMap = Object.assign(_heatMap, d.map||{});
+  }catch(e){}
+  _heatPending = false;
+  // 数据到位 → 重渲染chips与表格(sig已记录, 不会循环请求)
+  renderMADist(window._maDistLast||[]);
+  renderMATable();
+}
+function heatAvgOf(codes){
+  let s=0, n=0;
+  for(const c of (codes||[])){ const v=_heatMap[c]; if(v!=null && isFinite(v)){ s+=v; n++; } }
+  return n? s/n : null;
+}
+function heatBadgeHtml(avg, title){
+  if(avg==null) return '';
+  const lv = avg>=8?3:(avg>=4?2:(avg>0?1:0));
+  const col = avg>0?'var(--up)':(avg<0?'var(--down)':'var(--sub)');
+  const fire = lv>0? `<span style="color:var(--gold)">${'🔥'.repeat(lv)}</span>` : '';
+  const t = title? ` title="${esc(title)}"` : '';
+  return `<span${t} style="font-size:10px;white-space:nowrap">${fire}<span style="color:${col}">${avg>0?'+':''}${avg.toFixed(1)}%</span></span>`;
+}
 function renderMADist(stocks){
   const el=$('#maDist');
   if(!el) return;
@@ -4391,7 +4430,8 @@ function renderMADist(stocks){
   const conArr=Object.entries(conCnt).sort((a,b)=>b[1]-a[1]).slice(0,40); // 最多显示40个子概念
   const conHtml=conArr.map(([k,v])=>{
     const active = maFilterConcept===k ? ' active' : '';
-    return `<span class="ma-dist-tag${active}" data-concept="${esc(k)}">${k}<b>${v}</b></span>`;
+    const heat = window._heatGroups && window._heatGroups.con[k] ? heatBadgeHtml(heatAvgOf(window._heatGroups.con[k]), '板块5日均涨(列表内成分)') : '';
+    return `<span class="ma-dist-tag${active}" data-concept="${esc(k)}">${k}<b>${v}</b>${heat}</span>`;
   }).join('');
   const toggleHtml = conArr.length > 0
     ? `<span class="ma-dist-toggle" onclick="const p=this.closest('.ma-dist');p.classList.toggle('expanded');this.textContent=p.classList.contains('expanded')?'收起 ▲':'展开 ▼'">展开 ▼</span>`
@@ -4469,6 +4509,14 @@ function renderMATable(){
   if(maFilterConcept){
     stocks = stocks.filter(s=> maSplitConcept(s.concept).includes(maFilterConcept));
   }
+  // 热度分组 (20260925): 行业/子概念 → 列表内成员code (与chips同口径), 供热度标注
+  const indMembers={}, conMembers={};
+  stocks.forEach(s2=>{
+    const ind=s2.industry||'—';
+    (indMembers[ind] ||= []).push(String(s2.code));
+    maSplitConcept(s2.concept).forEach(sub=>{ (conMembers[sub] ||= []).push(String(s2.code)); });
+  });
+  window._heatGroups={ind:indMembers, con:conMembers};
   renderMADist(stocks);
   // 快速过滤: 在板块 chips 统计(renderMADist)之后应用, 不影响 chips 计数 (20260925)
   const _q=maQuickFilter.trim().toLowerCase();
@@ -4536,6 +4584,8 @@ function renderMATable(){
     });
   }
   $('#tbodyMA').innerHTML=stocks.map((s,i)=>maRowHtml(s,i)).join('');
+  // 板块/行业热度 (20260925): 拉取列表内个股5日涨幅, 到位后自动重渲染chips与表格
+  loadHeat5(stocks.map(s=>String(s.code)));
 }
 // 快速过滤计数显示
 function _updateQuickCount(n,active){
@@ -4620,6 +4670,17 @@ function maRowHtml(s,i){
     const newHigh = posPct > 100 ? ' <span style="color:var(--up);font-weight:700">· 新高</span>' : '';
     weeklyLine = `<div class="code" style="color:var(--sub);font-size:11px">52周位:<span style="color:${posColor}">${posPct.toFixed(2)}%</span>${newHigh}${boostTag}</div>`;
   }
+  // 热度标注 (20260925): 行业/所属板块 5日均涨(列表内成分股聚合)
+  let indHeat='', conHeat='';
+  if(window._heatGroups){
+    indHeat = heatBadgeHtml(heatAvgOf(window._heatGroups.ind[s.industry||'—']||[]), '行业5日均涨(列表内成分)');
+    let best=null, bestName='';
+    maSplitConcept(s.concept).forEach(sub=>{
+      const a=heatAvgOf(window._heatGroups.con[sub]||[]);
+      if(a!=null && (best==null || a>best)){ best=a; bestName=sub; }
+    });
+    if(best!=null) conHeat = heatBadgeHtml(best, '板块5日均涨·最热子概念: '+bestName);
+  }
   // 日J/周J (20260930): 全 tab 展示, 过百标红 (var(--up) 红色系), 低于30弱, 高值警示
   const jv = (v)=> (v!=null&&!isNaN(v)) ? '<span style="color:'+(v>=100?'var(--up)':(v>=80?'var(--sub)':(v<30?'var(--down)':'var(--gold)')))+';font-weight:600">'+ Number(v).toFixed(1) +'</span>' : '—';
   return `<tr class="${curPat==='低位启动前'?'early-row':''}">
@@ -4631,8 +4692,8 @@ function maRowHtml(s,i){
     <td class="ma-c">${jv(s.week_j)}</td>
     <td class="ma-c col-opt">${s.amount_yi}</td>
     <td class="ma-c">${s.atr_pct!=null? '<span style="color:'+(s.atr_pct>=8?'var(--up)':(s.atr_pct<4?'var(--sub)':'var(--gold)'))+'">'+s.atr_pct+'%</span>':'—'}</td>
-    <td class="l col-opt">${indHtml}</td>
-    <td class="l col-opt">${conHtml}</td>
+    <td class="l col-opt">${indHtml}${indHeat}</td>
+    <td class="l col-opt">${conHtml}${conHeat}</td>
   </tr>`;
 }
 // 更新表头排序箭头
@@ -6439,9 +6500,17 @@ function kdMultiChart(bars, opt){
     return `<line x1="${xi(i).toFixed(1)}" y1="${yFn1(b.high).toFixed(1)}" x2="${xi(i).toFixed(1)}" y2="${yFn1(b.low).toFixed(1)}" stroke="${col}" stroke-width="0.8"/>`+
            `<rect x="${(xi(i)-bw/2).toFixed(1)}" y="${bodyTop.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(1,Math.abs(yC-yO)).toFixed(1)}" fill="${col}"/>`;
   }).join('');
+  // 左侧涨跌幅刻度 (20260925): 以首根K线开盘价为0%
+  const base0=(parseFloat(bars[0].open)||lo);
+  const pctL=v=>{ const p=(v/base0-1)*100; return (p>0?'+':'')+p.toFixed(1)+'%'; };
   const grid1=[0,0.5,1].map(f=>{ const v=hi-f*rng1, yy=yFn1(v);
     return `<line x1="${padL}" y1="${yy.toFixed(1)}" x2="${w-padR}" y2="${yy.toFixed(1)}" stroke="rgba(255,255,255,.05)"/>`+
-           `<text x="${w-padR+3}" y="${(yy+3).toFixed(1)}" fill="#5a6a82" font-size="9">${v.toFixed(2)}</text>`; }).join('');
+           `<text x="${w-padR+3}" y="${(yy+3).toFixed(1)}" fill="#5a6a82" font-size="9">${v.toFixed(2)}</text>`+
+           `<text x="2" y="${(yy+3).toFixed(1)}" fill="#7a8aa0" font-size="8" text-anchor="start">${pctL(v)}</text>`; }).join('');
+  // 0% 基准虚线 (首根K线开盘价)
+  const base0Y=yFn1(base0);
+  const baseLine=`<line x1="${padL}" y1="${base0Y.toFixed(1)}" x2="${w-padR}" y2="${base0Y.toFixed(1)}" stroke="rgba(245,200,66,.35)" stroke-width="1" stroke-dasharray="4,3"/>`+
+                 `<text x="2" y="${(base0Y+3).toFixed(1)}" fill="#f5c842" font-size="8" text-anchor="start">0%</text>`;
   // 涨跌停「板」标记: 涨停红圈板在K线上方, 跌停绿圈板在当日K线下方 (20260925 圈式5号字)
   // 周K(tf=week)不做涨跌停标记: 涨停/地量口径仅对日线有意义 (20260929)
   const limitMarks=isWeek?'':(()=>{ let s='';
@@ -6528,7 +6597,7 @@ function kdMultiChart(bars, opt){
       return `<b>${esc(b.day||'')}</b>${limTag}<br>开 ${b.open} · 高 ${b.high}<br>低 ${b.low} · 收 <b>${b.close}</b> ${c?'<span style="color:'+(b.chg>=0?'#ff4d4f':'#26a69a')+'">'+(b.chg>=0?'+':'')+b.chg.toFixed(2)+'%</span>':''}`; }};
   // 20260906 修复: maPath 返回完整path元素, 直接输出(此前又包了一层<path d=...>导致均线不渲染)
   const p1=`<div class="sa-chart" id="${cid1}" style="height:${h1}px"><svg viewBox="0 0 ${w} ${h1}" style="width:100%;height:100%" preserveAspectRatio="none">
-    ${grid1}${chanBands}${candles}${limitMarks}<g id="${sigLayerId}"></g>
+    ${grid1}${baseLine}${chanBands}${candles}${limitMarks}<g id="${sigLayerId}"></g>
     ${maPath(ma5,'#f5c842',1)}
     ${maPath(ma10,'#4f9dff',1)}
     ${maPath(ma20,'#a06bff',1)}
