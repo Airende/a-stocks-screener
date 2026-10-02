@@ -3813,7 +3813,7 @@ function buildMiniChart(bars, pivots, opt){
         ${legend}
       </svg>
     </div>
-  `+subs.volHtml+subs.macdHtml+subs.kdjHtml;
+  `+subs.volHtml+subs.kdjHtml+subs.macdHtml;
 }
 
 // ===== 缠论周期切换: 30分/日/周 二次图 (20260919) =====
@@ -6209,10 +6209,9 @@ function kdSubPanels(bars, cfg){
     `<rect x="${padL}" y="${yFn3(100)}" width="${w-padL-padR}" height="${yFn3(80)-yFn3(100)}" fill="rgba(255,77,79,.07)"/>`+
     `<rect x="${padL}" y="${yFn3(20)}" width="${w-padL-padR}" height="${yFn3(0)-yFn3(20)}" fill="rgba(38,166,154,.07)"/>`
     : '';
-  // 底部日期轴并入KDJ面板
-  const dates=[0,Math.floor(n/2),n-1].map(i=>_sqT(xi(i), h3-1, `fill="#5a6a82" font-size="8" text-anchor="middle"`, (bars[i].day||'').slice(2))).join('');
+  // 底部日期轴已移至最底层 MACD 面板 (20261002, 面板顺序改 KDJ→MACD 后)
   const kLeg=tf==='week'?'周K':(tf==='month'?'月K':'K');  // 图例标签随周期 (20260928)
-  const p3final=`<div class="sa-chart" id="${cid3}" style="height:${h3}px;margin-top:2px"><svg viewBox="0 0 ${w} ${h3}" style="width:100%;height:100%" preserveAspectRatio="none">${kdjBands}${refLines}${line(K,'#e8eef6',1)}${line(D,'#f5c842',1)}${line(J,'#a06bff',1)}${_sqT(padL, 9, `fill="#e8eef6" font-size="9"`, kLeg)}${_sqT(padL+(kLeg.length>1?18:12), 9, `fill="#f5c842" font-size="9"`, 'D')}${_sqT(padL+(kLeg.length>1?30:24), 9, `fill="#a06bff" font-size="9"`, 'J')}<text x="${w-padR}" y="8" font-size="8" text-anchor="end" fill="#5a6a82">${tf==='week'?'(周KDJ · 9,3,3)':(tf==='month'?'(月KDJ · 9,3,3)':'')}</text>${dates}</svg></div>`;
+  const p3final=`<div class="sa-chart" id="${cid3}" style="height:${h3}px;margin-top:2px"><svg viewBox="0 0 ${w} ${h3}" style="width:100%;height:100%" preserveAspectRatio="none">${kdjBands}${refLines}${line(K,'#e8eef6',1)}${line(D,'#f5c842',1)}${line(J,'#a06bff',1)}${_sqT(padL, 9, `fill="#e8eef6" font-size="9"`, kLeg)}${_sqT(padL+(kLeg.length>1?18:12), 9, `fill="#f5c842" font-size="9"`, 'D')}${_sqT(padL+(kLeg.length>1?30:24), 9, `fill="#a06bff" font-size="9"`, 'J')}<text x="${w-padR}" y="8" font-size="8" text-anchor="end" fill="#5a6a82">${tf==='week'?'(周KDJ · 9,3,3)':(tf==='month'?'(月KDJ · 9,3,3)':'')}</text></svg></div>`;
   // ---- 面板4: MACD 副图 (12,26,9) (20261002) 红柱=多头/绿柱=空头, DIF白 DEA黄 ----
   const h4=stretch?96:82, padT4=12, padB4=8;
   const _k12=2/(12+1), _k26=2/(26+1), _k9=2/(9+1);
@@ -6238,12 +6237,14 @@ function kdSubPanels(bars, cfg){
   _chartReg[cid4]={bars, w, h:h4, padL, padR, n, sync:syncName,
     tipFn:(b,i)=>`<b>${esc(b.day||'')}</b><br>DIF ${difA[i].toFixed(3)} · DEA ${deaA[i].toFixed(3)} · <b>MACD ${histA[i].toFixed(3)}</b>`};
   const macdTf=tf==='week'?'周':(tf==='month'?'月':'');
+  // 最底层 MACD 面板承载底部日期轴 (20261002)
+  const datesM=[0,Math.floor(n/2),n-1].map(i=>_sqT(xi(i), h4-1, `fill="#5a6a82" font-size="8" text-anchor="middle"`, (bars[i].day||'').slice(2))).join('');
   const p4=`<div class="sa-chart" id="${cid4}" style="height:${h4}px;margin-top:2px"><svg viewBox="0 0 ${w} ${h4}" style="width:100%;height:100%" preserveAspectRatio="none">
     <line x1="${padL}" y1="${z4.toFixed(1)}" x2="${w-padR}" y2="${z4.toFixed(1)}" stroke="rgba(255,255,255,.2)" stroke-dasharray="2,2"/>
     ${mBars}${line(difA,'#e8eef6',1)}${line(deaA,'#f5c842',1)}
     ${_sqT(padL, 9, `fill="#e8eef6" font-size="9"`, macdTf+'MACD(12,26,9)')}
     ${_sqT(padL+94, 9, `fill="#e8eef6" font-size="9"`, 'DIF')}
-    ${_sqT(padL+120, 9, `fill="#f5c842" font-size="9"`, 'DEA')}
+    ${_sqT(padL+120, 9, `fill="#f5c842" font-size="9"`, 'DEA')}${datesM}
   </svg></div>`;
   return {volHtml:p2, macdHtml:p4, kdjHtml:p3final};
 }
@@ -6381,7 +6382,7 @@ function kdMultiChart(bars, opt){
 
   // ---- 成交量+KDJ 副图 (20260925 抽为 kdSubPanels 共用, 个股分析主图同款) ----
   const subs=kdSubPanels(bars, {w, padL, padR, xi, bw, opt, stretch:false, sync:syncName});
-  return {div: p1+subs.volHtml+subs.macdHtml+subs.kdjHtml, c1: cid1, sig};   // sig: 闭包注入历史信号标记
+  return {div: p1+subs.volHtml+subs.kdjHtml+subs.macdHtml, c1: cid1, sig};   // sig: 闭包注入历史信号标记
 }
 // 20260920: 把某股的历史形态信号标记注入到已渲染的K线面板1 (K线先显示, 信号异步补)
 function kdAddSigs(c1id, sig, m){
