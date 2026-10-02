@@ -6199,7 +6199,7 @@ function kdSubPanels(bars, cfg){
   const stagMarks=(()=>{ let s='';
     for(let i=0;i<n;i++){ const day=(bars[i].day||'').slice(0,10);
       if(!topStag[day]||limitDays[day]) continue;
-      s+=_sqT(xi(i), yFn2(bars[i].volume)-2, `font-size="5.5" font-weight="700" text-anchor="middle" fill="#f5a623" stroke="rgba(15,22,35,.9)" stroke-width="1.4" paint-order="stroke"`, '滞'); }
+      s+=_sqT(xi(i), yFn2(bars[i].volume)-2, `font-size="5.5" font-weight="700" text-anchor="middle" fill="#26a69a" stroke="rgba(15,22,35,.9)" stroke-width="1.4" paint-order="stroke"`, '滞'); }
     return s; })();
   // 涨跌停横杠 (仅日线): 在量柱顶部画横杠, 涨停红杠 / 跌停绿杠 (20261002)
   const limitBarMarks=(()=>{ let s='';
@@ -6239,7 +6239,7 @@ function kdSubPanels(bars, cfg){
       const limTag=limitDays[dayKey]? (limitDays[dayKey]==='up'?' <span style="color:#ff4d4f;font-weight:700">涨停</span>':' <span style="color:#26a69a;font-weight:700">跌停</span>') : '';
       const ditag=limitDays[dayKey]?'':(limitVol[dayKey]?' <span style="color:#f5c842;font-weight:700">地量低价</span>':'');
       const ditag2=limitDays[dayKey]?'':(limitHigh[dayKey]?' <span style="color:#ff4d4f;font-weight:700">天量</span>':'');
-      const stagTag=limitDays[dayKey]?'':(topStag[dayKey]?' <span style="color:#f5a623;font-weight:700">滞涨背离</span>':'');
+      const stagTag=limitDays[dayKey]?'':(topStag[dayKey]?' <span style="color:#26a69a;font-weight:700">滞涨背离</span>':'');
       // 成交额 = 成交量(股)×收盘价(元) (20260928: 原"量 xx万手"改为成交额)
       const amt=b.volume*b.close;
       const amtTxt=(amt/1e8).toFixed(2)+'亿';
