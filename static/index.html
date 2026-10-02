@@ -6158,6 +6158,30 @@ function kdSubPanels(bars, cfg){
       else if(volEdge[day]){ const cy=Math.max(padT2+4, yFn2(bars[i].volume)-4); s+=`<circle cx="${xi(i).toFixed(1)}" cy="${cy.toFixed(1)}" r="1.6" fill="#3da2ff" stroke="#ffffff" stroke-width="1"/>`; }
     }
     return s; })();
+  // 极致天量 (与地量对称, 60日窗口, 20261002): 只按量能判定, 只对日线
+  // 严档: vol≥前60日最高量×0.90 或 量比≥2.50 → 红色「天」字
+  // 宽档: 严档未中但 vol≥前60日最高量×0.85 或 量比≥2.00 → 橙点(边缘天量)
+  const limitHigh=(()=>{ const m={}, edge={}; const W=60;
+    if(n<=W || (opt&&opt.noLimits)) return m;   // 周/月K不做日线口径的天量判定
+    for(let i=W;i<n;i++){
+      const vol=+bars[i].volume; if(!(vol>0)) continue;
+      let vmaxN=0, vsum=0;
+      for(let j=i-W;j<i;j++){ const v=+bars[j].volume; if(v>vmaxN) vmaxN=v; vsum+=v; }
+      const vavg=vsum/W;
+      const vr2=vavg>0? vol/vavg : 1;
+      const strict=(vol>=vmaxN*0.90)||(vr2>=2.50);   // 严档 → 「天」字
+      if(strict){ m[(bars[i].day||'').slice(0,10)]=true; }
+      else if((vol>=vmaxN*0.85)||(vr2>=2.00)){ edge[(bars[i].day||'').slice(0,10)]=true; }  // 宽档 → 橙点
+    }
+    m._edge=edge; return m; })();
+  const highEdge=(limitHigh._edge||{});
+  const volHighMarks=(()=>{ let s='';
+    for(let i=0;i<n;i++){
+      const day=(bars[i].day||'').slice(0,10);
+      if(limitHigh[day]) s+=_sqT(xi(i), yFn2(bars[i].volume)-4, `font-size="5.5" font-weight="700" text-anchor="middle" fill="#ff4d4f" stroke="rgba(15,22,35,.9)" stroke-width="1.4" paint-order="stroke"`, '天');
+      else if(highEdge[day]){ const cy=Math.max(padT2+4, yFn2(bars[i].volume)-4); s+=`<circle cx="${xi(i).toFixed(1)}" cy="${cy.toFixed(1)}" r="1.6" fill="#ff8c3a" stroke="#ffffff" stroke-width="1"/>`; }
+    }
+    return s; })();
   const vbars=bars.map((b,i)=>{
     const col=(b.chg||0)>=0?'rgba(255,77,79,.85)':'rgba(38,166,154,.85)';
     const yv=yFn2(b.volume), bh=Math.max(1,h2-padT2-padB2-(yv-padT2));
@@ -6180,13 +6204,14 @@ function kdSubPanels(bars, cfg){
     tipFn:(b,i)=>{ const r=vr[i];
       const tag=r>=1.5?'<span style="color:#ff4d4f">放量</span>':(r<=0.8?'<span style="color:#26a69a">缩量</span>':'平量');
       const ditag=limitVol[(b.day||'').slice(0,10)]?' <span style="color:#f5c842;font-weight:700">地量低价</span>':'';
+      const ditag2=limitHigh[(b.day||'').slice(0,10)]?' <span style="color:#ff4d4f;font-weight:700">天量</span>':'';
       // 成交额 = 成交量(股)×收盘价(元) (20260928: 原"量 xx万手"改为成交额)
       const amt=b.volume*b.close;
       const amtTxt=(amt/1e8).toFixed(2)+'亿';
-      return `<b>${esc(b.day||'')}</b>${ditag}<br>成交额 ${amtTxt} · VR ${r.toFixed(2)} ${tag}`; }};
+      return `<b>${esc(b.day||'')}</b>${ditag}${ditag2}<br>成交额 ${amtTxt} · VR ${r.toFixed(2)} ${tag}`; }};
   const p2=`<div class="sa-chart" id="${cid2}" style="height:${h2}px;margin-top:2px"><svg viewBox="0 0 ${w} ${h2}" style="width:100%;height:100%" preserveAspectRatio="none">
     <line x1="${padL}" y1="${yFn2(vmax).toFixed(1)}" x2="${w-padR}" y2="${yFn2(vmax).toFixed(1)}" stroke="rgba(255,255,255,.05)"/>
-    ${vbars}${volMarks}
+    ${vbars}${volMarks}${volHighMarks}
     ${_sqT(padL, 9, `fill="#9fb0c6" font-size="9"`, tf==='week'?'周成交量':(tf==='month'?'月成交量':'成交量'))}
   </svg></div>`;
 
