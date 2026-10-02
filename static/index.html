@@ -6190,9 +6190,11 @@ function kdSubPanels(bars, cfg){
   const h3=stretch?118:100, padT3=12, padB3=6;  // 主图与浮窗均加高
   const jmin=Math.min(0,...J)-5, jmax=Math.max(100,...J)+5;
   const yFn3=v=>padT3+(jmax-v)/(jmax-jmin)*(h3-padT3-padB3);
-  const line=(arr,col,wd)=>{ let p='',st=false;
+  const line=(arr,col,wd,yFn)=>{
+    yFn=yFn||yFn3;   // 缺省按KDJ刻度; MACD传自己的 yFn4 (20261002)
+    let p='',st=false;
     for(let i=0;i<n;i++){ if(isNaN(arr[i])) continue;
-      p+=(st?'L':'M')+xi(i).toFixed(1)+','+yFn3(arr[i]).toFixed(1)+' '; st=true; }
+      p+=(st?'L':'M')+xi(i).toFixed(1)+','+yFn(arr[i]).toFixed(1)+' '; st=true; }
     return p?`<path d="${p}" fill="none" stroke="${col}" stroke-width="${wd}"/>`:''; };
   // KDJ参考线: 100/80/50/20/0 五条, 带数值标注 (20260925 增加100/50/0)
   const refLines=[100,80,50,20,0].map(v=>{
@@ -6241,7 +6243,7 @@ function kdSubPanels(bars, cfg){
   const datesM=[0,Math.floor(n/2),n-1].map(i=>_sqT(xi(i), h4-1, `fill="#5a6a82" font-size="8" text-anchor="middle"`, (bars[i].day||'').slice(2))).join('');
   const p4=`<div class="sa-chart" id="${cid4}" style="height:${h4}px;margin-top:2px"><svg viewBox="0 0 ${w} ${h4}" style="width:100%;height:100%" preserveAspectRatio="none">
     <line x1="${padL}" y1="${z4.toFixed(1)}" x2="${w-padR}" y2="${z4.toFixed(1)}" stroke="rgba(255,255,255,.2)" stroke-dasharray="2,2"/>
-    ${mBars}${line(difA,'#e8eef6',1)}${line(deaA,'#f5c842',1)}
+    ${mBars}${line(difA,'#e8eef6',1,yFn4)}${line(deaA,'#f5c842',1,yFn4)}
     ${_sqT(padL, 9, `fill="#e8eef6" font-size="9"`, macdTf+'MACD(12,26,9)')}
     ${_sqT(padL+94, 9, `fill="#e8eef6" font-size="9"`, 'DIF')}
     ${_sqT(padL+120, 9, `fill="#f5c842" font-size="9"`, 'DEA')}${datesM}
