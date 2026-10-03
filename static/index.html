@@ -2308,14 +2308,24 @@ async function applyHistSignalsToAnalysisChart(code, bars){
   _cleanHint();
   const hintG = document.createElementNS('http://www.w3.org/2000/svg','g');
   hintG.setAttribute('class','sa-sig-hint');
+  // (20261003) 胶囊移到 SVG 最右缘; 解析 viewBox 宽 + 实际渲染宽求横向拉伸系数 kX,
+  // 文字用 scale(1/kX,1) 反缩放, 避免 preserveAspectRatio=none 下字形被横向拉宽变形
+  let _vbw=800;
+  try{ const _vbs=(svg.getAttribute('viewBox')||'').split(/[ ,]+/); if(_vbs[2]) _vbw=Number(_vbs[2]); }catch(e){}
+  const _bsvg=svg.getBoundingClientRect();
+  const _kX=(_bsvg&&_bsvg.width&&_vbw>0)? _bsvg.width/_vbw : 1;
+  const _rw=84, _rx=_vbw-_rw-6;
+  const _sc=(_kX>1.02)?` scale(${(1/_kX).toFixed(3)},1)`:'';
   const hintRect = document.createElementNS('http://www.w3.org/2000/svg','rect');
-  hintRect.setAttribute('x','2'); hintRect.setAttribute('y','3');
-  hintRect.setAttribute('width','84'); hintRect.setAttribute('height','13');
+  hintRect.setAttribute('x',_rx.toFixed(1)); hintRect.setAttribute('y','3');
+  hintRect.setAttribute('width',String(_rw)); hintRect.setAttribute('height','13');
   hintRect.setAttribute('rx','4');
   hintRect.setAttribute('fill','rgba(13,18,28,.88)');
   const hint = document.createElementNS('http://www.w3.org/2000/svg','text');
-  hint.setAttribute('x','9'); hint.setAttribute('y','12.5');
   hint.setAttribute('font-size','9'); hint.setAttribute('fill','#c7d5e8');
+  hint.setAttribute('transform',`translate(${(_rx+_rw/2).toFixed(1)},12.5)${_sc}`);
+  hint.setAttribute('text-anchor','middle');
+  hint.setAttribute('x','0'); hint.setAttribute('y','0');
   hint.textContent='信号加载中…';
   hintG.appendChild(hintRect); hintG.appendChild(hint);
   svg.appendChild(hintG);
