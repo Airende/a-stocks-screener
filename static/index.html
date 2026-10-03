@@ -520,6 +520,7 @@
   .sl-row a.nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
   .sl-row .sl-p{font-variant-numeric:tabular-nums;min-width:52px;text-align:right}
   .sl-row .sl-c{min-width:58px;text-align:right;font-variant-numeric:tabular-nums}
+  .sl-row .sl-ind{min-width:64px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   /* 日周共振/埋伏型标签 (20260920): 共振=淡金(淡化), 周线回踩/底部反转=中性底色 */
   .res-tag{display:inline-block;font-size:10px;font-weight:600;border-radius:3px;padding:0 4px;margin-left:4px;vertical-align:middle}
   .res-tag.syn{color:#d8b84a;background:linear-gradient(180deg,rgba(245,200,66,.14),rgba(224,160,56,.10));border:1px solid rgba(245,200,66,.25)}
@@ -4809,7 +4810,7 @@ function renderShortlistPanel(){
       <a class="nm" data-code="${s.code}" onclick="gotoStockAnalyze('${s.code}','${nm}')" title="${nm}">${esc(s.name||'—')}</a>
       <span class="sl-p">${p2(s.price)}</span>
       <span class="sl-c">${fmtPct(s.change_pct)}</span>
-      <span>${esc(s.industry||'—')}</span>
+      <span class="sl-ind">${esc(s.industry||'—')}</span>
     </div>`;
   }).join('') : '<div class="sl-empty">暂无初筛股票<br/>点击列表序号 <b style="color:var(--up)">+</b> 加入</div>';
 }
