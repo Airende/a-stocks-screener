@@ -6425,7 +6425,8 @@ function kdSubPanels(bars, cfg){
       const day=(bars[i].day||'').slice(0,10);
       if(limitDays[day]) continue;   // 涨跌停日不标字, 改画横杠
       if(limitVol[day]) s+=_sqT(xi(i), yFn2(bars[i].volume)-4, `font-size="5.5" font-weight="700" text-anchor="middle" fill="#f5c842" stroke="rgba(15,22,35,.9)" stroke-width="1.4" paint-order="stroke"`, '地');
-      else if(volEdge[day]){ const cy=Math.max(padT2+4, yFn2(bars[i].volume)-4); s+=`<circle cx="${xi(i).toFixed(1)}" cy="${cy.toFixed(1)}" r="1.6" fill="#3da2ff" stroke="#ffffff" stroke-width="1"/>`; }
+      else if(volEdge[day]){ const cy=Math.max(padT2+4, yFn2(bars[i].volume)-4); const cxV=xi(i); const tx=(stretch&&kX>1.02)?` scale(${(1/kX).toFixed(3)},1)`:'';
+        s+=`<circle cx="0" cy="0" r="1.6" fill="#3da2ff" stroke="#ffffff" stroke-width="1" transform="translate(${cxV.toFixed(1)},${cy.toFixed(1)})${tx}"/>`; }
     }
     return s; })();
   // 极致天量 (与地量对称, 60日窗口, 20261002): 只按量能判定, 只对日线
