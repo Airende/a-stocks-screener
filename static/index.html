@@ -3938,7 +3938,9 @@ function buildChanChart(bars, chan, code, name, period){
       const cl=(t==='up')? y(bars[i].high)-(r+2.5)
                         : Math.min(y(bars[i].low)+(r+2.5), h-6);
       const fill=(t==='up')?'#ff4d4f':'#26a69a';
-      s+=`<g transform="translate(${x},${cl.toFixed(1)})">`+
+      // (20261003) preserveAspectRatio=none 横向拉伸会令圈变椭圆 → 平移后用 scale(1/kX,1) 反向补偿
+      const tx=(kX>1.02)?` scale(${(1/kX).toFixed(3)},1)`:'';
+      s+=`<g transform="translate(${x},${cl.toFixed(1)})${tx}">`+
          `<circle cx="0" cy="0" r="${r.toFixed(2)}" fill="#fff" stroke="${fill}" stroke-width="1"/></g>`;
     }
     return s; })():'';
