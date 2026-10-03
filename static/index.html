@@ -3979,7 +3979,7 @@ function buildChanChart(bars, chan){
   _chartReg[cid]={bars, w, padL, padR, padT, padB, n, h, hi:yHi, lo:yLo};
   // 成交量+KDJ+MACD 副图 (20261003): 移到缠论 K 线图下方, 按 成交量→KDJ→MACD 顺序, 与主图共用 x 映射对齐
   const chanSubs=kdSubPanels(bars, {w, padL, padR, xi, bw, opt:{}, stretch:true, kX});
-  const chanMacd=macdPanelHtml({bars, w, padL, padR, n, xStep, bw, kX, h:96});
+  const chanMacd=macdPanelHtml({bars, w, padL, padR, n, xStep, bw, kX, h:140});
   return `<div class="sa-chart" id="${cid}" style="height:${h}px">
     <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:100%" preserveAspectRatio="none">
       ${gridLines}${bands}${candles}${maChanHtml}${strokeEl}${segEl}${priceLine}${sigMarks}${dateTxt}${legend}
@@ -6399,7 +6399,7 @@ function kdSubPanels(bars, cfg){
   const limitDays=isWeekTf?{}:_limitDaysOf(bars, opt&&opt.code, opt&&opt.name);
   // ---- 面板2: 成交量副图 ----
   // 20260928: 主图(stretch=true, 个股分析)与浮窗(stretch=false)均加高副图
-  const h2=stretch?102:88, padT2=12, padB2=6;  // 加高使量柱更清晰
+  const h2=stretch?140:88, padT2=12, padB2=6;  // 加高使量柱更清晰 (20261003: 缠论副图等高)
   const vmax=Math.max(...bars.map(b=>b.volume))||1;
   const yFn2=v=>padT2+(1-v/vmax)*(h2-padT2-padB2);
   // 极致底量标记 (20261001 逐bar窗口版, 与后端 classify_bottom_volume 一致, 分两档):
@@ -6602,7 +6602,7 @@ function kdSubPanels(bars, cfg){
   </svg></div>`;
 
   // ---- 面板3: KDJ副图 ----
-  const h3=stretch?118:100, padT3=12, padB3=6;  // 主图与浮窗均加高
+  const h3=stretch?140:100, padT3=12, padB3=6;  // 主图与浮窗均加高
   // 上下各留 14 点余量: 给「顶背/底背」字标腾出空间 (20261002)
   const jmin=Math.min(0,...J)-14, jmax=Math.max(100,...J)+14;
   const yFn3=v=>padT3+(jmax-v)/(jmax-jmin)*(h3-padT3-padB3);
