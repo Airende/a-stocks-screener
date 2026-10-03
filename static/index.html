@@ -1534,12 +1534,12 @@ function bindChartInteractivity(rootEl){
         const di=Math.max(0, Math.min(reg.alignTotal-1, Math.floor((vx-reg.padL)/xsD)));
         return reg.idxForDi(di);
       }
-      return Math.max(0, Math.min(reg.n-1, Math.floor((vx-reg.padL)/((reg.w-reg.padL-reg.padR)/reg.n))));
+      return Math.max(0, Math.min(reg.n-1, Math.floor((vx-reg.padL)/((reg.w-reg.padL-reg.padR)/(reg.total||reg.n)))));
     };
     const rngShow=()=>{
       if(!rngSel) return;
       const i0=Math.min(rngSel.a,rngSel.b), i1=Math.max(rngSel.a,rngSel.b);
-      const xStep=(reg.w-reg.padL-reg.padR)/reg.n;
+      const xStep=(reg.w-reg.padL-reg.padR)/(reg.total||reg.n);
       // 对齐模式: 边界用公共时间轴位置(周/月bar在其末个交易日处) (20260925)
       const xa=reg.xi? reg.xi(i0) : (reg.padL+i0*xStep);
       const xb=reg.xi? reg.xi(i1) : (reg.padL+(i1+1)*xStep);
@@ -4006,7 +4006,7 @@ function buildChanChart(bars, chan, code, name, period){
     _sqT(padL+486, 12, 'fill="#a06bff" font-size="10"', 'MA20');
   const cid='chan'+(++_chartSeq);
   const syncName='chansync'+(++_chartSeq);   // (20261003) 十字光标同步组: 主图+成交量/KDJ/MACD, 竖线贯穿所有副图
-  _chartReg[cid]={bars, w, padL, padR, padT, padB, n, h, hi:yHi, lo:yLo, xi, total:ts, sync:syncName};
+  _chartReg[cid]={bars, w, padL, padR, padT, padB, n, h, hi:yHi, lo:yLo, xi, total:ts, rng:1, sync:syncName};
   // 成交量+KDJ+MACD 副图 (20261003): 移到缠论 K 线图下方, 按 成交量→KDJ→MACD 顺序, 与主图共用 x 映射对齐
   const chanSubs=kdSubPanels(bars, {w, padL, padR, xi, bw, opt:{code, name}, stretch:true, kX, total:ts, sync:syncName});
   const chanMacd=macdPanelHtml({bars, w, padL, padR, n, xStep, bw, kX, h:140, total:ts, sync:syncName});
