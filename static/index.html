@@ -6910,10 +6910,16 @@ function kdMultiChart(bars, opt){
       if(!sigs || !sigs.length) continue;
       // 20260921: 多信号竖向排 (自上而下), 簇以上方为起点向下延伸
       // 20260921b: 标识离K线最高价更远(间隙 -4 → -9), 避免贴柱
-      const cy=Math.max(3, yFn1(bars[i].high)-9-(sigs.length-1)*3.5);
+      // 20261003: "启"(低位启动前)改红色, 落到K线最低价下方向下排, 与上方信号错开
+      const yHi = yFn1(bars[i].high), yLo = yFn1(bars[i].low);
+      const startY = Math.max(3, yHi-9-(sigs.length-1)*3.5);
+      let kUp=0, kDown=0;
       sigs.forEach((s,idx)=>{
-        out+=`<text x="${xi(i).toFixed(1)}" y="${(cy+idx*7).toFixed(1)}" font-size="5" font-weight="700"
-          text-anchor="middle" dominant-baseline="central" fill="${s.color||'#fff'}" stroke="rgba(15,22,35,.9)" stroke-width="1.6" paint-order="stroke" title="${escFn(s.name||'')} ${day}">${escFn(s.ch||'')}</text>`;
+        const isQi=(s.ch==='启');
+        const yPos = isQi ? (yLo+8+(kDown++)*7) : (startY+(kUp++)*7);
+        const col = isQi ? '#ff4d4f' : (s.color||'#fff');
+        out+=`<text x="${xi(i).toFixed(1)}" y="${yPos.toFixed(1)}" font-size="5" font-weight="700"
+          text-anchor="middle" dominant-baseline="central" fill="${col}" stroke="rgba(15,22,35,.9)" stroke-width="1.6" paint-order="stroke" title="${escFn(s.name||'')} ${day}">${escFn(s.ch||'')}</text>`;
       });
     }
     return out;
