@@ -6968,7 +6968,7 @@ function kdMultiChart(bars, opt){
     return path?`<path d="${path}" fill="none" stroke="${col}" stroke-width="${wd}" opacity="0.9"/>`:''; };
 
   // ---- 面板1: K线 + 三均线 ----
-  const h1=170, padT1=26, padB1=16;  // 上下加高容纳涨跌停「板」标记 (20260925)
+  const h1=215, padT1=26, padB1=16;  // 浮窗K线主面板高(20261003 调高→宽高比更接近同花顺), 上下加高容纳涨跌停「板」标记 (20260925)
   const tf=opt&&opt.tf?String(opt.tf):'';   // 周期: ''=日K, 'week'=周K (20260929)
   const isWeek=tf==='week';
   const limitDays=_limitDaysOf(bars, opt&&opt.code, opt&&opt.name);
@@ -6978,8 +6978,8 @@ function kdMultiChart(bars, opt){
   const candles=bars.map((b,i)=>{
     const col=b.close>=b.open?'#ff4d4f':'#26a69a';  // 阴阳线: 按收/开判定 (20260928)
     const yO=yFn1(b.open), yC=yFn1(b.close), bodyTop=Math.min(yO,yC);
-    return `<line x1="${xi(i).toFixed(1)}" y1="${yFn1(b.high).toFixed(1)}" x2="${xi(i).toFixed(1)}" y2="${yFn1(b.low).toFixed(1)}" stroke="${col}" stroke-width="0.8"/>`+
-           `<rect x="${(xi(i)-bw/2).toFixed(1)}" y="${bodyTop.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(1,Math.abs(yC-yO)).toFixed(1)}" fill="${col}"/>`;
+    return `<line x1="${xi(i).toFixed(1)}" y1="${yFn1(b.high).toFixed(1)}" x2="${xi(i).toFixed(1)}" y2="${yFn1(b.low).toFixed(1)}" stroke="${col}" stroke-width="1"/>`+
+           `<rect x="${(xi(i)-bw/2).toFixed(1)}" y="${bodyTop.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(1,Math.abs(yC-yO)).toFixed(1)}" fill="${col}" stroke="${col}" stroke-width="0.5"/>`;
   }).join('');
   // 左侧涨跌幅刻度 (20260925): 以首根K线开盘价为0%
   const base0=(parseFloat(bars[0].open)||lo);
