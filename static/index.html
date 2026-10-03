@@ -3928,7 +3928,7 @@ function buildChanChart(bars, chan){
   // 线段: 已确认(特征序列分型定终点)画实线, 未确认/未走完(兜底终点)画虚线
   const _segPoly=(list)=>{
     const d=polyPath(list,['i0','i1'],['p0','p1']);
-    return d?`<path d="${d}" fill="none" stroke="#f5c842" stroke-width="2.6" opacity="0.95"/>`:''; };
+    return d?`<path d="${d}" fill="none" stroke="#f5c842" stroke-width="1.6" opacity="0.95"/>`:''; };
   const segEl=(()=>{
     const segs=chan.segments||[];
     const done=segs.filter(x=>x.confirmed!==false);
