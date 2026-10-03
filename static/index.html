@@ -3181,7 +3181,7 @@ function renderAnalysis(d){
     </div>`:'';
   // 缠论结构图 + 摘要 (20260911): 笔/线段/中枢/三类买卖点
   const ch=d.chan||{};
-  const chanChartHtml=(bars.length&&ch.ok)?buildChanChart(bars, ch):'';
+  const chanChartHtml=(bars.length&&ch.ok)?buildChanChart(bars, ch, d.code, d.name, 'day'):'';
   const chanHtml=ch.ok?`
     <div class="chan-box">
       <div class="sec-h" style="margin:0 0 10px;font-size:14px;display:flex;align-items:center;gap:10px">缠论结构
@@ -3862,7 +3862,7 @@ async function switchChanPeriod(code, period){
     const d=await r.json();
     if(!d.chan || !d.chan.ok){ chartEl.innerHTML='<div class="empty">'+esc(d.chan?.reason||'该周期未形成有效结构')+'</div>'; return; }
     if(sumEl) sumEl.innerHTML=chanSummaryHtml(d.chan);
-    chartEl.innerHTML=buildChanChart(d.bars, d.chan);
+    chartEl.innerHTML=buildChanChart(d.bars, d.chan, code, d.name || '', period);
     pdEl && pdEl.querySelectorAll('.cpd[data-pd]').forEach(b=>b.classList.toggle('on', b.dataset.pd===period));
     pdEl && pdEl.querySelectorAll('.cpd[data-sd]').forEach(b=>b.classList.toggle('on', b.dataset.sd===_chanStartDir));
     // 新图十字光标/OHLC 悬浮绑定 (旧图已带 xhairBound, 重复调用安全)
@@ -3880,11 +3880,14 @@ async function switchChanStartDir(code, sd){
 
 // ===== 缠论结构图: K线 + 笔 + 线段 + 中枢 + 三类买卖点 (20260911) =====
 // chan 字段由后端 /api/stock/analyze 的 chan_analysis() 生成, 索引与 bars 一一对应
-function buildChanChart(bars, chan){
+function buildChanChart(bars, chan, code, name, period){
   if(!bars || !bars.length || !chan || !chan.ok) return '';
   const w=800, h=360, padL=8, padR=8, padT=34, padB=42;
   const n=bars.length;
   if(n<2) return '';
+  // 涨跌停识别口径仅对日线有意义 (20261003): 30分/周/月不标
+  const isDay = !period || period==='day' || period==='日';
+  const limitDays = isDay? _limitDaysOf(bars, code, name) : {};
   // 显示区间需同时覆盖K线极值与中枢上下沿
   let yHi=Math.max(...bars.map(b=>b.high));
   let yLo=Math.min(...bars.map(b=>b.low));
@@ -3926,6 +3929,21 @@ function buildChanChart(bars, chan){
     return `<line x1="${x.toFixed(1)}" y1="${y(b.high).toFixed(1)}" x2="${x.toFixed(1)}" y2="${y(b.low).toFixed(1)}" stroke="${col}" stroke-width="1"/>`+
            `<rect x="${(x-bw/2).toFixed(1)}" y="${bodyTop.toFixed(1)}" width="${bw.toFixed(1)}" height="${bodyH.toFixed(1)}" fill="${col}"/>`;
   }).join('');
+  // 涨跌停「板」标记 (20261003, 浮窗K线同逻辑): 涨停红圈板在最贴近K线的K线上方, 跌停绿圈板在当根K线下方。
+  // 只对日线; 持仓在其他标识之上、最靠近K线, 其它标识(买卖点/均线)让位避免重叠。
+  const limitMarks=isDay?(()=>{ let s='';
+    for(let i=0;i<n;i++){
+      const t=limitDays[(bars[i].day||'').slice(0,10)];
+      if(!t) continue;
+      const x=xi(i).toFixed(1);
+      const r=Math.max(1.2, bw/2);
+      const cl=(t==='up')? y(bars[i].high)-(r+2.5)
+                        : Math.min(y(bars[i].low)+(r+2.5), h-6);
+      const fill=(t==='up')?'#ff4d4f':'#26a69a';
+      s+=`<g transform="translate(${x},${cl.toFixed(1)})">`+
+         `<circle cx="0" cy="0" r="${r.toFixed(2)}" fill="#fff" stroke="${fill}" stroke-width="1"/></g>`;
+    }
+    return s; })():'';
   // 折线工具: 把笔/线段的端点序列连成一条 path
   const polyPath=(arr, gi, gp)=>{
     if(!arr || !arr.length) return '';
@@ -3957,7 +3975,10 @@ function buildChanChart(bars, chan){
     const col=isBuy?'#ff4d4f':'#26a69a';
     _lane = (x-_lastX<28) ? (_lane+1)%3 : 0; _lastX=x;
     const off=_lane*11;
-    const ay=(isBuy?yy+11+off:yy-5-off), ty=(isBuy?yy+23+off:yy-17-off);
+    // (20261003) 涨停日上方有红色圈板(最贴近K线), 买点标识再上移让位, 避免与板圈重叠
+    const plateUp = isDay && limitDays[(bars[s.i].day||'').slice(0,10)]==='up';
+    const ext = plateUp&&isBuy ? 13 : 0;
+    const ay=(isBuy?yy+11+off+ext:yy-5-off), ty=(isBuy?yy+23+off+ext:yy-17-off);
     return _sqT(x, ay, `fill="${col}" font-size="9" text-anchor="middle"`, isBuy?'▲':'▼')+
            _sqT(x, ty, `fill="${col}" font-size="10" font-weight="700" text-anchor="middle"`, esc(s.label));
   }).join('');
@@ -3992,7 +4013,7 @@ function buildChanChart(bars, chan){
   const chanMacd=macdPanelHtml({bars, w, padL, padR, n, xStep, bw, kX, h:140, total:ts});
   return `<div class="sa-chart" id="${cid}" style="height:${h}px">
     <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:100%" preserveAspectRatio="none">
-      ${gridLines}${bands}${candles}${maChanHtml}${strokeEl}${segEl}${priceLine}${sigMarks}${dateTxt}${legend}
+      ${gridLines}${bands}${candles}${limitMarks}${maChanHtml}${strokeEl}${segEl}${priceLine}${sigMarks}${dateTxt}${legend}
     </svg>
   </div>`+chanSubs.volHtml+chanSubs.kdjHtml+chanMacd;
 }
