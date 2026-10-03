@@ -3883,7 +3883,9 @@ function buildChanChart(bars, chan){
   (chan.pivots||[]).forEach(p=>{ yHi=Math.max(yHi,p.zg); yLo=Math.min(yLo,p.zd); });
   const rng=(yHi-yLo)||1;
   const plotW=w-padL-padR, plotH=h-padT-padB;
-  const xStep=plotW/n;
+  const padN=8;                 // 右侧预留空位, 最新K线左移8个位置 (20261003)
+  const ts=n+padN;              // 总槽位数, 保证最新一根K线距右缘还有8个空位
+  const xStep=plotW/ts;
   const bw=Math.max(2, xStep*0.6);
   const xi=i=>padL+i*xStep+xStep/2;
   const y=v=>padT+(yHi-v)/rng*plotH;
