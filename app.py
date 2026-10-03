@@ -7293,7 +7293,8 @@ def _ma_scan_job():
             if _early.get("hit"):
                 pats.append("低位启动前")
             # 日KDJ底部钝化结束 (20261003): 低位钝化刚结束(<=3个交易日) → 早恢复信号
-            if _kdj_bottom_blunt_just_ended(bars, 3):
+            # (20261003b) 加周约束, 与"地量低价"同口径: 周K末完成笔向下、当前未完成笔向上 = 底部反转构建期
+            if _kdj_bottom_blunt_just_ended(bars, 3) and _weekly_stroke_state_ok(bars):
                 pats.append("KDJ底部钝化结束")
             if not pats:
                 return None
