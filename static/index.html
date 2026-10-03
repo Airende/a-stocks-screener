@@ -2340,12 +2340,12 @@ async function applyHistSignalsToAnalysisChart(code, bars){
   // 个股分析K线的 svg 只有 viewBox 没有 width 属性, 需从 viewBox 解析画布宽 (20260921)
   const vb = svg.viewBox && svg.viewBox.baseVal ? svg.viewBox.baseVal : (svg.getAttribute('viewBox')||'').split(/[ ,]+/);
   const vbW = svg.viewBox && svg.viewBox.baseVal ? svg.viewBox.baseVal.width : Number(vb[2]);
-  if(Math.round(vbW) !== 800) return;
-  // 坐标映射改为按目标图注册表(_chartReg)驱动 (20261003): 换位后信号标识
-  // 自动落到面板内第一张图(缠论图), 用该图自己的高度/边距/极值定位, 不再写死日K主图几何
+  // (20261003) 不再硬编码 800 拦截: 唯一视图改成了紧凑"多周期对比"(w=700),
+  // 之前 vbW!==800 直接 return 导致历史信号永远加载不出来。现全部以目标图
+  // 注册表(_chartReg)的几何为准(w/padL/padR/padT/padB/h/hi/lo/xi/total), 宽度兜底用 vbW。
   const hostDiv = svg.closest('.sa-chart');
   const reg = hostDiv ? _chartReg[hostDiv.id] : null;
-  const w=800, padL=8, padR=8;
+  const w=(reg&&reg.w)||(vbW>0?vbW:700), padL=(reg&&reg.padL)||8, padR=(reg&&reg.padR)||8;
   const n = reg ? reg.n : bars.length;
   if(n<2) return;
   const hi = reg ? reg.hi : Math.max(...bars.map(b=>b.high));
