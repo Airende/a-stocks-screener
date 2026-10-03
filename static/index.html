@@ -4742,8 +4742,8 @@ function maRowHtml(s,i){
     });
     if(best!=null) conHeat = heatBadgeHtml(best, '板块5日均涨·最热子概念: '+bestName);
   }
-  // 日J/周J (20260930): 全 tab 展示; 20261003 分档: >220红(var--up) >120黄(var--gold) <30绿(弱) 其余灰
-  const jv = (v)=> (v!=null&&!isNaN(v)) ? '<span style="color:'+(v>220?'var(--up)':(v>120?'var(--gold)':(v<30?'var(--down)':'var(--sub)')))+';font-weight:600">'+ Number(v).toFixed(1) +'</span>' : '—';
+  // 日J/周J (20260930): 全 tab 展示, 过百标红 (var(--up) 红色系), 低于30弱, 高值警示
+  const jv = (v)=> (v!=null&&!isNaN(v)) ? '<span style="color:'+(v>=100?'var(--up)':(v>=80?'var(--sub)':(v<30?'var(--down)':'var(--gold)')))+';font-weight:600">'+ Number(v).toFixed(1) +'</span>' : '—';
   // ★ 急跌型强档 (20261003): 仅「日·背离」tab 展示, **纯标注不参与过滤/排序**。
   //   判定 = 锚点(窗口最低价那根)的 K <= 20 (后端 DIV_STRONG_K, 经 /api/ma-screen 的 div_strong 下发)。
   //   依据: 底背全体按"信号出现日"日聚类复算 t 仅 1.1(同日暴跌扎堆致朴素 t 虚高约 3 倍),
