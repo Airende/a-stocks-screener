@@ -4008,9 +4008,7 @@ function buildChanChart(bars, chan){
     <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:100%" preserveAspectRatio="none">
       ${gridLines}${bands}${candles}${maChanHtml}${strokeEl}${segEl}${priceLine}${sigMarks}${dateTxt}${legend}
     </svg>
-  </div>`+
-  // MACD 副图 (20261002): 复用可复用版, 与主图X轴对齐
-  macdPanelHtml({bars, w, padL, padR, n, xStep, bw, kX, h:120});
+  </div>`;
 }
 
 // ===== ATR 副图: 4条线 ATR60(紫·平滑) / ATR30(蓝·中) / ATR14(橙·常用) / ATR5(红·短) =====
