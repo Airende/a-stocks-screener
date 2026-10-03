@@ -4005,10 +4005,11 @@ function buildChanChart(bars, chan, code, name, period){
     _sqT(padL+442, 12, 'fill="#4f9dff" font-size="10"', 'MA10')+
     _sqT(padL+486, 12, 'fill="#a06bff" font-size="10"', 'MA20');
   const cid='chan'+(++_chartSeq);
-  _chartReg[cid]={bars, w, padL, padR, padT, padB, n, h, hi:yHi, lo:yLo, xi, total:ts};
+  const syncName='chansync'+(++_chartSeq);   // (20261003) 十字光标同步组: 主图+成交量/KDJ/MACD, 竖线贯穿所有副图
+  _chartReg[cid]={bars, w, padL, padR, padT, padB, n, h, hi:yHi, lo:yLo, xi, total:ts, sync:syncName};
   // 成交量+KDJ+MACD 副图 (20261003): 移到缠论 K 线图下方, 按 成交量→KDJ→MACD 顺序, 与主图共用 x 映射对齐
-  const chanSubs=kdSubPanels(bars, {w, padL, padR, xi, bw, opt:{code, name}, stretch:true, kX, total:ts});
-  const chanMacd=macdPanelHtml({bars, w, padL, padR, n, xStep, bw, kX, h:140, total:ts});
+  const chanSubs=kdSubPanels(bars, {w, padL, padR, xi, bw, opt:{code, name}, stretch:true, kX, total:ts, sync:syncName});
+  const chanMacd=macdPanelHtml({bars, w, padL, padR, n, xStep, bw, kX, h:140, total:ts, sync:syncName});
   return `<div class="sa-chart" id="${cid}" style="height:${h}px">
     <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:100%" preserveAspectRatio="none">
       ${gridLines}${bands}${candles}${limitMarks}${maChanHtml}${strokeEl}${segEl}${priceLine}${sigMarks}${dateTxt}${legend}
@@ -6757,7 +6758,7 @@ function macdPanelHtml(cfg){
       p+=(st?'L':'M')+xi(i).toFixed(1)+','+yFn(arr[i]).toFixed(1)+' '; st=true; }
     return p; };
   const cid='macd'+(++_chartSeq);
-  _chartReg[cid]={bars, w, padL, padR, padT, padB, n, h, xi, total:(cfg.total||n),
+  _chartReg[cid]={bars, w, padL, padR, padT, padB, n, h, xi, total:(cfg.total||n), sync:cfg.sync,
     tipFn:(b,i)=>{ const dv=mDivAt[i];
       const dvTag=dv? (dv.type==='top'
           ? ` <span style="color:${_DIV_TOP};font-weight:${dv.strong?'700':'400'}">顶背离</span><span style="color:#8b97a8">(${dv.strong?'强':'弱'} · DIF ${(+difA[dv.ref]).toFixed(3)}→${(+difA[i]).toFixed(3)})</span>`
