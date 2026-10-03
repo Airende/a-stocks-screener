@@ -2344,9 +2344,11 @@ async function applyHistSignalsToAnalysisChart(code, bars){
   const padT = reg ? reg.padT : 40, padB = reg ? reg.padB : 18;
   const h = reg ? reg.h : 280;
   const plotW = w-padL-padR, plotH = h-padT-padB;
-  const xStep = plotW/n;
+  // (20261003) 目标图若右移预留了空槽(缠论图 padN=8), 直接用其注册的 xi 映射,
+  // 否则历史信号标签的 x 会与左移后的 K 线错位; 取 effective 槽位(total||n)作兜底。
+  const xStep = plotW/((reg&&reg.total)||n);
   const yFn = v => padT + (hi-v)/rng*plotH;
-  const xFn = i => padL + i*xStep + xStep/2;
+  const xFn = i => (reg&&reg.xi)? reg.xi(i) : (padL + i*xStep + xStep/2);
   // 日期→bars 索引映射 (用目标图自己的bars, 与其x映射一致) (20261003)
   const dayBars = (reg && reg.bars && reg.bars.length>=2) ? reg.bars : bars;
   const dayIdx = {};
