@@ -4007,7 +4007,7 @@ function buildChanChart(bars, chan, code, name, period){
   const cid='chan'+(++_chartSeq);
   _chartReg[cid]={bars, w, padL, padR, padT, padB, n, h, hi:yHi, lo:yLo, xi, total:ts};
   // 成交量+KDJ+MACD 副图 (20261003): 移到缠论 K 线图下方, 按 成交量→KDJ→MACD 顺序, 与主图共用 x 映射对齐
-  const chanSubs=kdSubPanels(bars, {w, padL, padR, xi, bw, opt:{}, stretch:true, kX, total:ts});
+  const chanSubs=kdSubPanels(bars, {w, padL, padR, xi, bw, opt:{code, name}, stretch:true, kX, total:ts});
   const chanMacd=macdPanelHtml({bars, w, padL, padR, n, xStep, bw, kX, h:140, total:ts});
   return `<div class="sa-chart" id="${cid}" style="height:${h}px">
     <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:100%" preserveAspectRatio="none">
@@ -6507,7 +6507,8 @@ function kdSubPanels(bars, cfg){
       const wv=(barW&&barW[i]&&barW[i].cw)?barW[i].cw:(bw||3);
       const yv=yFn2(Math.max(bars[i].volume, vmax*0.01))-2.5;   // 横杠上移留空隙
       const cl=t==='up'?'#ff4d4f':'#26a69a';
-      s+=`<line x1="${(cxv-wv/2).toFixed(1)}" y1="${yv.toFixed(1)}" x2="${(cxv+wv/2).toFixed(1)}" y2="${yv.toFixed(1)}" stroke="${cl}" stroke-width="2" stroke-linecap="round"/>`;
+      const hw=(wv*0.6)/2;   // (20261003) 横杠横向略微缩短(60%), 居中
+      s+=`<line x1="${(cxv-hw).toFixed(1)}" y1="${yv.toFixed(1)}" x2="${(cxv+hw).toFixed(1)}" y2="${yv.toFixed(1)}" stroke="${cl}" stroke-width="2" stroke-linecap="round"/>`;
     }
     return s; })();
   // 堆量标记 (20261002): 连续≥3根量柱每日量≥前20日均量×1.5 且 价涨/横盘 → 该段最高量柱顶部紫色「堆」字
