@@ -4358,11 +4358,15 @@ function passMaAtr(s, patOverride){
 }
 // ATR过滤UI已移除(20260925): 勾选联动逻辑一并删除, passMaAtr 因 maAtrConds 为空恒放行
 
-// 判断当前 tab 是否上试盘子 tab
-function _isSspTab(i){ return (i===undefined?maCurrentTab:i) >= SSP_KIND_TAB_OFFSET; }
+// 判断当前 tab 是否上试盘子 tab (20261003: 按 pattern 名前缀判定, 不再用下标边界——
+// 上试盘现位于数组中部(11~13), 其后还有周线/看跌, 用下标会误判使计数走 ssp 分支全变 0)
+function _isSspTab(i){
+  const p = MA_PATS[i===undefined?maCurrentTab:i];
+  return !!p && p[0].startsWith('上试盘');
+}
 function _sspPool(i){
-  const off = (i===undefined?maCurrentTab:i) - SSP_KIND_TAB_OFFSET;
-  return ['new_signals','watch_pool','confirmed_pool'][off] || 'new_signals';
+  const p = MA_PATS[i===undefined?maCurrentTab:i];
+  return ({'上试盘·新信号':'new_signals','上试盘·观察池':'watch_pool','上试盘·已确认':'confirmed_pool'})[p?p[0]:''] || 'new_signals';
 }
 // 表格列(头): 均线 5/8 列 vs 上试盘 A/B/C 扩展列
 function renderMAHeaders(){
