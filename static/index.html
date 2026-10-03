@@ -2374,12 +2374,10 @@ async function applyHistSignalsToAnalysisChart(code, bars){
       t.setAttribute('x', xs.toFixed(1));
       t.setAttribute('y', ty.toFixed(1));
       t.setAttribute('text-anchor','middle');
-      t.setAttribute('font-size','5');
+      t.setAttribute('font-size','4');      // (20261003) 小一号: 5→4
       t.setAttribute('font-weight','600');
       t.setAttribute('fill', s.color || '#fff');
-      t.setAttribute('stroke', 'rgba(0,0,0,.9)');   // 深色描边保证5px小字可读
-      t.setAttribute('stroke-width','1.6');
-      t.setAttribute('paint-order','stroke');
+      // (20261003) 去掉深色描边底色: 不再有圆黑包边/底色, 字形不再显得变形
       t.textContent = s.ch || '';
       t.setAttribute('title', (day+' '+ (s.name||'')) );
       g.appendChild(t);
