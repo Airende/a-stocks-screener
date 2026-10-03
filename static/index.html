@@ -6999,9 +6999,9 @@ async function showKlinePreview(code, anchor, period){
     const descTxt = period==='week' ? '周K · 三均线 · 量 · KDJ' : '近半年日K · 三均线 · 量 · KDJ';
     pop.innerHTML = `<div style="padding:6px 10px 2px;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:space-between">
         <div style="display:flex;align-items:center;flex-wrap:wrap">${d.name ? esc(d.name)+' ' : ''}<span class="meta cp-code"  onclick="openTHS('${code}')">${code}</span> ${chgTxt}${pdSwitch}
-        <span class="meta" style="margin-left:6px">${descTxt}</span>
-        <span class="meta sig-status" id="${renderMarkup.c1}_status" style="margin-left:8px;color:#6b7d95">${period==='week'?'':'信号加载中…'}</span></div>
+        <span class="meta" style="margin-left:6px">${descTxt}</span></div>
         <div class="kd-mk-bar">${mkBtns}${ignoreBtn}</div>
+        <span class="meta sig-status" id="${renderMarkup.c1}_status" style="color:#6b7d95">${period==='week'?'':'信号加载中…'}</span>
       </div>
       <div>` + renderMarkup.html + '</div>';
     _kdPlace(pop, anchor);
