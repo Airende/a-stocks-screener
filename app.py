@@ -10705,6 +10705,50 @@ def api_watchlist_sync(payload: dict):
         return JSONResponse({"scope": "all", **{k: {"codes": v} for k, v in result.items()}})
 
 
+# ===== 初筛列表 (20261003): 数据存服务端 kv_state (云端自动共享) =====
+_SL_KV_KEY = "shortlist"
+
+
+def _sl_load() -> list[dict]:
+    """读取初筛列表: 云端 kv_state 权威, 本地文件镜像兜底。返回 items 数组。"""
+    rec = _kv_get(_SL_KV_KEY)
+    if isinstance(rec, dict) and isinstance(rec.get("items"), list):
+        return rec["items"]
+    return []
+
+
+def _sl_save(items: list[dict]) -> None:
+    """写入初筛列表到云端 kv_state (带东八时间戳, 保证跨机比较谁更新)。"""
+    items = [i for i in items if str(i.get("code") or "").strip()]
+    _kv_set(_SL_KV_KEY, {"items": items, "updated_at": bj_now()})
+
+
+@app.get("/api/shortlist")
+def api_shortlist_get():
+    return JSONResponse({"items": _sl_load()})
+
+
+@app.post("/api/shortlist")
+def api_shortlist_save(payload: dict):
+    raw = payload.get("items") or []
+    items = []
+    for it in raw:
+        if not isinstance(it, dict):
+            continue
+        code = str(it.get("code") or "").strip()
+        if not code:
+            continue
+        items.append({
+            "code": code,
+            "name": str(it.get("name") or ""),
+            "price": it.get("price"),
+            "change_pct": it.get("change_pct"),
+            "industry": str(it.get("industry") or ""),
+        })
+    _sl_save(items)
+    return JSONResponse({"items": items})
+
+
 # 等权重指数代理: 三大指数卡片悬浮分时图的黄线 = "全部股票等权平均走势"。
 # 数据源没有与三大指数一一对应的"等权"指数, 故统一采用 中证全指(sh000985)
 # 作为市场等权平均走势的代理 (更贴近全部A股/市场整体的平均表现)。

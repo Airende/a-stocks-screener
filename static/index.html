@@ -4757,9 +4757,20 @@ function _hitLists(code){
   return arr.map(h=>{ const i=h.lastIndexOf('@'); return `<span class="hit-l" style="color:${h.slice(i+1)}">${h.slice(0,i)}</span>`; }).join('');
 }
 // ============ 初筛列表 (20261003) ============
-// code -> {code,name,price,change_pct,industry}; localStorage 持久化
-let shortlist=[]; try{ shortlist=JSON.parse(localStorage.getItem('shortlist_v1')||'[]')||[]; }catch(e){ shortlist=[]; }
-function _slSave(){ try{ localStorage.setItem('shortlist_v1', JSON.stringify(shortlist)); }catch(e){} }
+// code -> {code,name,price,change_pct,industry}; 数据存服务端 kv_state (云端共享)
+let shortlist=[];
+// 页面加载时从服务端拉取初筛列表
+function _slLoad(){
+  fetch('/api/shortlist').then(r=>r.ok?r.json():Promise.reject(r)).then(d=>{
+    if(Array.isArray(d.items)){ shortlist=d.items; _slSyncAllButtons(); renderShortlistPanel(); _slUpdateToggle(); }
+  }).catch(()=>{});
+}
+function _slSave(){
+  try{ fetch('/api/shortlist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:shortlist})}).catch(()=>{}); }catch(e){}
+}
+function _slSyncAllButtons(){
+  shortlist.forEach(x=>_slSyncButtons(x.code));
+}
 function _slSyncButtons(code){
   const inSl=shortlist.some(x=>x.code===code);
   document.querySelectorAll('.sl-btn[data-code="'+code+'"]').forEach(b=>{
@@ -4806,7 +4817,7 @@ function _slTogglePanel(){ document.getElementById('slPanel').classList.toggle('
 function initShortlist(){
   if(document.getElementById('slToggle')) return;
   const t=document.createElement('div'); t.id='slToggle'; t.title='初筛列表'; t.textContent='初筛 0'; t.onclick=_slTogglePanel;
-  const p=document.createElement('div'); p.id='slPanel';
+  const p=document.createElement('div'); p.id='slPanel'; p.className='hide';  // 默认收起 (20261003)
   p.innerHTML='<div id="slHead" class="sl-head"><span>初筛列表 <b id="slCnt" style="color:var(--txt)">0</b></span><span class="sl-close" title="收起">×</span></div><div id="slBody" class="sl-body"></div>';
   document.body.appendChild(t); document.body.appendChild(p);
   p.querySelector('.sl-close').onclick=_slTogglePanel;
@@ -4820,7 +4831,7 @@ function initShortlist(){
       document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up);
     });
   })();
-  renderShortlistPanel(); _slUpdateToggle();
+  renderShortlistPanel(); _slUpdateToggle(); _slLoad();  // 页面装载时从服务端拉取初筛数据
 }
 // 序号点击委托: 加入/移出初筛列表
 document.addEventListener('click', e=>{
