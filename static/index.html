@@ -4731,10 +4731,10 @@ function maRowHtml(s,i){
     const newHigh = posPct > 100 ? ' <span style="color:var(--up);font-weight:700">· 新高</span>' : '';
     weeklyLine = `<div class="code" style="color:var(--sub);font-size:11px">52周位:<span style="color:${posColor}">${posPct.toFixed(2)}%</span>${newHigh}${boostTag}</div>`;
   }
-  // 热度标注 (20260925): 行业/所属板块 5日均涨(列表内成分股聚合)
+  // 热度标注 (20260925): 板块(所属板块) 5日均涨(列表内成分股聚合)
+  // 20261003: 行业列不再显示涨跌幅热度徽标(简化), 仅保留板块列
   let indHeat='', conHeat='';
   if(window._heatGroups){
-    indHeat = heatBadgeHtml(heatAvgOf(window._heatGroups.ind[s.industry||'—']||[]), '行业5日均涨(列表内成分)');
     let best=null, bestName='';
     maSplitConcept(s.concept).forEach(sub=>{
       const a=heatAvgOf(window._heatGroups.con[sub]||[]);
@@ -4756,7 +4756,7 @@ function maRowHtml(s,i){
     <td class="l">${markNameHtml(s.code,s.name,s.price)}<div class="code"><a class="cd-link"  href="https://stockpage.10jqka.com.cn/${s.code}/" target="_blank" rel="noopener" onclick="openStock('${s.code}','${s.name}',event)">${mkt(s.code)}</a></div>${weeklyLine}${divStar}</td>
     <td class="ma-c">${p2(s.price)}</td>
     <td class="ma-c">${fmtPct(s.change_pct)}</td>
-    <td class="l col-opt">${indHtml}${indHeat}</td>
+    <td class="l col-opt">${indHtml}</td>
     <td class="l col-opt">${conHtml}${conHeat}</td>
     <td class="ma-c"><span class="kdot" style="color:var(--sub)">日</span>${jv(s.day_j)}<span style="color:var(--sub)">/</span><span class="kdot" style="color:var(--sub)">周</span>${jv(s.week_j)}</td>
     <td class="ma-c">${s.atr_pct!=null? '<span style="color:'+(s.atr_pct>=8?'var(--up)':(s.atr_pct<4?'var(--sub)':'var(--gold)'))+'">'+s.atr_pct+'%</span>':'—'}</td>
