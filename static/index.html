@@ -491,6 +491,8 @@
   /* 均线形态列表: 数字列居中 (现价/今日涨跌/日J/周J/成交额/ATR%) 20260930 */
   #tblMA td.ma-c{text-align:center}
   .ma-grp-badge{display:inline-block;font-size:10px;color:var(--sub);background:var(--tag);border-radius:3px;padding:0 4px;margin-left:4px}
+  /* 所属列表胶囊 (20261003): 该股命中的分组, 边框随分组主色 */
+  .hit-l{display:inline-block;font-size:10px;font-weight:600;line-height:1.3;padding:1px 5px;margin:1px 3px 1px 0;border-radius:3px;border:1px solid currentColor;background:transparent;white-space:nowrap}
   /* 日周共振/埋伏型标签 (20260920): 共振=淡金(淡化), 周线回踩/底部反转=中性底色 */
   .res-tag{display:inline-block;font-size:10px;font-weight:600;border-radius:3px;padding:0 4px;margin-left:4px;vertical-align:middle}
   .res-tag.syn{color:#d8b84a;background:linear-gradient(180deg,rgba(245,200,66,.14),rgba(224,160,56,.10));border:1px solid rgba(245,200,66,.25)}
@@ -4390,6 +4392,7 @@ function renderMAHeaders(){
     el.innerHTML = `
       <th class="l ma-th" data-sort="default" >#</th>
       <th class="l ma-th" data-sort="default" >股票</th>
+      <th class="l ma-th" data-sort="default" >所属列表</th>
       <th class="ma-th" data-sort="price">现价 <span class="sort-arrow"></span></th>
       <th class="ma-th" data-sort="chg">涨跌 <span class="sort-arrow"></span></th>
       <th class="l ma-th col-opt" data-sort="industry" >行业 <span class="sort-arrow"></span></th>
@@ -4708,6 +4711,27 @@ function sspRowHtml(s, i, pool){
   </tr>`;
 }
 // 单行渲染
+// 所属列表反查: code -> 该股今天命中的分组(显示名+分组主色), 惰性按数据版本重建 (20261003)
+let _codeHitMap=null, _codeHitSig='';
+const _GRP_COLOR={'grp-day':'#ff6b5e','grp-rise':'#ffab40','grp-chan':'#c084fc','grp-week':'#2ec6ff','grp-day alt':'#2fbf9f','ssp':'#f5c842'};
+function _hitLists(code){
+  const md=maData;
+  if(!md||!md.patterns) return '';
+  const sig=(md.updated||'')+'/'+(md.total_stocks||'');
+  if(_codeHitSig!==sig){ _codeHitSig=sig; _codeHitMap={};
+    Object.keys(md.patterns).forEach(pat=>{
+      const pi=MA_PATS.findIndex(p=>p[0]===pat);
+      const disp=(pi>=0?DISP_MA_NAME[pi]:pat);
+      let grp=_MA_GRP_MAP[pat]||''; if(!grp){ grp=pat.startsWith('上试盘')?'ssp':'grp-day'; }
+      (md.patterns[pat]||[]).forEach(s=>{
+        (_codeHitMap[s.code]=_codeHitMap[s.code]||[]).push(disp+'@'+(_GRP_COLOR[grp]||'#9fb0c6'));
+      });
+    });
+  }
+  const arr=_codeHitMap[code]||[];
+  if(!arr.length) return '<span class="hit-l" style="color:var(--sub)">—</span>';
+  return arr.map(h=>{ const i=h.lastIndexOf('@'); return `<span class="hit-l" style="color:${h.slice(i+1)}">${h.slice(0,i)}</span>`; }).join('');
+}
 function maRowHtml(s,i){
   // 行业/板块列: 聚合排序时显示分组计数徽标
   let indHtml = s.industry||'—';
@@ -4754,6 +4778,7 @@ function maRowHtml(s,i){
   return `<tr class="${curPat==='低位启动前'?'early-row':''}">
     <td class="l">${i+1}</td>
     <td class="l">${markNameHtml(s.code,s.name,s.price)}<div class="code"><a class="cd-link"  href="https://stockpage.10jqka.com.cn/${s.code}/" target="_blank" rel="noopener" onclick="openStock('${s.code}','${s.name}',event)">${mkt(s.code)}</a></div>${weeklyLine}${divStar}</td>
+    <td class="l">${_hitLists(s.code)}</td>
     <td class="ma-c">${s.price>220?`<span style="color:var(--up);font-weight:700">${p2(s.price)}</span>`:(s.price>120?`<span style="color:var(--gold);font-weight:600">${p2(s.price)}</span>`:p2(s.price))}</td>
     <td class="ma-c">${fmtPct(s.change_pct)}</td>
     <td class="l col-opt">${indHtml}</td>
