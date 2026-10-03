@@ -493,6 +493,33 @@
   .ma-grp-badge{display:inline-block;font-size:10px;color:var(--sub);background:var(--tag);border-radius:3px;padding:0 4px;margin-left:4px}
   /* 所属列表胶囊 (20261003): 该股命中的分组, 边框随分组主色 */
   .hit-l{display:inline-block;font-size:9px;font-weight:700;line-height:1.2;padding:0 3px;margin:1px 2px 1px 0;border-radius:3px;border:1px solid currentColor;background:transparent;white-space:nowrap}
+  /* 初筛列表序号按钮 (20261003): 未加入 hover→红+ 已加入 hover→绿− */
+  .sl-btn{position:relative;cursor:pointer;user-select:none;display:inline-block;min-width:18px;text-align:center;font-weight:600}
+  .sl-btn:hover{color:#fff}
+  .sl-btn > .n{display:inline}
+  .sl-btn > .ic{display:none;font-weight:800}
+  .sl-btn:hover > .n{display:none}
+  .sl-btn:hover > .ic{display:inline}
+  .sl-btn > .ic{color:var(--up)}
+  .sl-btn.in > .ic{color:var(--down)}
+  /* 初筛列表浮动面板 (20261003): 可拖动, 悬于整个页面 */
+  #slToggle{position:fixed;left:16px;bottom:14px;z-index:1002;padding:8px 14px;border-radius:8px;background:var(--panel2);border:1px solid var(--border);color:var(--txt);font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.4)}
+  #slToggle:hover{border-color:var(--accent);color:var(--accent)}
+  #slPanel{position:fixed;left:16px;bottom:58px;width:380px;max-width:92vw;display:flex;flex-direction:column;max-height:58vh;background:var(--panel);border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 34px rgba(0,0,0,.55);z-index:1001}
+  #slPanel.hide{display:none}
+  #slHead{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;cursor:grab;border-bottom:1px solid var(--border);font-weight:700;background:var(--panel2);border-radius:10px 10px 0 0;user-select:none;color:var(--gold)}
+  #slHead:active{cursor:grabbing}
+  #slHead .sl-close{cursor:pointer;color:var(--sub);font-weight:700;padding:0 5px;font-size:14px}
+  #slHead .sl-close:hover{color:#fff}
+  #slBody{overflow:auto;padding:6px}
+  .sl-empty{color:var(--sub);font-size:12px;text-align:center;padding:24px 0}
+  .sl-row{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;font-size:12px}
+  .sl-row:hover{background:var(--panel2)}
+  .sl-row .sl-idx{cursor:pointer;color:var(--down);font-weight:800;user-select:none;min-width:14px;text-align:center;font-size:14px}
+  .sl-row .sl-idx:hover{color:#fff}
+  .sl-row a.nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
+  .sl-row .sl-p{font-variant-numeric:tabular-nums;min-width:52px;text-align:right}
+  .sl-row .sl-c{min-width:58px;text-align:right;font-variant-numeric:tabular-nums}
   /* 日周共振/埋伏型标签 (20260920): 共振=淡金(淡化), 周线回踩/底部反转=中性底色 */
   .res-tag{display:inline-block;font-size:10px;font-weight:600;border-radius:3px;padding:0 4px;margin-left:4px;vertical-align:middle}
   .res-tag.syn{color:#d8b84a;background:linear-gradient(180deg,rgba(245,200,66,.14),rgba(224,160,56,.10));border:1px solid rgba(245,200,66,.25)}
@@ -4697,7 +4724,7 @@ function sspRowHtml(s, i, pool){
   }
   // SSP 行没有 bs_signal 字段（未来可选），不调用 analyze_buy_sell 避免耗时
   return `<tr>
-    <td class="l">${i+1}</td>
+    <td class="l">${slBtnHtml(i,s)}</td>
     <td class="l">${nmLink}</td>
     <td class="l col-opt">${s.industry||'—'}</td>
     <td class="l col-opt">${s.concept||'—'}</td>
@@ -4729,6 +4756,80 @@ function _hitLists(code){
   if(!arr.length) return '<span class="hit-l" style="color:var(--sub)">—</span>';
   return arr.map(h=>{ const i=h.lastIndexOf('@'); return `<span class="hit-l" style="color:${h.slice(i+1)}">${h.slice(0,i)}</span>`; }).join('');
 }
+// ============ 初筛列表 (20261003) ============
+// code -> {code,name,price,change_pct,industry}; localStorage 持久化
+let shortlist=[]; try{ shortlist=JSON.parse(localStorage.getItem('shortlist_v1')||'[]')||[]; }catch(e){ shortlist=[]; }
+function _slSave(){ try{ localStorage.setItem('shortlist_v1', JSON.stringify(shortlist)); }catch(e){} }
+function _slSyncButtons(code){
+  const inSl=shortlist.some(x=>x.code===code);
+  document.querySelectorAll('.sl-btn[data-code="'+code+'"]').forEach(b=>{
+    b.classList.toggle('in',inSl);
+    b.querySelector('.ic').textContent=inSl?'−':'+';
+    b.title=inSl?'已加入初筛 · 点击移出':'点击加入初筛列表';
+  });
+}
+function toggleShortlist(s){
+  const i=shortlist.findIndex(x=>x.code===s.code);
+  if(i>=0){ shortlist.splice(i,1); } else {
+    shortlist.push({code:s.code,name:s.name,price:Number(s.price)||0,change_pct:isFinite(+s.change_pct)?+s.change_pct:null,industry:s.industry||''});
+  }
+  _slSave(); _slSyncButtons(s.code); renderShortlistPanel(); _slUpdateToggle();
+}
+function removeShortlist(code){
+  const i=shortlist.findIndex(x=>x.code===code);
+  if(i>=0){ shortlist.splice(i,1); _slSave(); _slSyncButtons(code); renderShortlistPanel(); _slUpdateToggle(); }
+}
+function slBtnHtml(i, s){
+  const inSl=shortlist.some(x=>x.code===s.code);
+  const nm=String(s.name||'').replace(/'/g,"\\'").replace(/"/g,'&quot;');
+  const ind=String(s.industry||'').replace(/'/g,"\\'").replace(/"/g,'&quot;');
+  return `<span class="sl-btn${inSl?' in':''}" data-code="${s.code}" data-name="${nm}" data-price="${s.price!=null?s.price:''}" data-chg="${s.change_pct!=null?s.change_pct:''}" data-ind="${ind}" title="${inSl?'已加入初筛 · 点击移出':'点击加入初筛列表'}"><i class="n">${i+1}</i><b class="ic">${inSl?'−':'+'}</b></span>`;
+}
+function renderShortlistPanel(){
+  const body=document.getElementById('slBody'); if(!body) return;
+  const cnt=document.getElementById('slCnt'); if(cnt) cnt.textContent=shortlist.length;
+  body.innerHTML=shortlist.length? shortlist.map((s,i)=>{
+    const nm=String(s.name||'').replace(/'/g,"\\'").replace(/"/g,'&quot;');
+    return `<div class="sl-row">
+      <span class="sl-idx" data-code="&#x${s.code.charCodeAt(0)>0?'':'0'}" title="点击移出初筛" onclick="removeShortlist('${s.code}')">−</span>
+      <a class="nm" data-code="${s.code}" onclick="gotoStockAnalyze('${s.code}','${nm}')" title="${nm}">${esc(s.name||'—')}</a>
+      <span class="sl-p">${p2(s.price)}</span>
+      <span class="sl-c">${fmtPct(s.change_pct)}</span>
+      <span>${esc(s.industry||'—')}</span>
+    </div>`;
+  }).join('') : '<div class="sl-empty">暂无初筛股票<br/>点击列表序号 <b style="color:var(--up)">+</b> 加入</div>';
+}
+function _slUpdateToggle(){
+  const t=document.getElementById('slToggle'); if(t) t.textContent='初筛 '+(shortlist.length||0);
+}
+function _slTogglePanel(){ document.getElementById('slPanel').classList.toggle('hide'); }
+function initShortlist(){
+  if(document.getElementById('slToggle')) return;
+  const t=document.createElement('div'); t.id='slToggle'; t.title='初筛列表'; t.textContent='初筛 0'; t.onclick=_slTogglePanel;
+  const p=document.createElement('div'); p.id='slPanel';
+  p.innerHTML='<div id="slHead" class="sl-head"><span>初筛列表 <b id="slCnt" style="color:var(--txt)">0</b></span><span class="sl-close" title="收起">×</span></div><div id="slBody" class="sl-body"></div>';
+  document.body.appendChild(t); document.body.appendChild(p);
+  p.querySelector('.sl-close').onclick=_slTogglePanel;
+  (function drag(){
+    const head=document.getElementById('slHead');
+    head.addEventListener('mousedown',e=>{
+      if(e.target.closest('.sl-close')) return;
+      const sx=e.clientX, sy=e.clientY, r=p.getBoundingClientRect(), ox=r.left, oy=r.top;
+      const mv=ev=>{ p.style.left=(ox+ev.clientX-sx)+'px'; p.style.top=(oy+ev.clientY-sy)+'px'; p.style.bottom='auto'; };
+      const up=()=>{ document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); };
+      document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up);
+    });
+  })();
+  renderShortlistPanel(); _slUpdateToggle();
+}
+// 序号点击委托: 加入/移出初筛列表
+document.addEventListener('click', e=>{
+  const b=e.target && e.target.closest ? e.target.closest('.sl-btn') : null;
+  if(!b) return;
+  e.stopPropagation();
+  toggleShortlist({code:b.dataset.code, name:b.dataset.name, price:b.dataset.price, change_pct:b.dataset.chg, industry:b.dataset.ind});
+});
+initShortlist();  // 页面装载即建好可拖动初筛面板
 function maRowHtml(s,i){
   // 行业/板块列: 聚合排序时显示分组计数徽标
   let indHtml = s.industry||'—';
@@ -4773,7 +4874,7 @@ function maRowHtml(s,i){
     ? `<div class="code" style="font-size:11px;font-weight:700;color:var(--gold)" title="急跌型强档：背离低点那根的 K=${Number(s.div_k).toFixed(1)}（≤20）。该子集样本内外都为正（前段+4.44%/后段+4.34%），但全市场日均只出约 3.9 只，故只做标注、不过滤。">★ 急跌型<span style="font-weight:400;color:var(--sub)"> K=${Number(s.div_k).toFixed(1)}</span>${s.div_ago!=null?`<span style="font-weight:400;color:var(--sub)"> · ${s.div_ago===0?'当日':s.div_ago+'日前'}</span>`:''}</div>`
     : '';
   return `<tr class="${curPat==='低位启动前'?'early-row':''}">
-    <td class="l">${i+1}</td>
+    <td class="l">${slBtnHtml(i,s)}</td>
     <td class="l">${markNameHtml(s.code,s.name,s.price)}<div class="code"><a class="cd-link"  href="https://stockpage.10jqka.com.cn/${s.code}/" target="_blank" rel="noopener" onclick="openStock('${s.code}','${s.name}',event)">${mkt(s.code)}</a></div>${weeklyLine}${divStar}</td>
     <td class="l">${_hitLists(s.code)}</td>
     <td class="ma-c">${s.price>220?`<span style="color:var(--up);font-weight:700">${p2(s.price)}</span>`:(s.price>120?`<span style="color:var(--gold);font-weight:600">${p2(s.price)}</span>`:p2(s.price))}</td>
