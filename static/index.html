@@ -1414,7 +1414,9 @@ function bindChartInteractivity(rootEl){
       const rect = div.getBoundingClientRect();
       const vx = (ev.clientX - rect.left) / rect.width * reg.w;  // 视口坐标→viewBox坐标(preserveAspectRatio=none)
       const vy = (ev.clientY - rect.top) / rect.height * reg.h;
-      const xStep = (reg.w - reg.padL - reg.padR) / reg.n;
+      // (20261003) 若图右侧预留了空槽位(如缠论图 padN=8), 需用 effective 槽位数 total,
+      // 否则按 n 算出的 xStep 与绘制(K线已左移)不一致 → 悬浮命中的 bar 会错位。
+      const xStep = (reg.w - reg.padL - reg.padR) / (reg.total || reg.n);
       // 对齐模式 (20260925): 周/月图的蜡烛按"末个交易日"定位在公共时间轴上,
       // 悬停命中 = 先算公共时间轴下标, 再找覆盖该日期的本图bar
       let i;
@@ -1476,7 +1478,7 @@ function bindChartInteractivity(rootEl){
             for(const c of g.charts){
               const cv=c.svg.querySelector('.xhair');
               if(!cv||c.div===div) continue;   // 自己的已在上方设置
-              const r=c.reg; const st=(r.w-r.padL-r.padR)/r.n;
+              const r=c.reg; const st=(r.w-r.padL-r.padR)/(r.total||r.n);
               const x = r.xi ? r.xi(i) : (r.padL+i*st+st/2);
               cv.setAttribute('x1',x.toFixed(1)); cv.setAttribute('x2',x.toFixed(1));
               cv.style.display='';
@@ -3978,10 +3980,10 @@ function buildChanChart(bars, chan){
     _sqT(padL+442, 12, 'fill="#4f9dff" font-size="10"', 'MA10')+
     _sqT(padL+486, 12, 'fill="#a06bff" font-size="10"', 'MA20');
   const cid='chan'+(++_chartSeq);
-  _chartReg[cid]={bars, w, padL, padR, padT, padB, n, h, hi:yHi, lo:yLo};
+  _chartReg[cid]={bars, w, padL, padR, padT, padB, n, h, hi:yHi, lo:yLo, xi, total:ts};
   // 成交量+KDJ+MACD 副图 (20261003): 移到缠论 K 线图下方, 按 成交量→KDJ→MACD 顺序, 与主图共用 x 映射对齐
-  const chanSubs=kdSubPanels(bars, {w, padL, padR, xi, bw, opt:{}, stretch:true, kX});
-  const chanMacd=macdPanelHtml({bars, w, padL, padR, n, xStep, bw, kX, h:140});
+  const chanSubs=kdSubPanels(bars, {w, padL, padR, xi, bw, opt:{}, stretch:true, kX, total:ts});
+  const chanMacd=macdPanelHtml({bars, w, padL, padR, n, xStep, bw, kX, h:140, total:ts});
   return `<div class="sa-chart" id="${cid}" style="height:${h}px">
     <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:100%" preserveAspectRatio="none">
       ${gridLines}${bands}${candles}${maChanHtml}${strokeEl}${segEl}${priceLine}${sigMarks}${dateTxt}${legend}
@@ -6582,7 +6584,7 @@ function kdSubPanels(bars, cfg){
     for(let j=Math.max(0,i-5);j<i;j++){ s+=bars[j].volume; c++; }
     vr.push(c?bars[i].volume/(s/c):1); }
   const cid2='kd'+(++_chartSeq);
-  _chartReg[cid2]={bars, w, h:h2, padL, padR, n, sync:syncName,
+  _chartReg[cid2]={bars, w, h:h2, padL, padR, n, xi, total:(cfg.total||n), sync:syncName,
     tipFn:(b,i)=>{ const r=vr[i];
       const tag=r>=1.5?'<span style="color:#ff4d4f">放量</span>':(r<=0.8?'<span style="color:#26a69a">缩量</span>':'平量');
       const dayKey=(b.day||'').slice(0,10);
@@ -6623,7 +6625,7 @@ function kdSubPanels(bars, cfg){
     return `<line x1="${padL}" y1="${yFn3(v).toFixed(1)}" x2="${w-padR}" y2="${yFn3(v).toFixed(1)}" stroke="${col}" stroke-dasharray="3,2"/>`+lbl;
   }).join('');
   const cid3='kd'+(++_chartSeq);
-  _chartReg[cid3]={bars, w, h:h3, padL, padR, n, sync:syncName,
+  _chartReg[cid3]={bars, w, h:h3, padL, padR, n, xi, total:(cfg.total||n), sync:syncName,
     tipFn:(b,i)=>{ const dv=kDivAt[i], bl=kBluntAt[i];
       const dvTag=dv? (dv.type==='top'
           ? ` <span style="color:${_DIV_TOP};font-weight:${dv.strong?'700':'400'}">顶背离</span><span style="color:#8b97a8">(${dv.strong?'强':'弱'}${dv.blunt?' · 钝化内·弱化':''} · J ${(+J[dv.ref]).toFixed(1)}→${(+J[i]).toFixed(1)})</span>`
@@ -6729,7 +6731,7 @@ function macdPanelHtml(cfg){
       p+=(st?'L':'M')+xi(i).toFixed(1)+','+yFn(arr[i]).toFixed(1)+' '; st=true; }
     return p; };
   const cid='macd'+(++_chartSeq);
-  _chartReg[cid]={bars, w, padL, padR, padT, padB, n, h,
+  _chartReg[cid]={bars, w, padL, padR, padT, padB, n, h, xi, total:(cfg.total||n),
     tipFn:(b,i)=>{ const dv=mDivAt[i];
       const dvTag=dv? (dv.type==='top'
           ? ` <span style="color:${_DIV_TOP};font-weight:${dv.strong?'700':'400'}">顶背离</span><span style="color:#8b97a8">(${dv.strong?'强':'弱'} · DIF ${(+difA[dv.ref]).toFixed(3)}→${(+difA[i]).toFixed(3)})</span>`
