@@ -1487,6 +1487,8 @@ function bindChartInteractivity(rootEl){
     });
     div.addEventListener('mouseleave', ()=>{ tip.style.display='none'; vline.style.display='none'; hline.style.display='none'; hlbl.style.display='none'; if(rngLive){ rngLive=false; if(rngSel) rngShow(); } if(reg.sync && _xhairSync[reg.sync]) for(const c of _xhairSync[reg.sync].charts){ const cv=c.svg.querySelector('.xhair'); if(cv) cv.style.display='none'; } });
     // ---- 拉区间看涨跌幅 (20260925): 按住拖选两根K线, 实时显示区间涨跌幅/起止日期/交易日数 ----
+    // 仅主K线图启用(rng标记); 副图(量/KDJ/MACD)不响应拖选
+    if(reg.rng){
     let rngSel=null, rngLive=false;
     let rngRect=svg.querySelector('.rng-sel');
     if(!rngRect){
@@ -1575,6 +1577,7 @@ function bindChartInteractivity(rootEl){
       if(rngLive && rngSel){ rngSel.b=rngIdx(ev); rngShow(); }
     });
     window.addEventListener('mouseup', ()=>{ if(rngLive){ rngLive=false; if(rngSel) rngShow(); } });
+    }   // end if(reg.rng)
   });
 }
 // ---- SSE 实时事件 (20260906): 订阅 /api/events, ts 变化才拉全量数据; 原有轮询保留作断连兜底 ----
@@ -2315,20 +2318,26 @@ async function applyHistSignalsToAnalysisChart(code, bars){
   const vb = svg.viewBox && svg.viewBox.baseVal ? svg.viewBox.baseVal : (svg.getAttribute('viewBox')||'').split(/[ ,]+/);
   const vbW = svg.viewBox && svg.viewBox.baseVal ? svg.viewBox.baseVal.width : Number(vb[2]);
   if(Math.round(vbW) !== 800) return;
-  // 坐标映射 (与 applySSPMarkersToAnalysisChart 一致)
-  const w=800, h=280, padL=8, padR=8, padT=40, padB=18;
-  const n = bars.length;
+  // 坐标映射改为按目标图注册表(_chartReg)驱动 (20261003): 换位后信号标识
+  // 自动落到面板内第一张图(缠论图), 用该图自己的高度/边距/极值定位, 不再写死日K主图几何
+  const hostDiv = svg.closest('.sa-chart');
+  const reg = hostDiv ? _chartReg[hostDiv.id] : null;
+  const w=800, padL=8, padR=8;
+  const n = reg ? reg.n : bars.length;
   if(n<2) return;
-  const hi = Math.max(...bars.map(b=>b.high));
-  const lo = Math.min(...bars.map(b=>b.low));
+  const hi = reg ? reg.hi : Math.max(...bars.map(b=>b.high));
+  const lo = reg ? reg.lo : Math.min(...bars.map(b=>b.low));
   const rng = (hi-lo) || 1;
+  const padT = reg ? reg.padT : 40, padB = reg ? reg.padB : 18;
+  const h = reg ? reg.h : 280;
   const plotW = w-padL-padR, plotH = h-padT-padB;
   const xStep = plotW/n;
   const yFn = v => padT + (hi-v)/rng*plotH;
   const xFn = i => padL + i*xStep + xStep/2;
-  // 日期→bars 索引映射
+  // 日期→bars 索引映射 (用目标图自己的bars, 与其x映射一致) (20261003)
+  const dayBars = (reg && reg.bars && reg.bars.length>=2) ? reg.bars : bars;
   const dayIdx = {};
-  bars.forEach((b,i)=>{ if(b.day) dayIdx[b.day]=i; });
+  dayBars.forEach((b,i)=>{ if(b.day) dayIdx[b.day]=i; });
   const g = document.createElementNS(svgNS,'g');
   g.setAttribute('class','hist-signal-markers');
   let drawn=0;
@@ -2339,7 +2348,7 @@ async function applyHistSignalsToAnalysisChart(code, bars){
     const sigs = drow.signals || [];
     if(!sigs.length) continue;
     const xs = xFn(idx);
-    const ys = yFn(bars[idx].high);
+    const ys = yFn(dayBars[idx].high);
     // 该日多信号竖向排列, 簇整体以K线最高价上方为中心向上/下延伸
     // 20260921b: 标识离K线更高价更远(间隙 -3 → -9), 避免贴柱
     const startY = ys - 9;
@@ -3580,11 +3589,11 @@ function renderAnalysis(d){
     </div>
     ${boardHtml}${bizHtml}
     <div class="sa-grid">${gridHtml}</div>
-    ${chartHtml}
+    ${chanHtml}
     ${multiTfHtml}
     ${weekChartHtml}
     ${monthChartHtml}
-    ${chanHtml}
+    ${chartHtml}
     ${vpSystemHtml}
     ${bsHtml}
     <div class="sec-h" style="margin-top:16px;font-size:14px">技术分析</div>
@@ -3739,7 +3748,7 @@ function buildMiniChart(bars, pivots, opt){
   const cid='chart'+(++_chartSeq);
   _chartReg[cid]={bars, w, padL, padR, padT, padB, n, h, hi, lo,
     xi, alignPos: align?align.pos:null, alignTotal: align?align.total:n,
-    sync: (opt&&opt.sync)||null,
+    sync: (opt&&opt.sync)||null, rng:1,
     idxForDi: align? (di=>{ for(let k=n-1;k>=0;k--){ const b=bars[k]; const s0=align.pos[b._s], e0=align.pos[b._e];
         if(s0!=null&&e0!=null&&di>=s0&&di<=e0) return k; } return Math.min(n-1,di); }) : (di=>di)};
   // ---- ZigZag 转折点叠加 (波峰▼/波谷▲ + 折线) ----
@@ -3961,18 +3970,32 @@ function buildChanChart(bars, chan){
   // 日期轴: 跨月区间统一标 MM-DD (30分图同样跨多交易日, 只标时间无法定位日期)
   const dateTxt=[0,Math.floor(n/2),n-1].filter((v,i,a)=>a.indexOf(v)===i).map(i=>
     _sqT(xi(i), h-4, 'fill="#5a6a82" font-size="9" text-anchor="middle"', (bars[i].day||'').slice(5,10))).join('');
+  // MA5/10/20 均线 (20261003): 缠论K线上叠加均线, 与主图同色系
+  const closesC=bars.map(b=>+b.close);
+  const smaC=(arr,p)=>{ const r=new Array(arr.length).fill(NaN); let s=0;
+    for(let i=0;i<arr.length;i++){ s+=arr[i]; if(i>=p) s-=arr[i-p]; if(i>=p-1) r[i]=s/p; }
+    return r; };
+  const ma5c=smaC(closesC,5), ma10c=smaC(closesC,10), ma20c=smaC(closesC,20);
+  const maChanPath=(arr,col,wd)=>{ let p='',st=false;
+    for(let i=0;i<n;i++){ if(isNaN(arr[i])) continue;
+      p+=(st?'L':'M')+xi(i).toFixed(1)+','+y(arr[i]).toFixed(1)+' '; st=true; }
+    return p?`<path d="${p}" fill="none" stroke="${col}" stroke-width="${wd}" opacity="0.85"/>`:''; };
+  const maChanHtml=maChanPath(ma5c,'#f5c842',1.1)+maChanPath(ma10c,'#4f9dff',1.1)+maChanPath(ma20c,'#a06bff',1.1);
   const legend=_sqT(padL, 12, 'fill="#9fb0c6" font-size="10"', 'K线')+
     _sqT(padL+40, 12, 'fill="#e8eef6" font-size="10"', '— 笔')+
     _sqT(padL+90, 12, 'fill="#f5c842" font-size="10"', '— 线段')+
     _sqT(padL+150, 12, 'fill="#f5c842" font-size="10"', '┈ 未确认')+
     _sqT(padL+212, 12, 'fill="#a06bff" font-size="10"', '▭ 中枢')+
     _sqT(padL+282, 12, 'fill="#ff4d4f" font-size="10"', '▲ 买点')+
-    _sqT(padL+342, 12, 'fill="#26a69a" font-size="10"', '▼ 卖点');
+    _sqT(padL+342, 12, 'fill="#26a69a" font-size="10"', '▼ 卖点')+
+    _sqT(padL+402, 12, 'fill="#f5c842" font-size="10"', 'MA5')+
+    _sqT(padL+442, 12, 'fill="#4f9dff" font-size="10"', 'MA10')+
+    _sqT(padL+486, 12, 'fill="#a06bff" font-size="10"', 'MA20');
   const cid='chan'+(++_chartSeq);
   _chartReg[cid]={bars, w, padL, padR, padT, padB, n, h, hi:yHi, lo:yLo};
   return `<div class="sa-chart" id="${cid}" style="height:${h}px">
     <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:100%" preserveAspectRatio="none">
-      ${gridLines}${bands}${candles}${strokeEl}${segEl}${priceLine}${sigMarks}${dateTxt}${legend}
+      ${gridLines}${bands}${candles}${maChanHtml}${strokeEl}${segEl}${priceLine}${sigMarks}${dateTxt}${legend}
     </svg>
   </div>`+
   // MACD 副图 (20261002): 复用可复用版, 与主图X轴对齐
@@ -4221,7 +4244,7 @@ const MA_PATS=[
   ['多头排列','MA5>MA10>MA20>MA60，四线今日均>5日前，收盘≥MA10，多头排列持续≥5日（稳健型）'],
   ['多头排列向上发散','MA5>MA10>MA20，三线同步上行，间距扩大（不含MA60，宽松版）'],
   ['粘合向上突破','近3日MA5/MA10/MA20间距<1.5%(粘合)，现转为多头排列，突破启动'],
-  ['地量低价','极致底量低价(精炼)：量=击穿近60日地量(≤min×1.15)或量比≤0.6（满足其一）；价=收盘处于近半年高低区间下沿18%；且止跌企稳(近10日未破前20日最低)+持续缩量(近10日均量≤60日均量×0.75)。地量=卖压枯竭，观察信号，买点等其后放量阳线确认'],
+  ['地量低价','极致底量低价(精炼)：量=击穿近60日地量(≤min×1.15)或量比≤0.6（满足其一）；价=收盘处于近半年高低区间下沿18%；且止跌企稳(近10日未破前20日最低)+持续缩量(近10日均量≤60日均量×0.75)+周K末完成笔向下、当前构建笔向上。地量=卖压枯竭，观察信号，买点等其后放量阳线确认'],
   // 周线均线形态 (A + 埋伏二合一, 20260920 原B/C合并为'周线·埋伏')
   ['周线A·强势主升','周线多头排列(MA5>MA10>MA20) + MA20连续4周上行 + 收盘>MA10 + 距52周高回撤<15%；否决：收盘<MA20/MA20向下/空头排列/52周位<0.5'],
   ['周线·埋伏','周线低位埋伏(原B趋势回踩+C底部反转合并)：B=上升趋势中回踩20周线低吸(MA20/MA60向上+收盘≥MA20距MA20在0~+5%+距52周高回撤<25%)；C=底部反转初期(MA20由平转升+近4周金叉+放量>20周均量×1.5+距52周低涨>20%)'],
@@ -6862,7 +6885,7 @@ function kdMultiChart(bars, opt){
     }
     return out;
   };
-  _chartReg[cid1]={bars, w, h:h1, padL, padR, n, sync:syncName,
+  _chartReg[cid1]={bars, w, h:h1, padL, padR, n, rng:1, sync:syncName,
     tipFn:(b)=>{ const c=(b.chg!=null&&!isNaN(b.chg));
       const lim=limitDays[(b.day||'').slice(0,10)];
       const limTag=lim==='up'?' <span style="color:#ff4d4f;font-weight:700">涨停</span>':(lim==='down'?' <span style="color:#26a69a;font-weight:700">跌停</span>':'');

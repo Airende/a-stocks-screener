@@ -6492,6 +6492,26 @@ def _apply_frozen_today_bar(bars: list[dict], symbol: str, today_date: str,
     return bars
 
 
+def _weekly_stroke_state_ok(bars: list[dict]) -> bool:
+    """日·地量低价附加条件 (20261003): 周K最后完成笔为向下笔, 且当前未完成笔向上(构建中)。
+    语义: 下跌笔刚走完、正构筑向上笔 = 底部反转构建期, 而非仍在下跌途中。
+    复用缠论笔判定(_chan_merge/_chan_fractals/_chan_strokes)作用于周K;
+    数据不足(周K<8根)或结构不明返回False。"""
+    weekly = _aggregate_weekly(bars)
+    if len(weekly) < 8:
+        return False
+    merged = _chan_merge(weekly)
+    fracs = _chan_fractals(merged)
+    pts = _chan_strokes(fracs, "auto")
+    if len(pts) < 2:
+        return False
+    # 最后完成笔向下: 前一分型(顶)价 > 末分型(底)价
+    if not (pts[-2]["price"] > pts[-1]["price"]):
+        return False
+    # 未完成笔向上: 现价高于末分型(底)价 → 正构筑向上笔
+    return float(weekly[-1]["close"]) > float(pts[-1]["price"])
+
+
 def classify_bottom_volume(bars: list[dict]) -> bool:
     """极致底量低价 (20260927, 近5日回溯版): 判定最近5个交易日内是否有任一K线出过"底量低价"。
     基础(逐bar): 量 = 击穿该bar前60日地量(≤min×1.10) 或 量比(对前60日均量)≤0.50 满足其一;
@@ -7235,8 +7255,8 @@ def _ma_scan_job():
             # 周线形态 (已通过否决条件, 直接加入)
             for wp in weekly_pats:
                 pats.append(wp)
-            # 极致底量低价 (20260925): 量击穿60日地量或量比≤0.6, 价处近半年下沿18%
-            if classify_bottom_volume(bars):
+            # 极致底量低价 (20260925/20261003加严): 量价条件 + 周K末完成笔向下、构建笔向上
+            if classify_bottom_volume(bars) and _weekly_stroke_state_ok(bars):
                 pats.append("地量低价")
             # 放量滞涨 (20260928): 显著放量但价格滞涨(涨幅小+冲高回落), 精炼A高位/B上影二选一
             if classify_volume_stall(bars):
