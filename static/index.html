@@ -492,7 +492,7 @@
   #tblMA td.ma-c{text-align:center}
   .ma-grp-badge{display:inline-block;font-size:10px;color:var(--sub);background:var(--tag);border-radius:3px;padding:0 4px;margin-left:4px}
   /* 所属列表胶囊 (20261003): 该股命中的分组, 边框随分组主色 */
-  .hit-l{display:inline-block;font-size:10px;font-weight:600;line-height:1.3;padding:1px 5px;margin:1px 3px 1px 0;border-radius:3px;border:1px solid currentColor;background:transparent;white-space:nowrap}
+  .hit-l{display:inline-block;font-size:9px;font-weight:700;line-height:1.2;padding:0 3px;margin:1px 2px 1px 0;border-radius:3px;border:1px solid currentColor;background:transparent;white-space:nowrap}
   /* 日周共振/埋伏型标签 (20260920): 共振=淡金(淡化), 周线回踩/底部反转=中性底色 */
   .res-tag{display:inline-block;font-size:10px;font-weight:600;border-radius:3px;padding:0 4px;margin-left:4px;vertical-align:middle}
   .res-tag.syn{color:#d8b84a;background:linear-gradient(180deg,rgba(245,200,66,.14),rgba(224,160,56,.10));border:1px solid rgba(245,200,66,.25)}
@@ -4326,6 +4326,13 @@ const _MA_GRP_MAP={
   '周线A·强势主升':'grp-week','周线·埋伏':'grp-week',
   '粘合向下突破':'grp-day alt','空头排列向下发散':'grp-day alt'
 };
+// 形态名→一字简称 (20261003 全局, 供 tab 徽章 + "所属列表"胶囊共用)
+const PAT_GLYPH={"多头排列":"多","多头排列向上发散":"发","粘合向上突破":"突",
+    "粘合向下突破":"跌","空头排列向下发散":"空","日线背离":"背","地量低价":"地",
+    "周线A·强势主升":"周","周线·埋伏":"伏",
+    "缠论·日线一买":"1买","缠论·日线二买":"2买","缠论·日线三买":"3买",
+    "低位启动前":"启","带量突破":"破","KDJ底部钝化结束":"钝",
+    "上试盘·新信号":"观","上试盘·观察池":"等","上试盘·已确认":"买"};
 let maCurrentTab=0;
 let maData=null;
 let sspData=null;   // 上试盘三池缓存 {new_signals,watch_pool,confirmed_pool,counts,mkt_filter,updated,running,progress,error}
@@ -4402,15 +4409,6 @@ function renderMAHeaders(){
   }
 }
 function renderMATabs(){
-  // 20260921: 形态名 → 一字简称 (与后端图标映射一致), 显示在tab名称右侧小字体
-  const PAT_GLYPH={"多头排列":"多","多头排列向上发散":"发","粘合向上突破":"突",
-    "粘合向下突破":"跌","空头排列向下发散":"空","日线背离":"背","地量低价":"地",
-    "周线A·强势主升":"周","周线·埋伏":"伏",
-    "缠论·日线一买":"1买","缠论·日线二买":"2买","缠论·日线三买":"3买",
-    "低位启动前":"启",
-    "带量突破":"破",
-    "KDJ底部钝化结束":"钝",
-    "上试盘·新信号":"观","上试盘·观察池":"等","上试盘·已确认":"买"};
   // 上试盘 3 个 tab 用 sspData.counts 显示数量
   const sspCounts=(sspData&&sspData.counts)||{};
   $('#maTabs').innerHTML=MA_PATS.map((p,i)=>{
@@ -4720,8 +4718,7 @@ function _hitLists(code){
   const sig=(md.updated||'')+'/'+(md.total_stocks||'');
   if(_codeHitSig!==sig){ _codeHitSig=sig; _codeHitMap={};
     Object.keys(md.patterns).forEach(pat=>{
-      const pi=MA_PATS.findIndex(p=>p[0]===pat);
-      const disp=(pi>=0?DISP_MA_NAME[pi]:pat);
+      const disp = PAT_GLYPH[pat] || pat;   // 用一字简称(多/发/3买…), 无则退回原文
       let grp=_MA_GRP_MAP[pat]||''; if(!grp){ grp=pat.startsWith('上试盘')?'ssp':'grp-day'; }
       (md.patterns[pat]||[]).forEach(s=>{
         (_codeHitMap[s.code]=_codeHitMap[s.code]||[]).push(disp+'@'+(_GRP_COLOR[grp]||'#9fb0c6'));
