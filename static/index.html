@@ -4754,7 +4754,7 @@ function maRowHtml(s,i){
   return `<tr class="${curPat==='低位启动前'?'early-row':''}">
     <td class="l">${i+1}</td>
     <td class="l">${markNameHtml(s.code,s.name,s.price)}<div class="code"><a class="cd-link"  href="https://stockpage.10jqka.com.cn/${s.code}/" target="_blank" rel="noopener" onclick="openStock('${s.code}','${s.name}',event)">${mkt(s.code)}</a></div>${weeklyLine}${divStar}</td>
-    <td class="ma-c">${p2(s.price)}</td>
+    <td class="ma-c">${s.price>220?`<span style="color:var(--up);font-weight:700">${p2(s.price)}</span>`:(s.price>120?`<span style="color:var(--gold);font-weight:600">${p2(s.price)}</span>`:p2(s.price))}</td>
     <td class="ma-c">${fmtPct(s.change_pct)}</td>
     <td class="l col-opt">${indHtml}</td>
     <td class="l col-opt">${conHtml}${conHeat}</td>
