@@ -3171,11 +3171,8 @@ function renderAnalysis(d){
   const multiTfHtml=(bars.length&&weekBars.length>=2&&monthBars.length>=2)?`
     <div class="tf-compact">
       <div class="sec-h" style="margin-top:8px;font-size:14px">多周期对比 · 日 / 周 / 月</div>
-      <div class="sec-h" style="margin-top:6px;font-size:13px">日K</div>
       ${buildMiniChart(bars, zzPivots, Object.assign({code:d.code, name:d.name, compact:true, sync:'stockTF'}, tfOpt))}
-      <div class="sec-h" style="margin-top:6px;font-size:13px">周K</div>
       ${buildMiniChart(weekBars, [], Object.assign({noLimits:true, compact:true}, tfOpt))}
-      <div class="sec-h" style="margin-top:6px;font-size:13px">月K</div>
       ${buildMiniChart(monthBars, [], Object.assign({noLimits:true, compact:true}, tfOpt))}
     </div>`:'';
   // 缠论结构图 + 摘要 (20260911): 笔/线段/中枢/三类买卖点
