@@ -2301,11 +2301,22 @@ async function applyHistSignalsToAnalysisChart(code, bars){
            || document.querySelector('#stockPanel .sa-chart svg') || document.querySelector('.sa-chart svg');
   if(!svg) return;
   // 加载提示 (20260921b): 让用户区分"加载中"与"无信号"; 完成后删除/替换
+  // 20261003: 改造成带背景的小胶囊并去重——同一svg重复渲染时先移除旧提示, 避免文案堆叠重叠
+  const _cleanHint = () => { const old = svg.querySelector('.sa-sig-hint'); if(old) old.remove(); };
+  _cleanHint();
+  const hintG = document.createElementNS('http://www.w3.org/2000/svg','g');
+  hintG.setAttribute('class','sa-sig-hint');
+  const hintRect = document.createElementNS('http://www.w3.org/2000/svg','rect');
+  hintRect.setAttribute('x','2'); hintRect.setAttribute('y','3');
+  hintRect.setAttribute('width','84'); hintRect.setAttribute('height','13');
+  hintRect.setAttribute('rx','4');
+  hintRect.setAttribute('fill','rgba(13,18,28,.88)');
   const hint = document.createElementNS('http://www.w3.org/2000/svg','text');
-  hint.setAttribute('x','10'); hint.setAttribute('y','12');
-  hint.setAttribute('font-size','9'); hint.setAttribute('fill','#6b7d95');
+  hint.setAttribute('x','9'); hint.setAttribute('y','12.5');
+  hint.setAttribute('font-size','9'); hint.setAttribute('fill','#c7d5e8');
   hint.textContent='信号加载中…';
-  svg.appendChild(hint);
+  hintG.appendChild(hintRect); hintG.appendChild(hint);
+  svg.appendChild(hintG);
   let loaded=false;
   try{
     const r = await fetch('/api/stock/hist-signals?code='+encodeURIComponent(code));
@@ -2371,7 +2382,7 @@ async function applyHistSignalsToAnalysisChart(code, bars){
       drawn++;
     });
   }
-  if(drawn){ svg.appendChild(g); hint.remove(); }
+  if(drawn){ svg.appendChild(g); hintG.remove(); }
   else hint.textContent='无信号';
 } catch(err){} }
 // 历史记录: 折叠切换 (状态分别存 localStorage, 个股分析 / 缠论tab 各自独立折叠 20260920)
