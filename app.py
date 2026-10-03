@@ -2242,6 +2242,24 @@ def _scan_kdj_bottom_diverge_legacy(bars: list, win: int = 60, thr: float = 5.0)
     return out
 
 
+def _kdj_bottom_blunt_just_ended(bars: list, within: int = 3) -> bool:
+    """日KDJ底部钝化结束后 N 天内 (20261003 新增「KDJ底部钝化结束」tab)。
+
+    与副图 _kd_blunt_segs(K,3) 同口径取低位钝化段 (K 连续 >= 3 根 <=20)。
+    取**最近一段**低位钝化, 其段末 bar 距当前 (末根) 的根数 <= within 即视为
+    "底部钝化刚结束"而命中 —— 这类票处于超卖停滞后的早期恢复, 属低位观察信号。
+    返回是否命中 (不返回段, 调用方只需布尔)。"""
+    K, _, _ = _kdj_front(bars)
+    n = len(bars)
+    for seg in reversed(_kd_blunt_segs(K, 3)):
+        if seg["high"]:     # 只关心低位钝化 (<=20), 高位钝化跳过
+            continue
+        ago = n - 1 - seg["b"]     # 段末距当前根数
+        if 0 <= ago <= within:
+            return True
+    return False
+
+
 def _calc_kdj_bottom_diverge(closes: list, highs: list, lows: list, j: list) -> bool:
     """KDJ底背离: 价格创近20日新低但J值未创新低 (动能未跟随下行)。
 
@@ -6391,7 +6409,9 @@ MA_PATTERNS = ["多头排列", "多头排列向上发散", "粘合向上突破",
                # 低位启动前 (20260929): 提前捕获 横盘收敛→地量低价→缠论背驰 的蓄势票
                "低位启动前",
                # 带量突破 (20261002): 放量突破前期平台/前高, 量能确认有效突破
-               "带量突破"]
+               "带量突破",
+               # 日KDJ底部钝化结束 (20261003): KDJ 低位钝化(连续>=3根K<=20)刚结束, 距今<=3个交易日
+               "KDJ底部钝化结束"]
 
 
 _CHAN_BUY_TAB = {"一买": "缠论·日线一买", "二买": "缠论·日线二买", "三买": "缠论·日线三买"}
@@ -7272,6 +7292,9 @@ def _ma_scan_job():
             _early = det_early_signal(bars)
             if _early.get("hit"):
                 pats.append("低位启动前")
+            # 日KDJ底部钝化结束 (20261003): 低位钝化刚结束(<=3个交易日) → 早恢复信号
+            if _kdj_bottom_blunt_just_ended(bars, 3):
+                pats.append("KDJ底部钝化结束")
             if not pats:
                 return None
             # 买卖点分析
