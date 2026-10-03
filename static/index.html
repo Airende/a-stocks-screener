@@ -4781,10 +4781,13 @@ function _slSyncButtons(code){
 }
 function toggleShortlist(s){
   const i=shortlist.findIndex(x=>x.code===s.code);
+  let added=false;
   if(i>=0){ shortlist.splice(i,1); } else {
     shortlist.push({code:s.code,name:s.name,price:Number(s.price)||0,change_pct:isFinite(+s.change_pct)?+s.change_pct:null,industry:s.industry||''});
+    added=true;
   }
   _slSave(); _slSyncButtons(s.code); renderShortlistPanel(); _slUpdateToggle();
+  if(added){ const p=document.getElementById('slPanel'); if(p&&p.classList.contains('hide')) p.classList.remove('hide'); }  // 新加入时若面板收起则自动展开 (20261003)
 }
 function removeShortlist(code){
   const i=shortlist.findIndex(x=>x.code===code);
