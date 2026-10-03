@@ -3874,7 +3874,7 @@ async function switchChanStartDir(code, sd){
 // chan 字段由后端 /api/stock/analyze 的 chan_analysis() 生成, 索引与 bars 一一对应
 function buildChanChart(bars, chan){
   if(!bars || !bars.length || !chan || !chan.ok) return '';
-  const w=800, h=360, padL=8, padR=40, padT=34, padB=42;
+  const w=800, h=360, padL=8, padR=8, padT=34, padB=42;
   const n=bars.length;
   if(n<2) return '';
   // 显示区间需同时覆盖K线极值与中枢上下沿
