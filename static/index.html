@@ -7158,9 +7158,9 @@ async function showKlinePreview(code, anchor, period){
   try{
     const ckey = code + ':' + period;
     if(!_kdCache[ckey]){
-      // 拉取一年(260根): 日K取最近130根显示, 周K由后端聚合并返回 (20260929 支持 period)
-      // 请求 datalen 扩充到 260, rest 较多日K供周K聚合
-      const r = await fetch('/api/kline?code=' + encodeURIComponent(code) + '&datalen=260&period=' + encodeURIComponent(period));
+      // 日K显示近130根; 周K请求更多日K由后端聚合成周K, 前端再截取最近~130根 (20261003)
+      const need = period==='week' ? 720 : 260;
+      const r = await fetch('/api/kline?code=' + encodeURIComponent(code) + '&datalen=' + need + '&period=' + encodeURIComponent(period));
       const d = await r.json();
       if(!d.bars || !d.bars.length){ pop.innerHTML = '<div class="empty">无K线数据</div>'; return; }
       _kdCache[ckey] = d;
