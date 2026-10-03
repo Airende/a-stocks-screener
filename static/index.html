@@ -2374,19 +2374,23 @@ async function applyHistSignalsToAnalysisChart(code, bars){
     if(!sigs.length) continue;
     const xs = xFn(idx);
     const ys = yFn(dayBars[idx].high);
+    const yl = yFn(dayBars[idx].low);
     // 该日多信号竖向排列, 簇整体以K线最高价上方为中心向上/下延伸
     // 20260921b: 标识离K线更高价更远(间隙 -3 → -9), 避免贴柱
-    const startY = ys - 9;
+    // 20261003: "启"(低位启动前)信号改红色, 并落到K线最低价下方(向下排列), 与上方信号错开
     const step = 7;
+    let kUp=0, kDown=0;
     sigs.forEach((s, k)=>{
       const t = document.createElementNS(svgNS,'text');
-      const ty = startY - k*step;
+      const isQi = (s.ch==='启');
+      const ty = isQi ? (yl + 8 + kDown*step) : (ys - 9 - kUp*step);
+      if(isQi) kDown++; else kUp++;
       t.setAttribute('x', xs.toFixed(1));
       t.setAttribute('y', ty.toFixed(1));
       t.setAttribute('text-anchor','middle');
       t.setAttribute('font-size','4');      // (20261003) 小一号: 5→4
       t.setAttribute('font-weight','600');
-      t.setAttribute('fill', s.color || '#fff');
+      t.setAttribute('fill', isQi ? '#ff4d4f' : (s.color || '#fff'));
       // (20261003) 去掉深色描边底色: 不再有圆黑包边/底色, 字形不再显得变形
       t.textContent = s.ch || '';
       t.setAttribute('title', (day+' '+ (s.name||'')) );
