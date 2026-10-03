@@ -459,6 +459,10 @@
 .ma-tab.grp-day.alt2{color:#9aa3af;background:linear-gradient(180deg,rgba(154,163,175,.12),var(--panel2));border-color:rgba(154,163,175,.28)}
 .ma-tab.grp-day.alt2:hover{color:#fff}
 .ma-tab.grp-day.alt2.active{background:linear-gradient(180deg,#8a93a1,#6b7482);color:#fff;border-color:#6b7482}
+/* 启动/蓄势组 tab (20261003): 橙色, 日线启动组(地量/低位启动前/带量突破/KDJ钝化) */
+.ma-tab.grp-rise{color:#ffab40;background:linear-gradient(180deg,rgba(255,171,64,.13),var(--panel2));border-color:rgba(255,171,64,.3)}
+.ma-tab.grp-rise:hover{color:#fff}
+.ma-tab.grp-rise.active{background:linear-gradient(180deg,#ffab40,#ee9620);color:#fff;border-color:#ee9620}
 /* 缠论买卖点tab (20260926): 紫色紫罗兰, 靠近日线红但偏紫 */
 .ma-tab.grp-chan{color:#c084fc;background:linear-gradient(180deg,rgba(192,132,252,.13),var(--panel2));border-color:rgba(192,132,252,.32)}
 .ma-tab.grp-chan:hover{color:#fff}
@@ -4272,47 +4276,54 @@ function buildEquityCurve(curve){
 
 // ===== 均线形态筛选模块（均线形态 6 tab + 周线形态 2 tab + 上试盘策略 3 tab，共11 tab；20260920 周线B/C合并、日KDJ/MACD背离合并；20261002 日·背离最终定为仅日KDJ(保留周线否决)） =====
 const MA_PATS=[
+  // —— 日线·看多组 (红 grp-day) ——
   ['多头排列','MA5>MA10>MA20>MA60，四线今日均>5日前，收盘≥MA10，多头排列持续≥5日（稳健型）'],
   ['多头排列向上发散','MA5>MA10>MA20，三线同步上行，间距扩大（不含MA60，宽松版）'],
   ['粘合向上突破','近3日MA5/MA10/MA20间距<1.5%(粘合)，现转为多头排列，突破启动'],
-  ['地量低价','极致底量低价(精炼)：量=击穿近60日地量(≤min×1.15)或量比≤0.6（满足其一）；价=收盘处于近半年高低区间下沿18%；且止跌企稳(近10日未破前20日最低)+持续缩量(近10日均量≤60日均量×0.75)+周K末完成笔向下、当前构建笔向上。地量=卖压枯竭，观察信号，买点等其后放量阳线确认'],
-  // 周线均线形态 (A + 埋伏二合一, 20260920 原B/C合并为'周线·埋伏')
-  ['周线A·强势主升','周线多头排列(MA5>MA10>MA20) + MA20连续4周上行 + 收盘>MA10 + 距52周高回撤<15%；否决：收盘<MA20/MA20向下/空头排列/52周位<0.5'],
-  ['周线·埋伏','周线低位埋伏(原B趋势回踩+C底部反转合并)：B=上升趋势中回踩20周线低吸(MA20/MA60向上+收盘≥MA20距MA20在0~+5%+距52周高回撤<25%)；C=底部反转初期(MA20由平转升+近4周金叉+放量>20周均量×1.5+距52周低涨>20%)'],
   ['日线背离','日KDJ底背离（与K线副图「底背」标注同一套判定）：副图上60日窗口内最低价那根，其J值比前60日内J的最低值抬高>5点，且该低点从成型到被确认不超过5根（滞后过滤）、标注落在最近5根内、不在钝化区间里。需通过周线一票否决（收盘 > 周MA20×0.90、周MA20上行、非空头排列）；不受ATR过滤限制。名称下方的「★ 急跌型」= 背离低点那根的 K≤20（样本内外都为正的子集，只做标注、不减少命中）'],
-  ['粘合向下突破','近3日MA5/MA10/MA20间距<1.5%(粘合)，现转为空头排列，破位下行'],
-  ['空头排列向下发散','MA5<MA10<MA20，三线同步下行，间距扩大，弱势下降趋势'],
-  // 缠论日线买卖点分组 (20260926): 1买/2买/3买 各自独立 tab
-  ['缠论·日线一买','日线缠论 一买：空头抛压衰竭、力度背驰确认底部（第一类买点），下跌趋势反转的介入契机'],
-  ['缠论·日线二买','日线缠论 二买：一买后回抽不破前低（形成次低点），安全介入点'],
-  ['缠论·日线三买','日线缠论 三买：突破最后中枢后回抽不回中枢，强势追涨点'],
-  // 低位启动前 (20260929): 提前捕获 横盘收敛→地量低价→KDJ低位→缠论背驰 的蓄势票
+  // —— 日线·启动组 (橙 grp-rise) ——
+  ['地量低价','极致底量低价(精炼)：量=击穿近60日地量(≤min×1.15)或量比≤0.6（满足其一）；价=收盘处于近半年高低区间下沿18%；且止跌企稳(近10日未破前20日最低)+持续缩量(近10日均量≤60日均量×0.75)+周K末完成笔向下、当前构建笔向上。地量=卖压枯竭，观察信号，买点等其后放量阳线确认'],
   ['低位启动前','低位启动前·蓄势票：缠论最近3个完成的笔连接成的线段向上 + 末端笔后K线出现「底」标识(极致底量)。用于提前于多头排列发现底部蓄势票'],
-  // 带量突破 (20261002): 放量有效突破前60日高点/平台, 量能确认真突破
   ['带量突破','近5日出现"放量突破前60日最高价"：收盘高出前高≥1%、量≥5日均量×2/20日均量×1.5、阳线非大幅高开；量能确认真突破'],
   // 日KDJ底部钝化结束 (20261003): 低位钝化(连续>=3根K<=20)刚结束, 距今<=3个交易日 → 早恢复信号
   // (20261003b) 加周约束, 与"地量低价"同口径: 周K末完成笔向下、当前未完成笔向上
   ['KDJ底部钝化结束','日KDJ低位钝化结束：K线连续≥3根收在≤20(超卖停滞)的低位钝化段最近刚结束(距今≤3个交易日) + 周K末笔向下、当前构建向上笔(底部反转构建期)，股价自超卖区开始恢复，属早期低位观察信号'],
-  // 上试盘策略 3 个池子（对应说明书 A/B/C 三栏）
+  // —— 缠论组 (紫 grp-chan) ——
+  ['缠论·日线一买','日线缠论 一买：空头抛压衰竭、力度背驰确认底部（第一类买点），下跌趋势反转的介入契机'],
+  ['缠论·日线二买','日线缠论 二买：一买后回抽不破前低（形成次低点），安全介入点'],
+  ['缠论·日线三买','日线缠论 三买：突破最后中枢后回抽不回中枢，强势追涨点'],
+  // —— 上试盘策略 3 池（对应说明书 A/B/C 三栏, 金 ssp-tab）——
   ['上试盘·新信号','A池：今日刚出现长上影试盘日，观察不买；待后续放量突破再入场'],
   ['上试盘·观察池','B池：10日确认窗口内，未破信号日最低价、未放量突破的股票，附待突破价'],
   ['上试盘·已确认','C池：今日刚放量×1.01突破试盘高点 + 量比≥2 + 沪深300在MA20上方，当日收盘买入'],
+  // —— 周线组 (蓝 grp-week) ——
+  ['周线A·强势主升','周线多头排列(MA5>MA10>MA20) + MA20连续4周上行 + 收盘>MA10 + 距52周高回撤<15%；否决：收盘<MA20/MA20向下/空头排列/52周位<0.5'],
+  ['周线·埋伏','周线低位埋伏(原B趋势回踩+C底部反转合并)：B=上升趋势中回踩20周线低吸(MA20/MA60向上+收盘≥MA20距MA20在0~+5%+距52周高回撤<25%)；C=底部反转初期(MA20由平转升+近4周金叉+放量>20周均量×1.5+距52周低涨>20%)'],
+  // —— 日线·看跌组 (青 grp-day alt) ——
+  ['粘合向下突破','近3日MA5/MA10/MA20间距<1.5%(粘合)，现转为空头排列，破位下行'],
+  ['空头排列向下发散','MA5<MA10<MA20，三线同步下行，间距扩大，弱势下降趋势'],
 ];
-// 上试盘起始 tab: 前 15 个为 日线+周线+地量+缠论+低位启动前+带量突破+KDJ钝化 (4日+2周+3背离下跌+3缠+1低位+1带量突破+1KDJ钝化, 放量滞涨已删), 15/16/17 为 A/B/C (20261003 新增KDJ底部钝化结束tab)
-const SSP_KIND_TAB_OFFSET = 15;
+// 上试盘起始 tab: 前 11 个为 日线看多4 + 日线启动4 + 缠论3, 11/12/13 为 上试盘 A/B/C, 其后为 周线2 + 看跌2 (20261003 按用户指定顺序重排)
+const SSP_KIND_TAB_OFFSET = 11;
 // 子tab显示名 (20260918): 单字前缀·精简名, 表达分组 日/周/试; 仅用于渲染文本, 内部匹配仍用 p[0] 原名(后端 counts 按原名)
-// 顺序 (20261003, 与 MA_PATS 严格一一对应 0~17): 日多头→日发散→日粘合上突→日地量→周强势→
-//   周埋伏→日背离→日粘合下突→日空头发散→缠1/2/3买→低位启动前→带量突破→KDJ钝化→试新信号/观察池/已确认
+// 顺序 (20261003, 与 MA_PATS 严格一一对应 0~17): 日多头→日发散→日粘合上突→日背离→日地量→日低位启动前→
+//   日带量突破→日KDJ钝化→缠1/2/3买→试新信号/观察池/已确认→周强势→周埋伏→日粘合下突→日空头发散
 const DISP_MA_NAME=[
-  '日·多头排列','日·多头发散','日·粘合上突','日·地量',
-  '周·强势主升','周·埋伏',
-  '日·背离','日·粘合下突','日·空头发散',
+  '日·多头排列','日·多头发散','日·粘合上突','日·背离',
+  '日·地量','日·低位启动前','日·带量突破','日·KDJ钝化',
   '缠·日线1买','缠·日线2买','缠·日线3买',
-  '日·低位启动前',
-  '日·带量突破',
-  '日·KDJ钝化',
-  '试·新信号','试·观察池','试·已确认'
+  '试·新信号','试·观察池','试·已确认',
+  '周·强势主升','周·埋伏',
+  '日·粘合下突','日·空头发散'
 ];
+// 分组色映射 (20261003): 6 个分组各一色 —— 看多组=grp-day(红) 启动组=grp-rise(橙) 缠论=grp-chan(紫) 上试盘=ssp-tab(金) 周线=grp-week(蓝) 看跌组=grp-day alt(青)
+const _MA_GRP_MAP={
+  '多头排列':'grp-day','多头排列向上发散':'grp-day','粘合向上突破':'grp-day','日线背离':'grp-day',
+  '地量低价':'grp-rise','低位启动前':'grp-rise','带量突破':'grp-rise','KDJ底部钝化结束':'grp-rise',
+  '缠论·日线一买':'grp-chan','缠论·日线二买':'grp-chan','缠论·日线三买':'grp-chan',
+  '周线A·强势主升':'grp-week','周线·埋伏':'grp-week',
+  '粘合向下突破':'grp-day alt','空头排列向下发散':'grp-day alt'
+};
 let maCurrentTab=0;
 let maData=null;
 let sspData=null;   // 上试盘三池缓存 {new_signals,watch_pool,confirmed_pool,counts,mkt_filter,updated,running,progress,error}
@@ -4409,13 +4420,10 @@ function renderMATabs(){
     }
     const isSsp = _isSspTab(i);
     const title = isSsp ? `上试盘策略 ${['A池·新信号','B池·观察','C池·已确认买入'][i-SSP_KIND_TAB_OFFSET]||''}` : '';
-    // 分组色 (20260918): 日线=grp-day/组内看跌=alt(青)、背离=alt2(中性), 周线=grp-week(蓝), 上试盘=ssp-tab(金)
-    // 20260920: 日/周交错排列, 按名称前缀判断分组, 不再用下标边界
-    const grpCls = isSsp ? '' : (p[0].startsWith('周线') ? 'grp-week' : (p[0].startsWith('缠论') ? 'grp-chan' : 'grp-day'));
-    const dayAlt = (!isSsp && p[0].includes('向下')) ? ' alt' : '';
-    const dayAlt2 = (!isSsp && p[0].includes('背离')) ? ' alt2' : '';
+    // 分组色 (20261003): 按 _MA_GRP_MAP 逐一分组着色 —— 看多组=红 启动组=橙 缠论=紫 上试盘=金 周线=蓝 看跌组=青
+    const grpCls = _MA_GRP_MAP[p[0]] || (isSsp ? '' : 'grp-day');
     const glyph = PAT_GLYPH[p[0]] ? `<b class="gl">${PAT_GLYPH[p[0]]}</b>` : '';
-    return `<div class="ma-tab ${i===maCurrentTab?'active':''} ${grpCls}${dayAlt}${dayAlt2}${isSsp?' ssp-tab':''}" title="${title||p[1]}" data-i="${i}">${DISP_MA_NAME[i]||p[0]}${glyph}<span class="cnt">${c}</span></div>`;
+    return `<div class="ma-tab ${i===maCurrentTab?'active':''} ${grpCls}${isSsp?' ssp-tab':''}" title="${title||p[1]}" data-i="${i}">${DISP_MA_NAME[i]||p[0]}${glyph}<span class="cnt">${c}</span></div>`;
   }).join('');
   $('#maTabs').querySelectorAll('.ma-tab').forEach(t=>{
     t.onclick=()=>{
@@ -7209,13 +7217,9 @@ function renderHistory(rec){
       if(pats.length){
         const _gl = {"多头排列":"多","多头排列向上发散":"发","粘合向上突破":"突","地量低价":"地","空头排列向下发散":"空","粘合向下突破":"跌","日线背离":"背","周线A·强势主升":"周","周线·埋伏":"伏","缠论·日线一买":"1买","缠论·日线二买":"2买","缠论·日线三买":"3买","低位启动前":"启"};
         inner += '<div class="ma-tabs" style="margin-bottom:8px">' + pats.map((pat,i)=>{
-          let grp='grp-day', alt='', alt2='';
-          if(pat.startsWith('周线')) grp='grp-week';
-          else if(pat.startsWith('缠论')) grp='grp-chan';
-          if(pat.includes('向下')) alt=' alt';
-          if(pat.includes('背离')) alt2=' alt2';
+          const grp = _MA_GRP_MAP[pat] || 'grp-day';
           const ggl = _gl[pat] ? `<b class="gl">${_gl[pat]}</b>` : '';
-          return `<div class="ma-tab ${grp}${alt}${alt2}${i===0?' active':''}" data-hm="${pat}">${esc(pat)}${ggl}<span class="cnt">${(ma.patterns[pat]||[]).length}</span></div>`;
+          return `<div class="ma-tab ${grp}${i===0?' active':''}" data-hm="${pat}">${esc(pat)}${ggl}<span class="cnt">${(ma.patterns[pat]||[]).length}</span></div>`;
         }).join('') + '</div>';
         inner += pats.map((pat,i)=>`
           <div class="hm-pane" data-hp2="${pat}" style="${i===0?'':'display:none'}">
