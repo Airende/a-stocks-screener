@@ -1460,7 +1460,7 @@ function bindChartInteractivity(rootEl){
       }
       // 跨图同步 (20260925): 悬停任意图, 竖向虚线贯穿同组日/周/月所有图
       // 20260928 扩展: 浮窗三面板(K线/量/KDJ)同一系列无alignPos(等宽共用n与xi), 按bar索引直接定位
-      if(reg.sync){
+      if(reg.sync && i>=0 && i<reg.n){
         const g=_xhairSync[reg.sync];
         if(g){
           if(reg.alignPos){
@@ -3635,20 +3635,24 @@ function buildMiniChart(bars, pivots, opt){
   const lo=Math.min(...bars.map(b=>b.low));
   const rng=(hi-lo)||1;
   const plotW=w-padL-padR, plotH=h-padT-padB;
-  const xStep=plotW/n;
   // 时间对齐 (20260925): align={pos:日线日期→下标, total:日线根数} 时, x按"日线日期序列"
   // 公共时间轴映射——周/月bar画在其末个交易日的位置, 日/周/月三图时间严格对齐,
   // 并支持跨图同步十字线(悬停任意图, 竖线贯穿三图)
   const align=(opt&&opt.align)||null;
+  // (20261003) 右侧预留 8 个空位, 最新K线左移8个位置, 与缠论K线图一致:
+  // 时间轴总槽位 = 原有总槽数 + 8, 绘制与十字光标命中都按此槽位数算, 保证时间严格对齐。
+  const padN=8;
+  const axisTotal= align ? (align.total + padN) : n;
+  const xStep=plotW/axisTotal;
   const xi= align
     ? (i=>{ const b=bars[i]||{}; const p=(align.pos[b._e]!=null)?align.pos[b._e]:((align.pos[b.day]!=null)?align.pos[b.day]:i);
-            return padL+(p+0.5)*(plotW/align.total); })
+            return padL+(p+0.5)*(plotW/axisTotal); })
     : (i=>padL+i*xStep+xStep/2);
   // 光源模式下的蜡烛宽度 (20260928): 周/月K在align公共时间轴上按"末交易日"定位。
   // 每个周K对应约5个日K宽度(节假日例外)。为避免与前一根重叠且不把所有蜡烛压细,
   // 蜡烛体不采用全局min间距瘦身, 而是逐根按"该周实际交易日跨度"定宽, 中心对准该周中间,
   // 这样正常周宽约=5个日K, 而在进行的最后1周(仅几天)只占其真实天数, 右侧自然留出空位。
-  const dayU= align ? (plotW/align.total) : (xStep/1);   // 单个交易日对应的像素宽
+  const dayU= align ? (plotW/axisTotal) : (xStep/1);   // 单个交易日对应的像素宽（含右侧预留槽位）
   let bw=Math.max(2, xStep*0.6); // 蜡烛体宽度(默认, 非align模式用)
   // 主图svg按容器宽横向拉伸(preserveAspectRatio=none), 文字字形会被拉宽:
   // 所有文字用 scale(1/kX,1) 反向缩放保持方正 (20260925)
@@ -3733,9 +3737,9 @@ function buildMiniChart(bars, pivots, opt){
   // 注册图表数据, 供 bindChartInteractivity 十字光标/OHLC悬浮 (20260906)
   const cid='chart'+(++_chartSeq);
   _chartReg[cid]={bars, w, padL, padR, padT, padB, n, h, hi, lo,
-    xi, alignPos: align?align.pos:null, alignTotal: align?align.total:n,
+    xi, alignPos: align?align.pos:null, alignTotal: align?axisTotal:n,
     sync: (opt&&opt.sync)||null, rng:1,
-    idxForDi: align? (di=>{ for(let k=n-1;k>=0;k--){ const b=bars[k]; const s0=align.pos[b._s], e0=align.pos[b._e];
+    idxForDi: align? (di=>{ if(di>=align.total) return -1; for(let k=n-1;k>=0;k--){ const b=bars[k]; const s0=align.pos[b._s], e0=align.pos[b._e];
         if(s0!=null&&e0!=null&&di>=s0&&di<=e0) return k; } return Math.min(n-1,di); }) : (di=>di)};
   // ---- ZigZag 转折点叠加 (波峰▼/波谷▲ + 折线) ----
   let zzHtml='';
