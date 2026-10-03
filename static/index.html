@@ -4225,7 +4225,7 @@ const MA_PATS=[
   // 周线均线形态 (A + 埋伏二合一, 20260920 原B/C合并为'周线·埋伏')
   ['周线A·强势主升','周线多头排列(MA5>MA10>MA20) + MA20连续4周上行 + 收盘>MA10 + 距52周高回撤<15%；否决：收盘<MA20/MA20向下/空头排列/52周位<0.5'],
   ['周线·埋伏','周线低位埋伏(原B趋势回踩+C底部反转合并)：B=上升趋势中回踩20周线低吸(MA20/MA60向上+收盘≥MA20距MA20在0~+5%+距52周高回撤<25%)；C=底部反转初期(MA20由平转升+近4周金叉+放量>20周均量×1.5+距52周低涨>20%)'],
-  ['日线背离','日KDJ底背离（与K线副图「底背」标注同一套判定）：副图上45日窗口内最低价那根，其J值比前45日内J的最低值抬高>5点，且落在最近5根内、不在钝化区间里。需通过周线一票否决（收盘 > 周MA20×0.90、周MA20上行、非空头排列）；不受ATR过滤限制'],
+  ['日线背离','日KDJ底背离（与K线副图「底背」标注同一套判定）：副图上60日窗口内最低价那根，其J值比前60日内J的最低值抬高>5点，且该低点从成型到被确认不超过5根（滞后过滤）、标注落在最近5根内、不在钝化区间里。需通过周线一票否决（收盘 > 周MA20×0.90、周MA20上行、非空头排列）；不受ATR过滤限制。名称下方的「★ 急跌型」= 背离低点那根的 K≤20（样本内外都为正的子集，只做标注、不减少命中）'],
   ['粘合向下突破','近3日MA5/MA10/MA20间距<1.5%(粘合)，现转为空头排列，破位下行'],
   ['空头排列向下发散','MA5<MA10<MA20，三线同步下行，间距扩大，弱势下降趋势'],
   // 缠论日线买卖点分组 (20260926): 1买/2买/3买 各自独立 tab
@@ -4673,9 +4673,16 @@ function maRowHtml(s,i){
   }
   // 日J/周J (20260930): 全 tab 展示, 过百标红 (var(--up) 红色系), 低于30弱, 高值警示
   const jv = (v)=> (v!=null&&!isNaN(v)) ? '<span style="color:'+(v>=100?'var(--up)':(v>=80?'var(--sub)':(v<30?'var(--down)':'var(--gold)')))+';font-weight:600">'+ Number(v).toFixed(1) +'</span>' : '—';
+  // ★ 急跌型强档 (20261003): 仅「日·背离」tab 展示, **纯标注不参与过滤/排序**。
+  //   判定 = 锚点(窗口最低价那根)的 K <= 20 (后端 DIV_STRONG_K, 经 /api/ma-screen 的 div_strong 下发)。
+  //   依据: 底背全体按"信号出现日"日聚类复算 t 仅 1.1(同日暴跌扎堆致朴素 t 虚高约 3 倍),
+  //   只有锚点 K<=20 这一档前 55% / 后 45% 两段都为正 (+4.44% / +4.34%, 聚类 t 3.5)。
+  const divStar = (curPat==='日线背离' && s.div_k!=null && s.div_k<=20)
+    ? `<div class="code" style="font-size:11px;font-weight:700;color:var(--gold)" title="急跌型强档：背离低点那根的 K=${Number(s.div_k).toFixed(1)}（≤20）。该子集样本内外都为正（前段+4.44%/后段+4.34%），但全市场日均只出约 3.9 只，故只做标注、不过滤。">★ 急跌型<span style="font-weight:400;color:var(--sub)"> K=${Number(s.div_k).toFixed(1)}</span>${s.div_ago!=null?`<span style="font-weight:400;color:var(--sub)"> · ${s.div_ago===0?'当日':s.div_ago+'日前'}</span>`:''}</div>`
+    : '';
   return `<tr class="${curPat==='低位启动前'?'early-row':''}">
     <td class="l">${i+1}</td>
-    <td class="l">${markNameHtml(s.code,s.name,s.price)}<div class="code"><a class="cd-link"  href="https://stockpage.10jqka.com.cn/${s.code}/" target="_blank" rel="noopener" onclick="openStock('${s.code}','${s.name}',event)">${mkt(s.code)}</a></div>${weeklyLine}</td>
+    <td class="l">${markNameHtml(s.code,s.name,s.price)}<div class="code"><a class="cd-link"  href="https://stockpage.10jqka.com.cn/${s.code}/" target="_blank" rel="noopener" onclick="openStock('${s.code}','${s.name}',event)">${mkt(s.code)}</a></div>${weeklyLine}${divStar}</td>
     <td class="ma-c">${p2(s.price)}</td>
     <td class="ma-c">${fmtPct(s.change_pct)}</td>
     <td class="ma-c">${jv(s.day_j)}</td>
@@ -6188,7 +6195,8 @@ function _pxPivots(bars, L){
   return {H, Lo};
 }
 // 背离扫描(分型谷配对口径): 价格创新高/新低, 而指标 seq(J 或 DIF)未跟随 → 顶/底背离
-// ⚠️ (20261002 晚) 副图标注已改用 _scanDivergeLegacy (原版 KDJ 系统 45日窗口口径),
+// ⚠️ (20261002 晚) 副图标注已改用 _scanDivergeLegacy (原版 KDJ 系统 60日窗口口径, 20261003 由 45 调为 60;
+//    中午曾试 80, 实测标注数腰斩且 tab 归零, 已回退 —— 见下方 kdjDivAll 前的注释),
 //    本函数连同 _pxPivots 当前**已无调用点**, 保留备用。
 // opt: {L 分型半径, win 只标注最近win根(不传=全区间), thrAbs 绝对阈值, relFrac 阈值占seq振幅的比例,
 //       tol 价格容差(默认0.005): 允许"接近前高/前低的双头双底"也计入}
@@ -6249,7 +6257,7 @@ function _scanDiverge(bars, seq, opt){
 // 去重: 同一根只保留**首次被确认**的那次 (e 递增, 先到先得)。
 // 返回 [{i 背离所在K线, ref 参照的前极值K线, type:'top'|'bottom', gap 指标落差, strong}]
 function _scanDivergeLegacy(bars, seq, opt){
-  const o=opt||{}, n=bars.length, WIN=o.win||45, thr=(o.thr==null?5:o.thr);
+  const o=opt||{}, n=bars.length, WIN=o.win||60, thr=(o.thr==null?5:o.thr);
   if(n < WIN+1) return [];
   const hi=new Array(n), lo=new Array(n), cl=new Array(n);
   for(let i=0;i<n;i++){ hi[i]=+bars[i].high; lo[i]=+bars[i].low; cl[i]=+bars[i].close; }
@@ -6267,7 +6275,7 @@ function _scanDivergeLegacy(bars, seq, opt){
       let mcl=-Infinity; for(let i=s;i<=e;i++) if(cl[i]>mcl) mcl=cl[i];
       if(ppj!==null && cl[e]>=mcl*0.99 && (+seq[idxH]) < ppj-thr){
         tSeen[idxH]=1;
-        out.push({i:idxH, ref:ppi, type:'top', gap:ppj-(+seq[idxH]), strong:(ppj-(+seq[idxH]))>=thr*2});
+        out.push({i:idxH, ref:ppi, type:'top', gap:ppj-(+seq[idxH]), strong:(ppj-(+seq[idxH]))>=thr*2, e:e});
       }
     }
     // ---- 底背离 ----
@@ -6281,7 +6289,7 @@ function _scanDivergeLegacy(bars, seq, opt){
       let mll=Infinity; for(let i=s;i<=e;i++) if(cl[i]<mll) mll=cl[i];
       if(ptj!==null && cl[e]<=mll*1.01 && (+seq[idxL]) > ptj+thr){
         bSeen[idxL]=1;
-        out.push({i:idxL, ref:pti, type:'bottom', gap:(+seq[idxL])-ptj, strong:((+seq[idxL])-ptj)>=thr*2});
+        out.push({i:idxL, ref:pti, type:'bottom', gap:(+seq[idxL])-ptj, strong:((+seq[idxL])-ptj)>=thr*2, e:e});
       }
     }
   }
@@ -6315,17 +6323,24 @@ function _divAnnoHtml(divs, seq, xf, yf, opts){
   const lxTop=[], lxBot=[];   // 已写字标的 x (顶/底分处面板上下缘), 用于防重叠
   for(const d of divs){
     const top=d.type==='top', col=top?_DIV_TOP:_DIV_BOT;
+    const bl=!!d.blunt;                          // 钝化区内的背离 (20261003): **不画连线、不写字**, 只留小号白色实心点(原色边框)
     const wk=!d.strong;                          // 弱背离
     const xa=xf(d.ref), ya=yf(+seq[d.ref]), xb=xf(d.i), yb=yf(+seq[d.i]);
-    s+=`<line x1="${xa.toFixed(1)}" y1="${ya.toFixed(1)}" x2="${xb.toFixed(1)}" y2="${yb.toFixed(1)}" stroke="${col}" stroke-width="${wk?.7:1}" stroke-dasharray="3,2" opacity="${wk?.45:.9}"/>`;
-    s+=`<circle cx="${xa.toFixed(1)}" cy="${ya.toFixed(1)}" r="${wk?1.3:1.6}" fill="none" stroke="${col}" stroke-width="${wk?.7:.9}" opacity="${wk?.5:.9}"/>`;
-    s+= wk ? `<circle cx="${xb.toFixed(1)}" cy="${yb.toFixed(1)}" r="1.5" fill="none" stroke="${col}" stroke-width="1"/>`
-           : `<circle cx="${xb.toFixed(1)}" cy="${yb.toFixed(1)}" r="1.9" fill="${col}" stroke="#0f1623" stroke-width=".6"/>`;
+    if(!bl){
+      s+=`<line x1="${xa.toFixed(1)}" y1="${ya.toFixed(1)}" x2="${xb.toFixed(1)}" y2="${yb.toFixed(1)}" stroke="${col}" stroke-width="${wk?.7:1}" stroke-dasharray="3,2" opacity="${wk?.45:.9}"/>`;
+      s+=`<circle cx="${xa.toFixed(1)}" cy="${ya.toFixed(1)}" r="${wk?1.3:1.6}" fill="none" stroke="${col}" stroke-width="${wk?.7:.9}" opacity="${wk?.5:.9}"/>`;
+    }
+    s+= bl ? `<circle cx="${xb.toFixed(1)}" cy="${yb.toFixed(1)}" r="1.4" fill="#ffffff" stroke="${col}" stroke-width="1" opacity=".9"/>`   // 钝化内(20261003晚): 白色实心+原色边框, 缩小
+           : (wk ? `<circle cx="${xb.toFixed(1)}" cy="${yb.toFixed(1)}" r="1.5" fill="none" stroke="${col}" stroke-width="1"/>`
+                 : `<circle cx="${xb.toFixed(1)}" cy="${yb.toFixed(1)}" r="1.9" fill="${col}" stroke="#0f1623" stroke-width=".6"/>`);
     const ty = top ? Math.max(padT+6, yb-5) : Math.min(hPanel-padB-1, yb+11);
     const tx = Math.min(Math.max(xb, xMin), xMax);
     // 字标防重叠 (20261002 晚): 同一排水平距离 < 16px 时不再写字, 只保留虚线+圆点。
-    // 原版 45日窗口口径标注密度是分型谷口径的 3~4 倍, 不做这层会糊成一团。
+    // 原版窗口口径标注密度是分型谷口径的 3~4 倍, 不做这层会糊成一团。
+    // 钝化内的弱化标注(20261003): **不写字、只留小号白色实心点**(用户要求"文字去掉, 点清晰点",
+    //   不参与防重叠登记 —— 不能挤掉正常标注的显示机会。
     const row=top?lxTop:lxBot;
+    if(bl) continue;
     if(row.some(ux=>Math.abs(ux-tx)<16)) continue;
     row.push(tx);
     const attrs=`font-size="${fs}" font-weight="${wk?'400':'700'}" text-anchor="middle" fill="${col}" stroke="rgba(15,22,35,.92)" stroke-width="1.8" paint-order="stroke" opacity="${wk?.62:'1'}"`;
@@ -6480,7 +6495,10 @@ function kdSubPanels(bars, cfg){
             if(topStag[d]||limitDays[d]) continue;   // 命中滞/涨跌停则跳过该柱
             if(+bars[idx].volume>maxV){ maxV=+bars[idx].volume; picked=idx; }
           }
-          if(picked>=0) m[(bars[picked].day||'').slice(0,10)]=true;
+          // 双标 (20261003, 用户以「堆」为卖出依据, 需区分准确性):
+          //   open=true  → 放量段延续到窗口末根仍收不了 → **暂定**标注(若后面出现更大量柱, 位置会挪)
+          //   open=false → 段已走完(出现首根缩量/下跌) → **确认**标注(位置定格, 可作为操作依据)
+          if(picked>=0) m[(bars[picked].day||'').slice(0,10)]={open:(j>=n), len:seg.length};
         }
         i=j; continue;
       }
@@ -6489,10 +6507,13 @@ function kdSubPanels(bars, cfg){
     return m; })());
   const pileMarks=(()=>{ let s='';
     for(let i=0;i<n;i++){ const day=(bars[i].day||'').slice(0,10);
-      if(!pileUp[day]) continue;
+      const pv=pileUp[day]; if(!pv) continue;
       const topY=yFn2(bars[i].volume);
       const dy=limitHigh[day]?(topY+3):(topY-2);   // 同日已有「天」→ 堆下移错开, 否则柱顶上方
-      s+=_sqT(xi(i), dy, `font-size="5.5" font-weight="700" text-anchor="middle" fill="#a06bff" stroke="rgba(15,22,35,.9)" stroke-width="1.4" paint-order="stroke"`, '堆'); }
+      // 确认(段走完)=实心「堆」(可作卖出依据) / 暂定(段仍在延续)=浅色「堆?」(位置可能挪动)
+      s+= pv.open
+        ? _sqT(xi(i), dy, `font-size="5.5" font-weight="400" text-anchor="middle" fill="#a06bff" stroke="rgba(15,22,35,.9)" stroke-width="1.2" paint-order="stroke" opacity=".55"`, '堆?')
+        : _sqT(xi(i), dy, `font-size="5.5" font-weight="700" text-anchor="middle" fill="#a06bff" stroke="rgba(15,22,35,.9)" stroke-width="1.4" paint-order="stroke"`, '堆'); }
     return s; })();
   const vbars=bars.map((b,i)=>{
     const col=(b.chg||0)>=0?'rgba(255,77,79,.85)':'rgba(38,166,154,.85)';
@@ -6508,20 +6529,41 @@ function kdSubPanels(bars, cfg){
     for(let j=Math.max(0,i-8);j<=i;j++){ hh=Math.max(hh,bars[j].high); ll=Math.min(ll,bars[j].low); }
     const rsv=hh===ll?50:(bars[i].close-ll)/(hh-ll)*100;
     pk=(pk*2+rsv)/3; pd=(pd*2+pk)/3; K.push(pk); D.push(pd); J.push(3*pk-2*pd); }
-  // ---- 顶/底背离 + 钝化 标注数据 (20261002 晚改版) ----
-  // 口径: 改用**原版 KDJ 系统** (app.py:calc_kdj_system) —— 45日窗口最高/最低价那根,
-  //       对比其前45日内 J 的极值(不要求两点价位接近), 落差>5 即标;
-  //       钝化不变 = K 连续3根≥80或≤20
-  const kdjDivAll=_scanDivergeLegacy(bars, J, {win:45, thr:5});
+  // ---- 顶/底背离 + 钝化 标注数据 (20261003 调优: win 45→60 · 钝化按方向分流 · 加滞后过滤) ----
+  // 口径: **原版 KDJ 系统** (app.py:calc_kdj_system) —— 60日窗口最高/最低价那根,
+  //       对比其前60日内 J 的极值(不要求两点价位接近), 落差>5 即标; 钝化 = K 连续3根≥80或≤20。
+  // 为什么 win 是 60 而不是 45 / 80 (20261003 全市场实测, 见下方 kdjDivAll 注释与 app.py
+  //   DIV_LEGACY_WIN 的完整对照表):
+  //   · 45→60: 顶背 20 日超额 -2.91%→-3.50%、底背 +1.31%→+1.66%, 两端都改善;
+  //   · 60→80: 单标注质量仍有提升(图表口径 -7.25%→-8.14%), 但标注数只剩 57%、
+  //     总收益降到 64%, 且底背侧会让「日·背离」tab 命中归零 ⇒ **回退, 维持 60**;
+  //   · thr 在 3~8 之间差异 <0.2pp, 保持 5。
+  // 窗口 win=60 (20261003 曾试改 80, **实测后回退** —— 两条理由):
+  //   ① 底背: 「日·背离」tab 用 "div_ago<=5" 选票, win 放大会让锚点向历史迁移,
+  //      过周线否决的票在 win80 下 div_ago<=30 全是 0 只 → tab 命中归零 (见 app.py DIV_LEGACY_WIN)。
+  //   ② 顶背: **副图只渲染末 130 根**(下面 kdChart 里 d.bars.slice(-130)), 扫描就在这 130 根上跑,
+  //      窗口拉长后窗口极值被更老的低/高点夺走 → 标注数反而骤降。
+  //      全市场实测(5263 只, 同一快照口径, 已套钝化+滞后过滤): win60 7128 个 / 47.8% 的票有;
+  //      win80 仅 2505 个 / 17.5% 的票有, 1592 只票会**失去唯一**的顶背标注。
+  //      图表口径(末130根、每只 11 个快照)的 20 日超额: win45 -5.33% / win60 -7.25% / win80 -8.14%
+  //      —— 单标注质量只高 12%, 数量只剩 57%, **总收益反而降到 64%**。
+  const kdjDivAll=_scanDivergeLegacy(bars, J, {win:60, thr:5});
   const bluntSegs=_kdBluntSegs(K, 3);
   const kBluntAt={};
   for(const g of bluntSegs) for(let k=g.a;k<=g.b;k++) kBluntAt[k]=g;
-  // 钝化区间内不显示背离标识 (20261003, 用户要求):
-  // 钝化 = K 连续≥3根 ≥80(高位) / ≤20(低位), 指标已进入极端区并"麻木"; 同一区域再标
-  // 顶背/底背是自相矛盾的 —— 配色统一后「高位钝化·青绿」与「顶背离·青绿」本就叠在同一处
-  // 互相打架(同理低位), 且背离实证无增量信息, 故一律让位给钝化。
-  // 判定: 背离**信号点** d.i 落在任一钝化段 [a,b] 内即剔除 (不分顶/底类型)。
-  const kdjDiv=kdjDivAll.filter(d=>!kBluntAt[d.i]);
+  // 过滤一：钝化区间 (20261003, 用户要求) —— **顶/底分开处理**:
+  //   · 底背: 落在**任意**钝化段内都剔除(原逻辑保留)。低位钝化区的底背实测最弱(+0.15%),
+  //     剔掉是对的; 若放宽到"不剔"整体底背超额反而从 +0.68% 掉到 +0.24%。
+  //   · 顶背: 只让位给**低位**钝化。高位钝化区的顶背实测**最强**(-3.09%, 而 K≤20 的仅 -0.01%)。
+  //     20261003 午后二次调整: 高位钝化内的顶背**保留但弱化显示**(d.blunt=true → 不画连线、
+  //     颜色变浅, 见 _divAnnoHtml) —— 用户要求"钝化里面的背离弱化，不连线，颜色浅一点"。
+  // 过滤二：滞后 e-i ≤ 5。低点成型后要等价格回踩才确认, 拖得越久越没用
+  //   (实测滞后 21~44 根的信号超额完全无效)。win=60 下约保留 7 成标注, 收益仅 +0.06pp, 故维持 5。
+  const kdjDiv=kdjDivAll.filter(d=>{
+    const g=kBluntAt[d.i];
+    if(g && (d.type==='bottom' || !g.high)) return false;
+    return (d.e==null?0:(d.e-d.i))<=5;
+  }).map(d=>{ if(kBluntAt[d.i]) d.blunt=true; return d; });   // 钝化段内的幸存者(只能是高位钝化×顶背) → 弱化
   const kDivAt={};
   for(const d of kdjDiv) kDivAt[d.i]=d;
   const _halfW=i=> (((barW&&barW[i]&&barW[i].cw)?barW[i].cw:(bw||3))/2);
@@ -6537,7 +6579,10 @@ function kdSubPanels(bars, cfg){
       const ditag=limitDays[dayKey]?'':(limitVol[dayKey]?' <span style="color:#f5c842;font-weight:700">地量低价</span>':'');
       const ditag2=limitDays[dayKey]?'':(limitHigh[dayKey]?' <span style="color:#ff4d4f;font-weight:700">天量</span>':'');
       const stagTag=limitDays[dayKey]?'':(topStag[dayKey]?' <span style="color:#26a69a;font-weight:700">滞涨背离</span>':'');
-      const pileTag=pileUp[dayKey]?' <span style="color:#a06bff;font-weight:700">堆量</span>':'';
+      const pv=pileUp[dayKey];
+      const pileTag=pv?(pv.open
+        ? ' <span style="color:#a06bff;font-weight:700">堆·暂定</span><span style="color:#8b97a8">(放量段仍在延续, 后面若出更大量柱位置会挪; 段走完才定格)</span>'
+        : ' <span style="color:#a06bff;font-weight:700">堆·已确认</span><span style="color:#8b97a8">(段长'+pv.len+'根已走完, 位置定格, 可作卖出依据)</span>') : '';
       // 成交额 = 成交量(股)×收盘价(元) (20260928: 原"量 xx万手"改为成交额)
       const amt=b.volume*b.close;
       const amtTxt=(amt/1e8).toFixed(2)+'亿';
@@ -6570,8 +6615,8 @@ function kdSubPanels(bars, cfg){
   _chartReg[cid3]={bars, w, h:h3, padL, padR, n, sync:syncName,
     tipFn:(b,i)=>{ const dv=kDivAt[i], bl=kBluntAt[i];
       const dvTag=dv? (dv.type==='top'
-          ? ` <span style="color:${_DIV_TOP};font-weight:${dv.strong?'700':'400'}">顶背离</span><span style="color:#8b97a8">(${dv.strong?'强':'弱'} · J ${(+J[dv.ref]).toFixed(1)}→${(+J[i]).toFixed(1)})</span>`
-          : ` <span style="color:${_DIV_BOT};font-weight:${dv.strong?'700':'400'}">底背离</span><span style="color:#8b97a8">(${dv.strong?'强':'弱'} · J ${(+J[dv.ref]).toFixed(1)}→${(+J[i]).toFixed(1)})</span>`) : '';
+          ? ` <span style="color:${_DIV_TOP};font-weight:${dv.strong?'700':'400'}">顶背离</span><span style="color:#8b97a8">(${dv.strong?'强':'弱'}${dv.blunt?' · 钝化内·弱化':''} · J ${(+J[dv.ref]).toFixed(1)}→${(+J[i]).toFixed(1)})</span>`
+          : ` <span style="color:${_DIV_BOT};font-weight:${dv.strong?'700':'400'}">底背离</span><span style="color:#8b97a8">(${dv.strong?'强':'弱'}${dv.blunt?' · 钝化内·弱化':''} · J ${(+J[dv.ref]).toFixed(1)}→${(+J[i]).toFixed(1)})</span>`) : '';
       const blTag=bl? (bl.high? ' <span style="color:#ff4d4f;font-weight:700">高位钝化</span>' : ' <span style="color:#26a69a;font-weight:700">低位钝化</span>') : '';
       return `<b>${esc(b.day||'')}</b>${dvTag}${blTag}<br>K ${K[i].toFixed(1)} · D ${D[i].toFixed(1)} · <b>J ${J[i].toFixed(1)}</b>`; }};
   // 周/月KDJ副图 (20260928): 叠加 80~100 超买带(微红) 与 0~20 超卖带(微绿), 更直观
@@ -6584,10 +6629,10 @@ function kdSubPanels(bars, cfg){
   // 顶/底背离 + 钝化 标注 (20261002)
   const kdjAnno=_divAnnoHtml(kdjDiv, J, xi, yFn3, {sqT:_sqT, hPanel:h3, padT:padT3, padB:padB3, xMin:padL+9, xMax:w-padR-9})
                +_bluntAnnoHtml(bluntSegs, xi, _halfW, {sqT:_sqT, hPanel:h3,
-                    avoidHigh:kdjDiv.filter(d=>d.type==='top').map(d=>xi(d.i)),
-                    avoidLow: kdjDiv.filter(d=>d.type==='bottom').map(d=>xi(d.i))});
+                    avoidHigh:kdjDiv.filter(d=>d.type==='top'&&!d.blunt).map(d=>xi(d.i)),
+                    avoidLow: kdjDiv.filter(d=>d.type==='bottom'&&!d.blunt).map(d=>xi(d.i))});
   const kLjx=padL+(kLeg.length>1?30:24)+13;   // 图例起始x (紧跟 J 之后)
-  const p3final=`<div class="sa-chart" id="${cid3}" style="height:${h3}px;margin-top:2px"><svg viewBox="0 0 ${w} ${h3}" style="width:100%;height:100%" preserveAspectRatio="none">${kdjBands}${refLines}${line(K,'#e8eef6',1)}${line(D,'#f5c842',1)}${line(J,'#a06bff',1)}${kdjAnno}${_sqT(padL, 9, `fill="#e8eef6" font-size="9"`, kLeg)}${_sqT(padL+(kLeg.length>1?18:12), 9, `fill="#f5c842" font-size="9"`, 'D')}${_sqT(padL+(kLeg.length>1?30:24), 9, `fill="#a06bff" font-size="9"`, 'J')}${kdjDiv.length?_sqT(kLjx, 9, `fill="${_DIV_TOP}" font-size="8"`, '┈顶背'):''}${kdjDiv.length?_sqT(kLjx+34, 9, `fill="${_DIV_BOT}" font-size="8"`, '┈底背'):''}${bluntSegs.length?_sqT(kLjx+68, 9, `fill="#9fb0c6" font-size="8"`, '▬钝化'):''}${kdjDiv.length?_sqT(kLjx+107, 9, `fill="#5a6a82" font-size="8"`, '粗=强·细=弱'):''}<text x="${w-padR}" y="8" font-size="8" text-anchor="end" fill="#5a6a82">${tf==='week'?'(周KDJ · 9,3,3)':(tf==='month'?'(月KDJ · 9,3,3)':'')}</text></svg></div>`;
+  const p3final=`<div class="sa-chart" id="${cid3}" style="height:${h3}px;margin-top:2px"><svg viewBox="0 0 ${w} ${h3}" style="width:100%;height:100%" preserveAspectRatio="none">${kdjBands}${refLines}${line(K,'#e8eef6',1)}${line(D,'#f5c842',1)}${line(J,'#a06bff',1)}${kdjAnno}${_sqT(padL, 9, `fill="#e8eef6" font-size="9"`, kLeg)}${_sqT(padL+(kLeg.length>1?18:12), 9, `fill="#f5c842" font-size="9"`, 'D')}${_sqT(padL+(kLeg.length>1?30:24), 9, `fill="#a06bff" font-size="9"`, 'J')}${kdjDiv.length?_sqT(kLjx, 9, `fill="${_DIV_TOP}" font-size="8"`, '┈顶背'):''}${kdjDiv.length?_sqT(kLjx+34, 9, `fill="${_DIV_BOT}" font-size="8"`, '┈底背'):''}${bluntSegs.length?_sqT(kLjx+68, 9, `fill="#9fb0c6" font-size="8"`, '▬钝化'):''}${kdjDiv.length?_sqT(kLjx+107, 9, `fill="#5a6a82" font-size="8"`, '粗=强·细=弱·白●=钝化内'):''}<text x="${w-padR}" y="8" font-size="8" text-anchor="end" fill="#5a6a82">${tf==='week'?'(周KDJ · 9,3,3)':(tf==='month'?'(月KDJ · 9,3,3)':'')}</text></svg></div>`;
   // ---- 面板4: MACD 副图 (12,26,9) (20261002) 红柱=多头/绿柱=空头, DIF白 DEA黄 ----
   const h4=stretch?96:82, padT4=12, padB4=8;
   const _k12=2/(12+1), _k26=2/(26+1), _k9=2/(9+1);
@@ -7163,7 +7208,7 @@ function renderHistory(rec){
     Object.entries(ma.patterns||{}).forEach(([pat, list]) => {
       const pane = box.querySelector(`.hm-pane[data-hp2="${pat}"] .hm-rows`);
       if(pane) pane.innerHTML = (list||[]).length
-        ? list.slice(0,200).map((s,i) => `<tr><td class="l">${i+1}</td><td class="l">${markNameHtml(s.code,s.name,s.price)}</td><td class="l col-opt">${esc(s.industry||'')}</td><td>${fmtPct(s.change_pct)}</td><td>${p2(s.price)}</td></tr>`).join('')
+        ? list.slice(0,200).map((s,i) => `<tr><td class="l">${i+1}</td><td class="l">${markNameHtml(s.code,s.name,s.price)}${(pat==='日线背离'&&s.div_k!=null&&s.div_k<=20)?`<div class="code" style="font-size:11px;font-weight:700;color:var(--gold)" title="急跌型强档：背离低点那根的 K=${Number(s.div_k).toFixed(1)}（≤20）">★ 急跌型</div>`:''}</td><td class="l col-opt">${esc(s.industry||'')}</td><td>${fmtPct(s.change_pct)}</td><td>${p2(s.price)}</td></tr>`).join('')
         : '<tr><td colspan="5" class="empty">无</td></tr>';
     });
   }

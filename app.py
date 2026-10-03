@@ -2099,7 +2099,9 @@ def _kd_blunt_segs(K: list, min_len: int = 3) -> list:
 
     K 连续 >= min_len 根处于 >=80(高位钝化) / <=20(低位钝化) 即算一段。
     返回 [{"a": 起始下标, "b": 结束下标, "high": 是否高位钝化}]。
-    副图对落在钝化段内的背离点 **不显示标注**, tab 沿用同一过滤 (20261002 用户指定)。"""
+    副图对底背: 落在**任意**钝化段内不显示; 对顶背: 只让位**低位**钝化, 高位钝化内的顶背
+    **保留但弱化显示**(不画连线、淡色, 20261003 用户指定, 前端 _divAnnoHtml 的 d.blunt 分支)。
+    tab(「日线背离」只取底背)沿用"任意段剔"的同一过滤。"""
     n = len(K)
     need = min_len or 3
     segs = []
@@ -2150,10 +2152,10 @@ def _scan_kdj_bottom_diverge(bars: list, L: int = 3, thr: float = 5.0,
                              tol: float = 0.005, span: int = 4) -> list:
     """日KDJ底背离扫描 —— 按"相邻价格**分型谷**配对"定义 (❌ 非当前 tab 口径)。
 
-    ⚠️ (20261002 晚 v3) "日·背离" tab 现用 _scan_kdj_bottom_diverge_legacy (45日窗口口径,
+    ⚠️ (20261002 晚 v3) "日·背离" tab 现用 _scan_kdj_bottom_diverge_legacy (窗口极值口径, 现 win=80,
     与 K线副图标注完全一致)。本函数连同 _px_pivot_lows 当前**无调用点**, 保留备查 ——
     它是"分型谷配对"定义(要求前后两谷价位接近), 与"窗口极值"定义不是一回事:
-    实测标注密度 分型谷版 ~25.8 个/只(钝化前) vs 45日窗口版 7.3 个/只(钝化后)。
+    实测标注密度 分型谷版 ~25.8 个/只(钝化前) vs 窗口极值版 7.3 个/只(钝化后)。
 
     对应前端: _pxPivots(bars,3) 取谷 → _scanDiverge(bars, J, {L:3, thrAbs:5}) 的 bots 分支。
     逐对比较「相邻两个价格分型谷」:
@@ -2185,18 +2187,23 @@ def _scan_kdj_bottom_diverge(bars: list, L: int = 3, thr: float = 5.0,
     return kept
 
 
-def _scan_kdj_bottom_diverge_legacy(bars: list, win: int = 45, thr: float = 5.0) -> list:
+def _scan_kdj_bottom_diverge_legacy(bars: list, win: int = 60, thr: float = 5.0) -> list:
     """日KDJ底背离扫描 —— **与 K线副图的「底背」标注完全同口径** (20261002 晚起 "日·背离" tab 采用)。
 
-    对应前端 static/index.html 的 `_scanDivergeLegacy(bars, J, {win:45, thr:5})` 的**底背分支**
+    对应前端 static/index.html 的 `_scanDivergeLegacy(bars, J, {win:60, thr:5})` 的**底背分支**
+    (顶背那一路曾试过 win=80 —— 单标注质量更高, 但副图只渲染末 130 根, 标注数会掉到 57%,
+     总收益反而少 36%, 已回退; 见 DIV_LEGACY_WIN 注释)。
     (顶背分支 tab 不需要, 故未移植)。它与原版 calc_kdj_system 的背离判定逐行对齐, 区别只是把
     "只判当前时刻" 展开成 "逐根回算": 对每个时刻 e 取窗口 [e-win+1, e], 窗口内**最低价那根**
     即 "当前低点" idxL, 与其前 win 根内 J 的**最小值**比较 —— 一律不要求两个点位价位接近。
 
     去重: 同一根只保留**首次被确认**的那次 (e 递增, 先到先得)。
-    返回 [{i 背离所在K线, ref 参照的前极值K线, gap J 落差, strong gap>=2*thr}] (i 升序)。
-    注: 副图另有一层「钝化区间内不显示背离」过滤 (见 _kd_blunt_segs), tab 沿用,
-    由调用方施加 —— 本函数只负责扫描, 不做钝化过滤。"""
+    返回 [{i 背离所在K线, ref 参照的前极值K线, gap J 落差, strong gap>=2*thr, e 确认根}] (i 升序)。
+    注: 副图另有两层过滤, 均由调用方施加, 本函数只负责扫描:
+      · 钝化 (见 _kd_blunt_segs) —— 底背落在**任意**钝化段内即剔除 (副图对顶背只剔低位段, 高位钝化内保留但弱化显示; tab 只取底背)；
+      · 滞后 e-i <= DIV_MAX_LAG —— 拖太久的标注实测无预测力。
+    20261003: win 默认 45 → 60。**本分支保持 60** —— 顶背那一路更适合 80, 但底背受
+    "div_ago <= DIV_RECENT_BARS" 时效窗约束, 调到 80 会让 tab 命中归零 (见 DIV_LEGACY_WIN 注释)。"""
     n = len(bars)
     if n < win + 1:
         return []
@@ -2230,7 +2237,7 @@ def _scan_kdj_bottom_diverge_legacy(bars: list, win: int = 45, thr: float = 5.0)
         if cl[e] <= mll * 1.01 and J[idx_l] > ptj + thr:
             seen.add(idx_l)
             gap = J[idx_l] - ptj
-            out.append({"i": idx_l, "ref": pti, "gap": gap, "strong": gap >= thr * 2.0})
+            out.append({"i": idx_l, "ref": pti, "gap": gap, "strong": gap >= thr * 2.0, "e": e})
     out.sort(key=lambda d: d["i"])
     return out
 
@@ -6753,14 +6760,53 @@ PATTERNS_NEED_WEEKLY_VETO = {
 WEEKLY_VETO_MA20_TOL = 0.90
 
 # 「日·背离」tab 的口径常量 (20261002 晚 v3: tab 改为 **与 K线副图完全同口径**)
-#   副图 = _scanDivergeLegacy(bars, J, {win:45, thr:5}) + 钝化互斥 (K 连续>=3 根 >=80/<=20 的段内不标)
-#   tab  = 该扫描的**底背分支** (_scan_kdj_bottom_diverge_legacy) + 同一钝化过滤 + 下面的时效窗口
+#   副图 = _scanDivergeLegacy(bars, J, {win:60, thr:5}) + 钝化互斥 (底背:任意段; 顶背:**仅低位**段)
+#          + 滞后过滤 (e-i <= DIV_MAX_LAG)。20261003 调优: win 45→60、钝化对顶背分流、加滞后过滤。
+#   tab  = 该扫描的**底背分支** (_scan_kdj_bottom_diverge_legacy) + 同一钝化 + 滞后过滤 + 时效窗口
 # 时效窗口必须存在: 副图标注是"历史上出现过底背离", 实测 5325 只里 98.0% 在 260 根内都有标注,
 # 不设窗口等于全市场命中。实测各窗口命中量(2/3/5/10/15/20/30/45/60 根)
 #   → 299/317/419/485/546/592/636/1801/3317 只, 全部样本"最近标注距末根"中位数 54 根。
-DIV_LEGACY_WIN = 45      # 与副图 calc_kdj_system 的 WIN 一致
-DIV_LEGACY_THR = 5.0     # J 落差阈值(点), 同一
+DIV_LEGACY_WIN = 60      # 「日·背离」tab + 副图**底背**分支的窗口 (沿革 45 → 60, 20261003)。
+                         # ⚠️ 20261003 中午曾按"次日操作口径"评估调到 80, **全量实测后回退, 两处都不能用 80**:
+                         #   〔口径〕用户"看到标识后下一天才筛选下单" ⇒ 入场价必须用 op[e+1](次日开盘),
+                         #     cl[e](信号根收盘)成交不可实现。全市场 5263 只 / 1,575,818 根日 K 实测,
+                         #     超额 = 信号收益 − 该股同口径无条件收益:
+                         #       顶背 win 30/45/60/80/120 = -1.89/-2.91/-3.50/-4.08/-4.71%
+                         #       底背 win 30/45/60/80/120 = +0.45/+1.31/+1.66/+1.54/+1.68%
+                         #   〔回退理由 ① 底背〕本 tab 的时效窗是"最近一次标注距末根 <= DIV_RECENT_BARS(5)",
+                         #     win 放大会让"窗口最低价那根"(锚点 i)整体向历史迁移 → 5 根窗直接空掉。
+                         #     全市场 5306 只实测(已过周线一票否决): win60 下 div_ago<=5 有 10 只、<=30 仍 10 只;
+                         #     win80 下 div_ago<=5..30 **全是 0 只** ⇒ 不存在可用的 DIV_RECENT_BARS。
+                         #     根因: 过否决的票 div_ago 天然**双峰**(<=5 刚砸出的新低 / >=31 旧低点已走完修复),
+                         #     6~30 是空的; win 60→80 恰好把前一簇推到 >=31。
+                         #   〔回退理由 ② 顶背〕副图**只渲染末 130 根**(index.html: d.bars.slice(-130)),
+                         #     扫描就在这 130 根上跑 —— 窗口拉长后窗口极值被更老的高点夺走, 标注数骤降:
+                         #     同快照口径 win60 7128 个(47.8% 的票有) → win80 2505 个(17.5%),
+                         #     1592 只票会失去唯一的顶背标注。图表口径(末130根×11快照)的 20 日超额
+                         #     win45/60/80 = -5.33%/-7.25%/-8.14%: 单标注只强 12%, 数量只剩 57%,
+                         #     **总收益降到 64%** ⇒ 净亏。
+                         #   〔方法学⚠️〕"朴素 t"会被"同日暴跌扎堆"虚高约 3 倍, 必须按信号出现日做**日聚类**
+                         #     复算: 顶背全体 win60 朴素 t=-17.9 → 聚类 t=-4.3(真实有效)。
+                         #   〔已被否掉的两个候选〕① 顶背加"锚点 K>80"过滤: 聚类 t 无改善, 不做;
+                         #     ② 顶背"次日跳空分档"(gap>3% 时 -5.63% 看似很强): 前后段符号翻转, 不可用。
+                         #   〔底背整体别高估〕日聚类 t 仅 1.1(朴素 t=11.9); 占 84% 的"锚点 20<K<=50"是噪声。
+                         #     目前底背**保留全部**, 未按锚点 K 过滤 —— 若日后要提质量, 唯一稳健的子集是
+                         #     "锚点 K<=20 急跌型"(+4.4%, 聚类 t 3.5, 前后段 +4.44%/+4.34%, 日均仅 3.9 只)。
+DIV_LEGACY_THR = 5.0     # J 落差阈值(点); 实测 3~10 之间差异 <0.1pp, 故不动
+DIV_MAX_LAG = 5          # 确认滞后上限 e-i (20261003 新增): 低点成型后要等价格回踩才确认,
+                         #   拖越久越没用(滞后 21~44 根的超额完全无效); win=60 下约保留 7 成标注。
+                         #   收紧到 2 只多得 +0.06pp, 且 lag=5 仅占 0.7% → 不值得改。
 DIV_RECENT_BARS = 5      # 最近一次底背标注须落在最后 N 根内 (20261003 由 10 收到 5, 用户要求)
+
+# 「急跌型强档」(20261003 新增, 仅**标注**用, 不过滤): 锚点(窗口最低价那根)的 **K <= 20**。
+#   背景: 底背整体按"信号出现日"日聚类复算 t 仅 1.1(噪声) —— 同日暴跌会一次冒出几十条,
+#   朴素 t=11.9 被虚高约 3 倍; 占 84% 的"锚点 20<K<=50"那档就是噪声本体。
+#   唯一**样本内外都稳**的子集是锚点 K<=20 的"急跌型": 20 日超额 +4.4%(聚类 t 3.5),
+#   前 55% 段 +4.44% / 后 45% 段 +4.34%, win 45/60/80 三档均成立, 日均只出 ~3.9 只(全市场, 过否决前)。
+#   ⚠️ 口径细节: K 取 **_kdj_front(bars) 全历史**序列在**锚点 i**(背离低点那根)的值, 不是当日值、
+#   也不是 J —— 与 div_nextday_scan.py 的 `bucket(K_EDGES, K[i])`(K_EDGES 首档 `<=20`)逐字对齐。
+#   只做前端 ★ 展示与悬浮说明, **不参与任何过滤**: 命中数、排序、其余 13 个 tab 一律不变。
+DIV_STRONG_K = 20.0
 
 # (20261002) 下面这组连同 _scan_kdj_bottom_diverge / _px_pivot_lows 是"副图**分型谷**口径"
 # 方案的配套实现, 现**无调用点**, 保留供对照与随时切回 (与本版采用的"45日窗口"口径不同:
@@ -7155,15 +7201,23 @@ def _ma_scan_job():
             # 注意: 副图是"逐根回算"(每个时刻都判一次), tab 取其中**最近一次**落在 DIV_RECENT_BARS 内的。
             # MACD 那一路此前已摘除 (dif_arr/dea/hist 仅服务 _calc_macd_bottom_diverge, 函数定义保留备用)。
             kdj_div_ago = None
+            div_anchor_k = None      # 最近一次可见底背的**锚点 K** (原版 KDJ 全历史序列, 非当日值)
+            div_strong = False       # 急跌型强档: 锚点 K <= DIV_STRONG_K (见常量注释; 仅供标注)
             _Kf, _Df, _Jf = _kdj_front(bars)
             _divs = _scan_kdj_bottom_diverge_legacy(bars, DIV_LEGACY_WIN, DIV_LEGACY_THR)
             # 钝化互斥 (与副图一致): 落在 K 连续>=3 根 >=80/<=20 区间内的标注一律剔除
             _blunt_at = set()
             for _g in _kd_blunt_segs(_Kf, 3):
                 _blunt_at.update(range(_g["a"], _g["b"] + 1))
-            _divs = [d for d in _divs if d["i"] not in _blunt_at]
+            _divs = [d for d in _divs if d["i"] not in _blunt_at
+                     and (d.get("e", d["i"]) - d["i"]) <= DIV_MAX_LAG]
             if _divs:
-                kdj_div_ago = len(bars) - 1 - _divs[-1]["i"]
+                _last_div = _divs[-1]                       # out 按 i 升序, 末项即"最近一次"可见标注
+                kdj_div_ago = len(bars) - 1 - _last_div["i"]
+                _ai = _last_div["i"]
+                if 0 <= _ai < len(_Kf) and math.isfinite(_Kf[_ai]):
+                    div_anchor_k = round(float(_Kf[_ai]), 2)
+                    div_strong = div_anchor_k <= DIV_STRONG_K
             kdj_bottom = kdj_div_ago is not None and kdj_div_ago <= DIV_RECENT_BARS
             # 收集该股票命中的所有 tab (均线形态 + 背离 + 周线形态可同时命中)
             pats = []
@@ -7214,6 +7268,10 @@ def _ma_scan_job():
                 "kdj_db": bool(kdj_bottom),
                 # 最近一次底背标注距末根的根数 (None = 区间内无标注), 供前端展示信号新鲜度
                 "div_ago": kdj_div_ago,
+                # 急跌型强档 (20261003): 锚点 K 值 + 是否 <= DIV_STRONG_K。仅供前端 ★ 标注,
+                # 不参与过滤/排序 —— 底背全体是噪声(日聚类 t=1.1), 只有这一档样本内外都稳。
+                "div_k": div_anchor_k,
+                "div_strong": bool(div_strong),
                 "ma5": round(ma5[-1], 2) if not math.isnan(ma5[-1]) else 0,
                 "ma10": round(ma10[-1], 2) if not math.isnan(ma10[-1]) else 0,
                 "ma20": round(ma20[-1], 2) if not math.isnan(ma20[-1]) else 0,
