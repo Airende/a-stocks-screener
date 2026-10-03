@@ -3673,8 +3673,8 @@ function dailyToWeekly(bars){
   return out;
 }
 function buildMiniChart(bars, pivots, opt){
-  const compact=!!(opt&&opt.compact);   // 多周期对比紧凑模式: 主图170px、无副图 (20260925)
-  const w=800, h=compact?170:280, padL=44, padR=8, padT=compact?34:40, padB=compact?14:18; // 左侧加宽放涨跌幅刻度(20260925), 顶部加高容纳信号/SSP/历史标识
+  const compact=!!(opt&&opt.compact);   // 多周期对比紧凑模式: 主图、无副图 (20260925; 20261003 高度170→215贴近同花顺比例)
+  const w=800, h=compact?215:280, padL=44, padR=8, padT=compact?34:40, padB=compact?14:18; // 左侧加宽放涨跌幅刻度(20260925), 顶部加高容纳信号/SSP/历史标识
   const n=bars.length;
   if(n<2) return '';
   // 周K线(opt.noLimits)不判定涨跌停/地量: 涨跌停口径仅对日线有意义
@@ -3756,7 +3756,7 @@ function buildMiniChart(bars, pivots, opt){
     const yH=y(b.high), yL=y(b.low);
     const bodyTop=Math.min(yO,yC), bodyH=Math.max(1,Math.abs(yC-yO));
     let s=`<line x1="${cx.toFixed(1)}" y1="${yH.toFixed(1)}" x2="${cx.toFixed(1)}" y2="${yL.toFixed(1)}" stroke="${col}" stroke-width="1"/>`;
-    s+=`<rect x="${(cx-cw/2).toFixed(1)}" y="${bodyTop.toFixed(1)}" width="${cw.toFixed(1)}" height="${bodyH.toFixed(1)}" fill="${col}"/>`;
+    s+=`<rect x="${(cx-cw/2).toFixed(1)}" y="${bodyTop.toFixed(1)}" width="${cw.toFixed(1)}" height="${bodyH.toFixed(1)}" fill="${col}" stroke="${col}" stroke-width="0.5"/>`;
     return s;
   }).join('');
   // 价格刻度 + 左侧涨跌幅刻度 (20260925: 以首根K线开盘价为0%)
